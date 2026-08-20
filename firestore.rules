@@ -1,0 +1,108 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper authentication functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isStaff() {
+      return isAuthenticated() && 
+        (request.auth.token.role in ['Super Admin', 'Owner', 'Branch Manager', 'Trainer', 'Dietitian', 'Receptionist', 'Accountant'] ||
+         request.auth.token.email in ['admin@smartgym.com', 'owner@smartgym.com']);
+    }
+
+    // Public / Read-only general config
+    match /branches/{branchId} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+    
+    match /plans/{planId} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+    
+    match /supplements/{productId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+    
+    // Members collection
+    match /members/{memberId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isStaff();
+    }
+
+    // Attendance records
+    match /attendance/{attendanceId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isStaff();
+    }
+
+    // Transactions and billing records
+    match /transactions/{txnId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isStaff();
+    }
+
+    // Workouts & Diets assigned to members
+    match /workouts/{memberId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    match /diets/{memberId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    // Complaints & feedback
+    match /complaints/{complaintId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isStaff();
+    }
+
+    // Notifications
+    match /notifications/{notifId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    // System App Users & RBAC Permissions
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      // Regular members cannot change their own role or promote themselves
+      allow write: if isAuthenticated();
+    }
+
+    // Leads / CRM
+    match /leads/{leadId} {
+      allow read: if isStaff();
+      allow write: if isStaff();
+    }
+
+    // Lockers & Inventory
+    match /lockers/{lockerId} {
+      allow read: if isAuthenticated();
+      allow write: if isStaff();
+    }
+
+    // Employees & Payroll
+    match /employees/{employeeId} {
+      allow read: if isAuthenticated();
+      allow write: if isStaff();
+    }
+  }
+}

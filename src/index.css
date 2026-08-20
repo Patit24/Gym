@@ -1,0 +1,143 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg-dark: #0B0D12;
+    --card-bg: #14171F;
+    --accent-blue: #4F7CFF;
+    --accent-emerald: #27D980;
+  }
+
+  body {
+    background-color: #0B0D12;
+    color: #F1F5F9;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+}
+
+/* Glassmorphism & Depth Utilities */
+.glass-panel {
+  background: rgba(20, 23, 31, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-card {
+  background: linear-gradient(135deg, rgba(26, 31, 44, 0.8) 0%, rgba(18, 21, 30, 0.9) 100%);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+.glass-card:hover {
+  border-color: rgba(79, 124, 255, 0.3);
+  box-shadow: 0 12px 40px 0 rgba(79, 124, 255, 0.12);
+}
+
+.glow-blue {
+  box-shadow: 0 0 25px rgba(79, 124, 255, 0.35);
+}
+
+.glow-emerald {
+  box-shadow: 0 0 25px rgba(39, 217, 128, 0.35);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0B0D12;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #232938;
+  border-radius: 9999px;
+}
+
+/* Wave Animation for Hand Waving */
+@keyframes wave-hand {
+  0% { transform: rotate(0deg); }
+  15% { transform: rotate(14deg); }
+  30% { transform: rotate(-8deg); }
+  45% { transform: rotate(14deg); }
+  60% { transform: rotate(-4deg); }
+  75% { transform: rotate(10deg); }
+  100% { transform: rotate(0deg); }
+}
+
+.animate-wave {
+  display: inline-block;
+  transform-origin: 70% 70%;
+  animation: wave-hand 1.8s infinite ease-in-out;
+}
+
+/* Text Shimmer Wave Glow */
+@keyframes text-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-text-shimmer {
+  background: linear-gradient(90deg, #FFFFFF 0%, #38BDF8 30%, #27D980 60%, #FFFFFF 100%);
+  background-size: 200% auto;
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: text-shimmer 3s linear infinite;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3B455E;
+}
+
+/* Custom Text Wave & Waving Hand Animations */
+@keyframes wave {
+  0%, 100% { transform: rotate(0deg); }
+  20% { transform: rotate(14deg); }
+  40% { transform: rotate(-8deg); }
+  60% { transform: rotate(14deg); }
+  80% { transform: rotate(-4deg); }
+}
+
+@keyframes textWave {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.animate-wave {
+  display: inline-block;
+  transform-origin: 70% 70%;
+  animation: wave 2.2s infinite;
+}
+
+.text-gradient-wave {
+  background: linear-gradient(90deg, #FFFFFF 0%, #27D980 30%, #38BDF8 60%, #FFFFFF 100%);
+  background-size: 200% auto;
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: textWave 3s ease infinite;
+}
+
+/* Pulsing QR Code animation */
+@keyframes qrScanLine {
+  0% { top: 0%; opacity: 0.8; }
+  50% { top: 95%; opacity: 1; }
+  100% { top: 0%; opacity: 0.8; }
+}
+
+.animate-scan-line {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 4px;
+  background: linear-gradient(90deg, transparent, #27D980, transparent);
+  box-shadow: 0 0 15px #27D980;
+  animation: qrScanLine 2.5s ease-in-out infinite;
+}
