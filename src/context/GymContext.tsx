@@ -22,8 +22,16 @@ import {
   Expense,
   ExpenseType,
   AppUser,
-  WebsiteCustomer
+  WebsiteCustomer,
+  AuditLog
 } from '../types/gym';
+import {
+  generateUniqueUsername,
+  generateSecureTemporaryPassword,
+  normalizePhoneNumber,
+  buildWhatsAppCredentialMessage,
+  dispatchWhatsAppCredentials
+} from '../services/memberProvisioningService';
 import {
   INITIAL_BRANCHES,
   INITIAL_PLANS,
@@ -90,8 +98,24 @@ interface GymContextType {
   expenses: Expense[];
   expenseTypes: ExpenseType[];
   appUsers: AppUser[];
+  auditLogs: AuditLog[];
 
-  // Dynamic Actions
+  // Dynamic Actions & Provisioning
+  provisionMemberWithAccount: (
+    newMemberData: Omit<Member, 'id' | 'membershipNo' | 'status' | 'rewardPoints' | 'referralCode'>,
+    options?: { createLogin?: boolean; sendWhatsApp?: boolean }
+  ) => Promise<{
+    member: Member;
+    appUser?: AppUser;
+    tempPassword?: string;
+    whatsappDirectUrl?: string;
+    whatsappStatus: 'SENT' | 'FAILED' | 'NOT_SENT';
+  }>;
+  resetMemberPassword: (memberId: string) => Promise<{ newTempPassword: string; whatsappDirectUrl?: string }>;
+  updateAccountStatus: (memberId: string, isActive: boolean) => Promise<void>;
+  completeFirstLoginPasswordChange: (userId: string, newPassword: string) => Promise<void>;
+  resendMemberCredentials: (memberId: string) => Promise<{ success: boolean; whatsappDirectUrl?: string }>;
+
   generateNewToken: (memberId: string) => string;
   scanDoorQR: (qrToken: string, targetBranchId: BranchId, verificationMethod?: 'Dynamic QR' | 'Face ID') => { success: boolean; message: string; member?: Member };
   addMember: (newMember: Omit<Member, 'id' | 'membershipNo' | 'status' | 'rewardPoints' | 'referralCode'>) => Promise<Member>;
@@ -174,6 +198,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [expenses, setExpenses] = useState<Expense[]>(INITIAL_EXPENSES);
   const [expenseTypes, setExpenseTypes] = useState<ExpenseType[]>(INITIAL_EXPENSE_TYPES);
   const [appUsers, setAppUsers] = useState<AppUser[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
   // Website Customer State & Persistence
   const [authContext, setAuthContext] = useState<'app' | 'website' | null>(() => {
@@ -324,6 +349,14 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setAppUsersLoaded(true);
     });
 
+    const unsubAuditLogs = onSnapshot(collection(db, 'audit_logs'), (snap) => {
+      if (!snap.empty) {
+        const list: AuditLog[] = [];
+        snap.forEach(doc => list.push(doc.data() as AuditLog));
+        setAuditLogs(list.sort((a, b) => b.timestamp.localeCompare(a.timestamp)));
+      }
+    });
+
     return () => {
       unsubBranches();
       unsubPlans();
@@ -340,6 +373,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubProgress();
       unsubLeads();
       unsubAppUsers();
+      unsubAuditLogs();
     };
   }, []);
 
@@ -764,30 +798,152 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   };
 
-  const addMember = async (newMemberData: Omit<Member, 'id' | 'membershipNo' | 'status' | 'rewardPoints' | 'referralCode'>): Promise<Member> => {
-    const id = `MEM-2026-${String(members.length + 1).padStart(3, '0')}`;
-    const membershipNo = `SG-${Math.floor(10000 + Math.random() * 90000)}`;
-    const referralCode = `${newMemberData.name.split(' ')[0].toUpperCase()}${Math.floor(100 + Math.random() * 900)}`;
-    const plan = plans.find(p => p.id === newMemberData.planId) || plans[0];
+  const recordAuditLog = async (
+    eventType: AuditLog['eventType'],
+    memberId: string,
+    memberName: string,
+    details: string,
+    status: 'SUCCESS' | 'FAILED' = 'SUCCESS'
+  ) => {
+    const logItem: AuditLog = {
+      id: `LOG-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+      eventType,
+      memberId,
+      memberName,
+      actorId: appUserAccount?.id || firebaseUser?.uid || 'admin-system',
+      actorRole: appUserAccount?.role || 'Super Admin',
+      details,
+      timestamp: new Date().toISOString(),
+      status,
+    };
+    setAuditLogs((prev) => [logItem, ...prev]);
+    safeDbWrite(setDoc(doc(db, 'audit_logs', logItem.id), logItem));
+  };
 
+  const provisionMemberWithAccount = async (
+    newMemberData: Omit<Member, 'id' | 'membershipNo' | 'status' | 'rewardPoints' | 'referralCode'>,
+    options: { createLogin?: boolean; sendWhatsApp?: boolean } = { createLogin: true, sendWhatsApp: true }
+  ): Promise<{
+    member: Member;
+    appUser?: AppUser;
+    tempPassword?: string;
+    whatsappDirectUrl?: string;
+    whatsappStatus: 'SENT' | 'FAILED' | 'NOT_SENT';
+  }> => {
+    const memberId = `MEM-2026-${String(members.length + 1).padStart(3, '0')}`;
+    const membershipNo = `SG-${Math.floor(10000 + Math.random() * 90000)}`;
+    const referralCode = `${(newMemberData.name || 'MEMBER').split(' ')[0].toUpperCase()}${Math.floor(100 + Math.random() * 900)}`;
+    const plan = plans.find((p) => p.id === newMemberData.planId) || plans[0];
+
+    // 1. Generate unique username e.g. MEM00125
+    const existingUsernames = appUsers.map((u) => u.username);
+    const username = generateUniqueUsername(members.length + 1, existingUsernames);
+
+    // 2. Generate strong temporary password e.g. Gym@48291
+    const tempPassword = generateSecureTemporaryPassword();
+
+    // 3. User account ID
+    const userId = `USR-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
+
+    const normalizedPhone = normalizePhoneNumber(newMemberData.mobile);
+
+    let initialWhatsAppStatus: 'NOT_SENT' | 'SENT' | 'FAILED' = 'NOT_SENT';
+    let whatsappDirectUrl = '';
+
+    // 4. Send WhatsApp if requested
+    if (options.sendWhatsApp && normalizedPhone) {
+      const msg = buildWhatsAppCredentialMessage({
+        memberName: newMemberData.name,
+        memberId: membershipNo,
+        username,
+        tempPassword,
+      });
+
+      const res = await dispatchWhatsAppCredentials(normalizedPhone, msg);
+      initialWhatsAppStatus = res.status;
+      whatsappDirectUrl = res.directUrl || '';
+
+      await recordAuditLog(
+        res.success ? 'WHATSAPP_SENT' : 'WHATSAPP_FAILED',
+        memberId,
+        newMemberData.name,
+        `WhatsApp credential transmission: ${res.status} to ${normalizedPhone}`,
+        res.success ? 'SUCCESS' : 'FAILED'
+      );
+    }
+
+    // 5. Build Member Record
     const newMember: Member = {
       ...newMemberData,
-      id,
+      id: memberId,
       membershipNo,
       referralCode,
       rewardPoints: 100,
       status: 'Active',
-      paidAmount: plan ? plan.totalPrice : 0,
-      totalPlanAmount: plan ? plan.totalPrice : 0,
+      paidAmount: plan ? (plan.totalPrice || plan.basePrice) : (newMemberData.paidAmount || 0),
+      totalPlanAmount: plan ? (plan.totalPrice || plan.basePrice) : (newMemberData.totalPlanAmount || 0),
       lastPaymentDate: new Date().toISOString().split('T')[0],
       nextDueDate: newMemberData.endDate || newMemberData.expiryDate,
       paymentStatus: newMemberData.pendingDues > 0 ? 'Partially Paid' : 'Paid',
+      userId: options.createLogin ? userId : undefined,
+      username: options.createLogin ? username : undefined,
+      tempPassword: options.createLogin ? tempPassword : undefined,
+      mustChangePassword: options.createLogin ? true : false,
+      whatsappStatus: initialWhatsAppStatus,
+      whatsappSentAt: initialWhatsAppStatus === 'SENT' ? new Date().toISOString() : undefined,
     };
 
     setMembers((prev) => [newMember, ...prev]);
-    safeDbWrite(setDoc(doc(db, 'members', id), newMember));
+    safeDbWrite(setDoc(doc(db, 'members', memberId), newMember));
 
-    // Record initial membership payment transaction
+    // 6. Record Member Creation Audit
+    await recordAuditLog(
+      'MEMBER_CREATED',
+      memberId,
+      newMember.name,
+      `Member enrolled with plan ${newMember.planName} (ID: ${membershipNo})`
+    );
+
+    // 7. Build and persist AppUser if requested
+    let createdAppUser: AppUser | undefined;
+    if (options.createLogin) {
+      createdAppUser = {
+        id: userId,
+        username,
+        password: tempPassword,
+        tempPassword,
+        role: 'Member',
+        linkedId: memberId,
+        linkedName: newMember.name,
+        branchId: newMember.branchId,
+        createdAt: new Date().toISOString(),
+        createdByAdminId: appUserAccount?.id || 'admin-system',
+        isActive: true,
+        mustChangePassword: true,
+        whatsappStatus: initialWhatsAppStatus,
+        whatsappSentAt: initialWhatsAppStatus === 'SENT' ? new Date().toISOString() : undefined,
+        permissions: {
+          canViewDashboard: true,
+          canEditWorkouts: false,
+          canEditDiets: false,
+          canViewMembers: false,
+          canManageFinance: false,
+          canAccessAdmin: false,
+        },
+      };
+
+      setAppUsers((prev) => [createdAppUser!, ...prev]);
+      safeDbWrite(setDoc(doc(db, 'users', userId), createdAppUser));
+
+      await recordAuditLog(
+        'ACCOUNT_PROVISIONED',
+        memberId,
+        newMember.name,
+        `Member login account provisioned with username ${username} (Role: Member)`
+      );
+    }
+
+    // 8. Record initial payment transaction if paid
     if (newMember.paidAmount && newMember.paidAmount > 0) {
       const initialTxn: Transaction = {
         id: `TXN-${Date.now()}`,
@@ -799,13 +955,189 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         category: 'Membership Dues',
         date: new Date().toISOString().split('T')[0],
         receiptNo: `RCP-SG-${Math.floor(1000 + Math.random() * 9000)}`,
-        planName: newMember.planName
+        planName: newMember.planName,
       };
-      setTransactions(prev => [initialTxn, ...prev]);
+      setTransactions((prev) => [initialTxn, ...prev]);
       safeDbWrite(setDoc(doc(db, 'transactions', initialTxn.id), initialTxn));
     }
 
-    return newMember;
+    return {
+      member: newMember,
+      appUser: createdAppUser,
+      tempPassword,
+      whatsappDirectUrl,
+      whatsappStatus: initialWhatsAppStatus,
+    };
+  };
+
+  const resetMemberPassword = async (
+    memberId: string
+  ): Promise<{ newTempPassword: string; whatsappDirectUrl?: string }> => {
+    const member = members.find((m) => m.id === memberId);
+    if (!member) throw new Error('Member not found');
+
+    const newTempPassword = generateSecureTemporaryPassword();
+    const now = new Date().toISOString();
+
+    // Update member record
+    const updatedMemberPartial: Partial<Member> = {
+      tempPassword: newTempPassword,
+      mustChangePassword: true,
+      lastPasswordResetAt: now,
+    };
+    setMembers((prev) => prev.map((m) => (m.id === memberId ? { ...m, ...updatedMemberPartial } : m)));
+    safeDbWrite(updateDoc(doc(db, 'members', memberId), updatedMemberPartial));
+
+    // Update user record
+    const user = appUsers.find((u) => u.linkedId === memberId || u.id === member.userId);
+    if (user) {
+      const updatedUserPartial: Partial<AppUser> = {
+        password: newTempPassword,
+        tempPassword: newTempPassword,
+        mustChangePassword: true,
+        lastPasswordResetAt: now,
+      };
+      setAppUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, ...updatedUserPartial } : u)));
+      safeDbWrite(updateDoc(doc(db, 'users', user.id), updatedUserPartial));
+    }
+
+    // Prepare WhatsApp transmission
+    let whatsappDirectUrl = '';
+    const normalizedPhone = normalizePhoneNumber(member.mobile);
+    if (normalizedPhone) {
+      const msg = buildWhatsAppCredentialMessage({
+        memberName: member.name,
+        memberId: member.membershipNo,
+        username: member.username || user?.username || `MEM${memberId.replace(/\D/g, '')}`,
+        tempPassword: newTempPassword,
+      });
+      const res = await dispatchWhatsAppCredentials(normalizedPhone, msg);
+      whatsappDirectUrl = res.directUrl || '';
+
+      await recordAuditLog(
+        'WHATSAPP_SENT',
+        memberId,
+        member.name,
+        `Password reset credentials sent via WhatsApp to ${normalizedPhone}`
+      );
+    }
+
+    await recordAuditLog(
+      'PASSWORD_RESET',
+      memberId,
+      member.name,
+      `Login password reset. Previous credential invalidated.`
+    );
+
+    return { newTempPassword, whatsappDirectUrl };
+  };
+
+  const updateAccountStatus = async (memberId: string, isActive: boolean) => {
+    const member = members.find((m) => m.id === memberId);
+    const user = appUsers.find((u) => u.linkedId === memberId || u.id === member?.userId);
+
+    if (user) {
+      setAppUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, isActive } : u)));
+      safeDbWrite(updateDoc(doc(db, 'users', user.id), { isActive }));
+    }
+
+    if (member) {
+      await recordAuditLog(
+        isActive ? 'ACCOUNT_ENABLED' : 'ACCOUNT_DISABLED',
+        memberId,
+        member.name,
+        `Account ${isActive ? 'enabled' : 'disabled / suspended'} by admin`
+      );
+    }
+  };
+
+  const completeFirstLoginPasswordChange = async (userId: string, newPassword: string) => {
+    const user = appUsers.find((u) => u.id === userId || u.username.toLowerCase() === userId.toLowerCase());
+    if (!user) throw new Error('User not found');
+
+    const updatedUserPartial: Partial<AppUser> = {
+      password: newPassword,
+      tempPassword: '',
+      mustChangePassword: false,
+      lastLoginAt: new Date().toISOString(),
+    };
+
+    setAppUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, ...updatedUserPartial } : u)));
+    safeDbWrite(updateDoc(doc(db, 'users', user.id), updatedUserPartial));
+
+    // Also update linked member if present
+    if (user.linkedId) {
+      const updatedMemberPartial: Partial<Member> = {
+        tempPassword: '',
+        mustChangePassword: false,
+        lastLoginAt: new Date().toISOString(),
+      };
+      setMembers((prev) => prev.map((m) => (m.id === user.linkedId ? { ...m, ...updatedMemberPartial } : m)));
+      safeDbWrite(updateDoc(doc(db, 'members', user.linkedId), updatedMemberPartial));
+    }
+
+    if (appUserAccount && appUserAccount.id === user.id) {
+      setAppUserAccount((prev) => (prev ? { ...prev, ...updatedUserPartial } : null));
+    }
+
+    await recordAuditLog(
+      'FIRST_LOGIN_COMPLETED',
+      user.linkedId || user.id,
+      user.linkedName || user.username,
+      `First login completed and new personal password established.`
+    );
+  };
+
+  const resendMemberCredentials = async (
+    memberId: string
+  ): Promise<{ success: boolean; whatsappDirectUrl?: string }> => {
+    const member = members.find((m) => m.id === memberId);
+    if (!member) return { success: false };
+
+    const user = appUsers.find((u) => u.linkedId === memberId || u.id === member.userId);
+    const username = member.username || user?.username || 'MEM00125';
+    const tempPassword = member.tempPassword || user?.tempPassword || 'Fit#73192';
+
+    const normalizedPhone = normalizePhoneNumber(member.mobile);
+    if (!normalizedPhone) return { success: false };
+
+    const msg = buildWhatsAppCredentialMessage({
+      memberName: member.name,
+      memberId: member.membershipNo,
+      username,
+      tempPassword,
+    });
+
+    const res = await dispatchWhatsAppCredentials(normalizedPhone, msg);
+
+    const updatedStatus = res.status;
+    const now = new Date().toISOString();
+
+    setMembers((prev) =>
+      prev.map((m) =>
+        m.id === memberId ? { ...m, whatsappStatus: updatedStatus, whatsappSentAt: now } : m
+      )
+    );
+    safeDbWrite(
+      updateDoc(doc(db, 'members', memberId), {
+        whatsappStatus: updatedStatus,
+        whatsappSentAt: now,
+      })
+    );
+
+    await recordAuditLog(
+      res.success ? 'WHATSAPP_SENT' : 'WHATSAPP_FAILED',
+      memberId,
+      member.name,
+      `Resent credentials via WhatsApp: ${res.status} to ${normalizedPhone}`
+    );
+
+    return { success: res.success, whatsappDirectUrl: res.directUrl };
+  };
+
+  const addMember = async (newMemberData: Omit<Member, 'id' | 'membershipNo' | 'status' | 'rewardPoints' | 'referralCode'>): Promise<Member> => {
+    const res = await provisionMemberWithAccount(newMemberData, { createLogin: true, sendWhatsApp: true });
+    return res.member;
   };
 
   const updateMember = async (id: string, updatedData: Partial<Member>) => {
@@ -1340,6 +1672,12 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         expenses,
         expenseTypes,
         appUsers,
+        auditLogs,
+        provisionMemberWithAccount,
+        resetMemberPassword,
+        updateAccountStatus,
+        completeFirstLoginPasswordChange,
+        resendMemberCredentials,
         generateNewToken,
         scanDoorQR,
         addMember,

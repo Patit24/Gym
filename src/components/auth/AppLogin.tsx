@@ -22,20 +22,36 @@ import {
   ShieldCheck,
   Smartphone,
   Layers,
-  Dumbbell
+  Dumbbell,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 export const AppLogin: React.FC = () => {
   const navigate = useNavigate();
-  const { firebaseUser, appUserAccount, isAuthLoading, addMember, plans } = useGym();
+  const { 
+    firebaseUser, 
+    appUserAccount, 
+    appUsers, 
+    isAuthLoading, 
+    addMember, 
+    plans, 
+    completeFirstLoginPasswordChange 
+  } = useGym();
   
-  const [authMode, setAuthMode] = useState<'signin' | 'signup' | 'forgot'>('signin');
-  const [email, setEmail] = useState('');
+  const [authMode, setAuthMode] = useState<'signin' | 'signup' | 'forgot' | 'first-login-change-password'>('signin');
+  const [identifier, setIdentifier] = useState(''); // Email or Username (e.g. MEM00125)
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [mobile, setMobile] = useState('');
   const [fitnessGoal, setFitnessGoal] = useState('Muscle Building');
   
+  // First-login password change fields
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [pendingUserId, setPendingUserId] = useState<string>('');
+
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -46,6 +62,12 @@ export const AppLogin: React.FC = () => {
       if (appUserAccount.isActive === false) {
         setError('Your account is currently deactivated or suspended. Please contact gym management.');
         signOut(auth);
+        return;
+      }
+
+      if (appUserAccount.mustChangePassword) {
+        setPendingUserId(appUserAccount.id);
+        setAuthMode('first-login-change-password');
         return;
       }
 
@@ -68,11 +90,85 @@ export const AppLogin: React.FC = () => {
     setError('');
     setSuccessMsg('');
     setIsLoading(true);
+
+    const cleanInput = identifier.trim();
+
+    // Check if input matches an existing generated AppUser username (e.g. MEM00125)
+    const matchedUser = appUsers.find(
+      (u) =>
+        u.username.toUpperCase() === cleanInput.toUpperCase() ||
+        u.username.toLowerCase() === cleanInput.toLowerCase() ||
+        u.id === cleanInput
+    );
+
+    if (matchedUser) {
+      if (matchedUser.isActive === false) {
+        setError('This member account has been suspended or disabled by gym management.');
+        setIsLoading(false);
+        return;
+      }
+
+      // If user is using generated temporary password
+      if (matchedUser.password && (matchedUser.password === password || matchedUser.tempPassword === password)) {
+        localStorage.setItem('gym_auth_context', 'app');
+
+        if (matchedUser.mustChangePassword) {
+          setPendingUserId(matchedUser.id);
+          setAuthMode('first-login-change-password');
+          setIsLoading(false);
+          return;
+        }
+
+        // Route directly if password change was already satisfied
+        if (matchedUser.role === 'Member') {
+          navigate('/app/user/dashboard', { replace: true });
+        } else if (matchedUser.role === 'Trainer') {
+          navigate('/app/trainer/dashboard', { replace: true });
+        } else {
+          navigate('/app/admin/dashboard', { replace: true });
+        }
+        return;
+      }
+    }
+
     try {
       localStorage.setItem('gym_auth_context', 'app');
-      await signInWithEmailAndPassword(auth, email.trim(), password);
+      await signInWithEmailAndPassword(auth, cleanInput, password);
     } catch (err: any) {
-      setError(err.message || 'Invalid credentials or user not found.');
+      setError(
+        err.message || 'Invalid credentials. Please verify your Username/Email and Password.'
+      );
+      setIsLoading(false);
+    }
+  };
+
+  const handleCompletePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccessMsg('');
+
+    if (newPassword.length < 6) {
+      setError('New password must be at least 6 characters.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match. Please re-enter.');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const targetId = pendingUserId || appUserAccount?.id || '';
+      await completeFirstLoginPasswordChange(targetId, newPassword);
+
+      setSuccessMsg('✓ Password updated successfully! Accessing Member Dashboard...');
+      setTimeout(() => {
+        navigate('/app/user/dashboard', { replace: true });
+      }, 1000);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to update password. Please try again.');
       setIsLoading(false);
     }
   };
@@ -91,7 +187,7 @@ export const AppLogin: React.FC = () => {
 
     try {
       localStorage.setItem('gym_auth_context', 'app');
-      const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+      const userCredential = await createUserWithEmailAndPassword(auth, identifier.trim(), password);
       const user = userCredential.user;
 
       // Register new member record in database
@@ -103,7 +199,7 @@ export const AppLogin: React.FC = () => {
 
       await addMember({
         name: fullName.trim() || 'New Member',
-        email: email.trim(),
+        email: identifier.trim(),
         mobile: mobile.trim() || '+91 98765 00000',
         dob: '1998-01-01',
         gender: 'Other',
@@ -147,8 +243,8 @@ export const AppLogin: React.FC = () => {
     setIsLoading(true);
 
     try {
-      await sendPasswordResetEmail(auth, email.trim());
-      setSuccessMsg(`Password reset link sent to ${email.trim()}. Please check your inbox.`);
+      await sendPasswordResetEmail(auth, identifier.trim());
+      setSuccessMsg(`Password reset link sent to ${identifier.trim()}. Please check your inbox.`);
       setIsLoading(false);
     } catch (err: any) {
       setError(err.message || 'Unable to send reset email. Verify email address.');
@@ -156,74 +252,74 @@ export const AppLogin: React.FC = () => {
     }
   };
 
-  const fillQuickDemo = (demoEmail: string, demoPass: string) => {
-    setEmail(demoEmail);
+  const fillQuickDemo = (demoId: string, demoPass: string) => {
+    setIdentifier(demoId);
     setPassword(demoPass);
     setError('');
     setSuccessMsg('');
   };
 
-  if (isAuthLoading || (firebaseUser && !appUserAccount)) {
+  if (isAuthLoading || (firebaseUser && !appUserAccount && authMode !== 'first-login-change-password')) {
     return (
-      <div className="min-h-screen bg-[#0B0D12] flex flex-col items-center justify-center gap-3">
+      <div className="min-h-screen bg-[#07090E] flex flex-col items-center justify-center gap-3">
         <Activity className="w-9 h-9 text-[#27D980] animate-spin" />
-        <p className="text-xs font-semibold text-gym-subtext">Verifying App session & security role...</p>
+        <p className="text-xs font-semibold text-slate-400">Verifying session & credentials...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#0B0D12] text-slate-100 flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-[#07090E] text-slate-100 flex items-center justify-center p-4 relative overflow-hidden">
       {/* Ambient background glows */}
-      <div className="absolute top-10 left-10 w-96 h-96 bg-[#27D980]/15 rounded-full blur-[120px] pointer-events-none animate-pulse-slow" />
-      <div className="absolute bottom-10 right-10 w-[500px] h-[500px] bg-[#4F7CFF]/15 rounded-full blur-[140px] pointer-events-none animate-pulse-slow" />
+      <div className="absolute top-10 left-10 w-96 h-96 bg-[#27D980]/15 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-10 right-10 w-[500px] h-[500px] bg-[#4F7CFF]/15 rounded-full blur-[140px] pointer-events-none" />
 
-      <div className="relative z-10 max-w-md w-full bg-[#14171F]/90 backdrop-blur-2xl border border-gym-border/80 rounded-[32px] p-6 lg:p-8 shadow-2xl space-y-6">
+      {/* Main Glass Authentication Card */}
+      <div className="w-full max-w-md bg-[#0F1322]/90 backdrop-blur-2xl border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-5 relative z-10">
         
         {/* Brand Header */}
-        <div className="text-center space-y-3">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-[#4F7CFF] to-[#27D980] p-[2px] shadow-xl shadow-[#27D980]/30">
-            <div className="w-full h-full bg-[#0B0D12] rounded-[14px] flex items-center justify-center">
-              <Activity className="w-7 h-7 text-[#27D980]" />
+        <div className="text-center space-y-1">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#4F7CFF] to-[#27D980] p-[2px] mx-auto shadow-lg shadow-[#27D980]/20">
+            <div className="w-full h-full bg-[#07090E] rounded-[14px] flex items-center justify-center">
+              <Activity className="w-6 h-6 text-[#27D980]" />
             </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-black tracking-tight text-white flex items-center justify-center gap-2">
-              SMART <span className="text-[#27D980]">GYM</span>
-            </h1>
-            <div className="flex items-center justify-center gap-1.5 mt-1">
-              <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-[#4F7CFF]/20 text-[#4F7CFF] border border-[#4F7CFF]/30">
-                APP LOGIN (USER & ADMIN)
-              </span>
-            </div>
-            <p className="text-xs text-gym-subtext mt-1">Role-Based Authentication Engine</p>
-          </div>
+          <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight mt-2">
+            SMART <span className="text-[#27D980]">GYM</span>
+          </h1>
+          <p className="text-xs text-slate-400 font-medium">
+            {authMode === 'first-login-change-password'
+              ? 'Security Setup — Set Your New Password'
+              : 'Enterprise Member, Trainer & Owner Application'}
+          </p>
         </div>
 
-        {/* Mode Selector Tabs */}
-        <div className="grid grid-cols-3 gap-1 bg-[#0B0D12] p-1 rounded-2xl border border-gym-border text-xs font-bold">
-          <button
-            type="button"
-            onClick={() => { setAuthMode('signin'); setError(''); setSuccessMsg(''); }}
-            className={`py-2 rounded-xl transition-all ${authMode === 'signin' ? 'bg-[#27D980] text-gym-dark shadow-md font-black' : 'text-slate-400 hover:text-white'}`}
-          >
-            Sign In
-          </button>
-          <button
-            type="button"
-            onClick={() => { setAuthMode('signup'); setError(''); setSuccessMsg(''); }}
-            className={`py-2 rounded-xl transition-all ${authMode === 'signup' ? 'bg-[#4F7CFF] text-white shadow-md font-black' : 'text-slate-400 hover:text-white'}`}
-          >
-            Sign Up
-          </button>
-          <button
-            type="button"
-            onClick={() => { setAuthMode('forgot'); setError(''); setSuccessMsg(''); }}
-            className={`py-2 rounded-xl transition-all ${authMode === 'forgot' ? 'bg-purple-600 text-white shadow-md font-black' : 'text-slate-400 hover:text-white'}`}
-          >
-            Reset
-          </button>
-        </div>
+        {/* Mode Selector Tabs (Hidden on First Login Password Change) */}
+        {authMode !== 'first-login-change-password' && (
+          <div className="grid grid-cols-3 gap-1 bg-[#07090E] p-1 rounded-2xl border border-white/10 text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => { setAuthMode('signin'); setError(''); setSuccessMsg(''); }}
+              className={`py-2 rounded-xl transition-all ${authMode === 'signin' ? 'bg-[#27D980] text-black shadow-md font-black' : 'text-slate-400 hover:text-white'}`}
+            >
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => { setAuthMode('signup'); setError(''); setSuccessMsg(''); }}
+              className={`py-2 rounded-xl transition-all ${authMode === 'signup' ? 'bg-[#4F7CFF] text-white shadow-md font-black' : 'text-slate-400 hover:text-white'}`}
+            >
+              Sign Up
+            </button>
+            <button
+              type="button"
+              onClick={() => { setAuthMode('forgot'); setError(''); setSuccessMsg(''); }}
+              className={`py-2 rounded-xl transition-all ${authMode === 'forgot' ? 'bg-purple-600 text-white shadow-md font-black' : 'text-slate-400 hover:text-white'}`}
+            >
+              Reset
+            </button>
+          </div>
+        )}
 
         {/* Alert Notifications */}
         {error && (
@@ -240,19 +336,90 @@ export const AppLogin: React.FC = () => {
           </div>
         )}
 
-        {/* ── 1. SIGN IN FORM ── */}
+        {/* ═══════════════════════════════════════════════════════════
+            MODE 1: FIRST LOGIN PASSWORD SETUP (FORCE PASSWORD CHANGE)
+        ═══════════════════════════════════════════════════════════ */}
+        {authMode === 'first-login-change-password' && (
+          <form onSubmit={handleCompletePasswordChange} className="space-y-4 animate-in fade-in">
+            <div className="p-3.5 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs space-y-1">
+              <div className="font-black flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-amber-400" />
+                <span>First Login Security Requirement</span>
+              </div>
+              <p className="text-[11px] text-amber-200/90 leading-relaxed">
+                You logged in with a temporary password sent via WhatsApp. For your security, please create a new permanent password.
+              </p>
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-[10px] font-black text-slate-300 uppercase tracking-wide">
+                New Password (Min 6 Characters)
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
+                <input
+                  type={showNewPassword ? 'text' : 'password'}
+                  placeholder="Create strong password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full bg-[#07090E] border border-white/15 focus:border-[#27D980] rounded-2xl pl-10 pr-10 py-2.5 text-white text-xs font-semibold placeholder-slate-600 outline-none"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="absolute right-3.5 top-3 text-slate-400 hover:text-white"
+                >
+                  {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-[10px] font-black text-slate-300 uppercase tracking-wide">
+                Confirm New Password
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
+                <input
+                  type="password"
+                  placeholder="Confirm password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full bg-[#07090E] border border-white/15 focus:border-[#27D980] rounded-2xl pl-10 pr-4 py-2.5 text-white text-xs font-semibold placeholder-slate-600 outline-none"
+                  required
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#27D980] to-[#4F7CFF] text-black font-black text-xs shadow-xl shadow-[#27D980]/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              <span>{isLoading ? 'Establishing Password...' : 'Save Password & Enter App'}</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </form>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════
+            MODE 2: NORMAL SIGN IN FORM (SUPPORTS USERNAME & EMAIL)
+        ═══════════════════════════════════════════════════════════ */}
         {authMode === 'signin' && (
           <form onSubmit={handleSignIn} className="space-y-4">
             <div className="space-y-1">
-              <label className="block text-[10px] font-black text-slate-300 uppercase tracking-wide">Email / Username</label>
+              <label className="block text-[10px] font-black text-slate-300 uppercase tracking-wide">
+                Username (e.g. MEM00125) or Email
+              </label>
               <div className="relative">
-                <Mail className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
+                <User className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
                 <input
-                  type="email"
-                  placeholder="admin@smartgym.com or member@smartgym.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-[#121622] border-2 border-white/15 focus:border-[#27D980] rounded-2xl pl-10 pr-4 py-2.5 text-white text-xs font-semibold placeholder-slate-600 outline-none transition-colors"
+                  type="text"
+                  placeholder="e.g. MEM00125 or admin@smartgym.com"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  className="w-full bg-[#07090E] border border-white/15 focus:border-[#27D980] rounded-2xl pl-10 pr-4 py-2.5 text-white text-xs font-semibold placeholder-slate-600 outline-none transition-colors"
                   required
                 />
               </div>
@@ -276,7 +443,7 @@ export const AppLogin: React.FC = () => {
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-[#121622] border-2 border-white/15 focus:border-[#27D980] rounded-2xl pl-10 pr-4 py-2.5 text-white text-xs font-semibold placeholder-slate-600 outline-none transition-colors"
+                  className="w-full bg-[#07090E] border border-white/15 focus:border-[#27D980] rounded-2xl pl-10 pr-4 py-2.5 text-white text-xs font-semibold placeholder-slate-600 outline-none transition-colors"
                   required
                 />
               </div>
@@ -285,86 +452,59 @@ export const AppLogin: React.FC = () => {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#27D980] via-[#4F7CFF] to-[#27D980] bg-[length:200%_auto] hover:bg-[position:right_center] text-gym-dark font-black text-xs shadow-xl shadow-[#27D980]/20 hover:scale-[1.01] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#27D980] via-[#4F7CFF] to-[#27D980] bg-[length:200%_auto] hover:bg-[position:right_center] text-black font-black text-xs shadow-xl shadow-[#27D980]/20 hover:scale-[1.01] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
-              <span>{isLoading ? 'Authenticating & Verifying Role...' : 'Log In to App'}</span>
+              <span>{isLoading ? 'Verifying Account...' : 'Log In to Smart Gym'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
 
             {/* Quick Demo Accounts Helper */}
-            <div className="pt-3 border-t border-gym-border/60 space-y-2">
-              <div className="text-[10px] font-extrabold text-gym-subtext uppercase tracking-wider text-center">
+            <div className="pt-3 border-t border-white/10 space-y-2">
+              <div className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider text-center">
                 Instant Demo Credentials (1-Tap Test)
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
-                  onClick={() => fillQuickDemo('admin@smartgym.com', 'SG@Admin2026')}
-                  className="p-2 rounded-xl bg-[#1B202C] hover:bg-[#252C3D] border border-gym-border text-left transition-all group"
+                  onClick={() => fillQuickDemo('admin@smartgym.com', 'admin123')}
+                  className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-[10px] font-bold text-slate-300 hover:text-white border border-white/10 text-center transition-all"
                 >
-                  <div className="flex items-center gap-1 text-[11px] font-black text-cyan-400 group-hover:text-cyan-300">
-                    <ShieldCheck className="w-3 h-3" />
-                    <span>Owner</span>
-                  </div>
-                  <div className="text-[9px] text-gym-subtext truncate">admin@</div>
+                  👑 Admin
                 </button>
-
                 <button
                   type="button"
-                  onClick={() => fillQuickDemo('trainer@smartgym.com', 'Trainer@2026')}
-                  className="p-2 rounded-xl bg-[#1B202C] hover:bg-[#252C3D] border border-gym-border text-left transition-all group"
+                  onClick={() => fillQuickDemo('trainer@smartgym.com', 'trainer123')}
+                  className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-[10px] font-bold text-slate-300 hover:text-white border border-white/10 text-center transition-all"
                 >
-                  <div className="flex items-center gap-1 text-[11px] font-black text-purple-400 group-hover:text-purple-300">
-                    <Dumbbell className="w-3 h-3" />
-                    <span>Trainer</span>
-                  </div>
-                  <div className="text-[9px] text-gym-subtext truncate">trainer@</div>
+                  🏋️ Trainer
                 </button>
-
                 <button
                   type="button"
-                  onClick={() => fillQuickDemo('member@smartgym.com', 'Member@2026')}
-                  className="p-2 rounded-xl bg-[#1B202C] hover:bg-[#252C3D] border border-gym-border text-left transition-all group"
+                  onClick={() => fillQuickDemo('MEM00125', 'Gym@48291')}
+                  className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-[10px] font-bold text-[#27D980] hover:text-white border border-[#27D980]/30 text-center transition-all"
                 >
-                  <div className="flex items-center gap-1 text-[11px] font-black text-[#27D980] group-hover:text-emerald-300">
-                    <Smartphone className="w-3 h-3" />
-                    <span>Member</span>
-                  </div>
-                  <div className="text-[9px] text-gym-subtext truncate">member@</div>
+                  👤 Member
                 </button>
               </div>
             </div>
           </form>
         )}
 
-        {/* ── 2. SIGN UP FORM ── */}
+        {/* ═══════════════════════════════════════════════════════════
+            MODE 3: SIGN UP FORM
+        ═══════════════════════════════════════════════════════════ */}
         {authMode === 'signup' && (
-          <form onSubmit={handleSignUp} className="space-y-4">
+          <form onSubmit={handleSignUp} className="space-y-3.5">
             <div className="space-y-1">
               <label className="block text-[10px] font-black text-slate-300 uppercase tracking-wide">Full Name</label>
               <div className="relative">
                 <User className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
                 <input
                   type="text"
-                  placeholder="Alex Morgan"
+                  placeholder="Rahul Roy"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  className="w-full bg-[#121622] border-2 border-white/15 focus:border-[#4F7CFF] rounded-2xl pl-10 pr-4 py-2.5 text-white text-xs font-semibold placeholder-slate-600 outline-none transition-colors"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <label className="block text-[10px] font-black text-slate-300 uppercase tracking-wide">Email Address</label>
-              <div className="relative">
-                <Mail className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
-                <input
-                  type="email"
-                  placeholder="alex@smartgym.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-[#121622] border-2 border-white/15 focus:border-[#4F7CFF] rounded-2xl pl-10 pr-4 py-2.5 text-white text-xs font-semibold placeholder-slate-600 outline-none transition-colors"
+                  className="w-full bg-[#07090E] border border-white/15 focus:border-[#4F7CFF] rounded-2xl pl-10 pr-4 py-2.5 text-white text-xs font-semibold placeholder-slate-600 outline-none"
                   required
                 />
               </div>
@@ -372,37 +512,45 @@ export const AppLogin: React.FC = () => {
 
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
-                <label className="block text-[10px] font-black text-slate-300 uppercase tracking-wide">Mobile Number</label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-3 w-3.5 h-3.5 text-slate-500" />
-                  <input
-                    type="tel"
-                    placeholder="+91 98765 43210"
-                    value={mobile}
-                    onChange={(e) => setMobile(e.target.value)}
-                    className="w-full bg-[#121622] border-2 border-white/15 focus:border-[#4F7CFF] rounded-2xl pl-8 pr-3 py-2.5 text-white text-xs font-semibold placeholder-slate-600 outline-none"
-                    required
-                  />
-                </div>
+                <label className="block text-[10px] font-black text-slate-300 uppercase tracking-wide">Email</label>
+                <input
+                  type="email"
+                  placeholder="name@email.com"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  className="w-full bg-[#07090E] border border-white/15 focus:border-[#4F7CFF] rounded-2xl px-3 py-2.5 text-white text-xs font-semibold placeholder-slate-600 outline-none"
+                  required
+                />
               </div>
-
               <div className="space-y-1">
-                <label className="block text-[10px] font-black text-slate-300 uppercase tracking-wide">Fitness Goal</label>
-                <select
-                  value={fitnessGoal}
-                  onChange={(e) => setFitnessGoal(e.target.value)}
-                  className="w-full bg-[#121622] border-2 border-white/15 focus:border-[#4F7CFF] rounded-2xl px-3 py-2.5 text-white text-xs font-semibold outline-none"
-                >
-                  <option value="Muscle Building">Muscle Building</option>
-                  <option value="Weight Loss">Weight Loss</option>
-                  <option value="Body Recomposition">Body Recomp</option>
-                  <option value="Endurance & Cardio">Cardio & VO2</option>
-                </select>
+                <label className="block text-[10px] font-black text-slate-300 uppercase tracking-wide">WhatsApp Phone</label>
+                <input
+                  type="tel"
+                  placeholder="+91 98765 00000"
+                  value={mobile}
+                  onChange={(e) => setMobile(e.target.value)}
+                  className="w-full bg-[#07090E] border border-white/15 focus:border-[#4F7CFF] rounded-2xl px-3 py-2.5 text-white text-xs font-semibold placeholder-slate-600 outline-none"
+                  required
+                />
               </div>
             </div>
 
             <div className="space-y-1">
-              <label className="block text-[10px] font-black text-slate-300 uppercase tracking-wide">Password (Min. 6 chars)</label>
+              <label className="block text-[10px] font-black text-slate-300 uppercase tracking-wide">Primary Fitness Goal</label>
+              <select
+                value={fitnessGoal}
+                onChange={(e) => setFitnessGoal(e.target.value)}
+                className="w-full bg-[#07090E] border border-white/15 focus:border-[#4F7CFF] rounded-2xl px-3.5 py-2.5 text-white text-xs font-semibold outline-none"
+              >
+                <option value="Muscle Building">Muscle Building</option>
+                <option value="Weight Loss">Weight Loss</option>
+                <option value="Body Recomposition">Body Recomposition</option>
+                <option value="Endurance & Cardio">Endurance & Cardio</option>
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-[10px] font-black text-slate-300 uppercase tracking-wide">Password (Min 6 chars)</label>
               <div className="relative">
                 <Lock className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
                 <input
@@ -410,7 +558,7 @@ export const AppLogin: React.FC = () => {
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-[#121622] border-2 border-white/15 focus:border-[#4F7CFF] rounded-2xl pl-10 pr-4 py-2.5 text-white text-xs font-semibold placeholder-slate-600 outline-none"
+                  className="w-full bg-[#07090E] border border-white/15 focus:border-[#4F7CFF] rounded-2xl pl-10 pr-4 py-2.5 text-white text-xs font-semibold placeholder-slate-600 outline-none"
                   required
                 />
               </div>
@@ -419,27 +567,31 @@ export const AppLogin: React.FC = () => {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3.5 rounded-2xl bg-[#4F7CFF] hover:bg-[#3D69EB] text-white font-black text-xs shadow-xl shadow-[#4F7CFF]/25 hover:scale-[1.01] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#4F7CFF] to-[#27D980] text-white font-black text-xs shadow-xl shadow-[#4F7CFF]/20 hover:scale-[1.01] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
-              <span>{isLoading ? 'Creating Member Account...' : 'Register & Launch Member App'}</span>
+              <span>{isLoading ? 'Creating Member Pass...' : 'Create Member Account'}</span>
               <Sparkles className="w-4 h-4" />
             </button>
           </form>
         )}
 
-        {/* ── 3. RESET PASSWORD FORM ── */}
+        {/* ═══════════════════════════════════════════════════════════
+            MODE 4: FORGOT PASSWORD FORM
+        ═══════════════════════════════════════════════════════════ */}
         {authMode === 'forgot' && (
           <form onSubmit={handleForgotPassword} className="space-y-4">
             <div className="space-y-1">
-              <label className="block text-[10px] font-black text-slate-300 uppercase tracking-wide">Account Email</label>
+              <label className="block text-[10px] font-black text-slate-300 uppercase tracking-wide">
+                Account Email Address
+              </label>
               <div className="relative">
                 <Mail className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
                 <input
                   type="email"
-                  placeholder="Enter your registered email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-[#121622] border-2 border-white/15 focus:border-purple-500 rounded-2xl pl-10 pr-4 py-2.5 text-white text-xs font-semibold placeholder-slate-600 outline-none"
+                  placeholder="name@email.com"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  className="w-full bg-[#07090E] border border-white/15 focus:border-purple-500 rounded-2xl pl-10 pr-4 py-2.5 text-white text-xs font-semibold placeholder-slate-600 outline-none"
                   required
                 />
               </div>
@@ -448,23 +600,13 @@ export const AppLogin: React.FC = () => {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3.5 rounded-2xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-xl shadow-purple-600/25 hover:scale-[1.01] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              className="w-full py-3.5 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white font-black text-xs shadow-xl shadow-purple-600/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
-              <span>{isLoading ? 'Sending Reset Email...' : 'Send Password Reset Link'}</span>
+              <span>{isLoading ? 'Sending Reset Instructions...' : 'Send Password Reset Link'}</span>
               <KeyRound className="w-4 h-4" />
             </button>
           </form>
         )}
-
-        {/* Bottom Switch to Website */}
-        <div className="pt-2 border-t border-gym-border/60 text-center">
-          <Link
-            to="/"
-            className="text-[11px] text-slate-400 hover:text-white transition-colors"
-          >
-            ← Return to Public Website
-          </Link>
-        </div>
 
       </div>
     </div>

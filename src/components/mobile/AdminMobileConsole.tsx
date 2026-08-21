@@ -487,8 +487,8 @@ export const AdminMobileConsole: React.FC = () => {
                     </button>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-300">Pass: <strong className="text-amber-300">{u.password}</strong></span>
-                    <button onClick={() => handleCopy(u.password, `pwd-${u.id}`)} className="text-cyan-400">
+                    <span className="text-slate-300">Pass: <strong className="text-amber-300">{u.password || '••••••'}</strong></span>
+                    <button onClick={() => handleCopy(u.password || '', `pwd-${u.id}`)} className="text-cyan-400">
                       {copiedField === `pwd-${u.id}` ? <Check className="w-3 h-3 text-[#27D980]" /> : <Copy className="w-3 h-3" />}
                     </button>
                   </div>
@@ -546,7 +546,7 @@ export const AdminMobileConsole: React.FC = () => {
                       className="p-2 rounded-xl bg-[#1A2030] text-slate-300 border border-white/20">
                       {showPwd ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                     </button>
-                    <button onClick={() => handleCopy(newCredential.password, 'new-pwd')}
+                    <button onClick={() => handleCopy(newCredential.password || '', 'new-pwd')}
                       className="p-2 rounded-xl bg-amber-400 text-gym-dark font-black shadow-md flex items-center gap-1 text-[10px]">
                       {copiedField === 'new-pwd' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                       {copiedField === 'new-pwd' ? 'Copied!' : 'Copy'}
@@ -604,7 +604,7 @@ export const AdminMobileConsole: React.FC = () => {
                     <div className="text-[9px] text-slate-400">Password</div>
                     <div className="font-black text-amber-300 text-[10px]">••••••</div>
                   </div>
-                  <button onClick={() => handleCopy(user.password, user.id)} className="text-cyan-400">
+                  <button onClick={() => handleCopy(user.password || '', user.id)} className="text-cyan-400">
                     {copiedField === user.id ? <Check className="w-3.5 h-3.5 text-[#27D980]" /> : <Copy className="w-3.5 h-3.5" />}
                   </button>
                 </div>

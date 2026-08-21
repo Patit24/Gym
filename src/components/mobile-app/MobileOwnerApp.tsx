@@ -1,54 +1,65 @@
 import React, { useState } from 'react';
 import { useGym } from '../../context/GymContext';
-import { Member, Role, BranchId, GoalType } from '../../types/gym';
+import { Member, GoalType, BranchId, AuditLog } from '../../types/gym';
+
+type Gender = 'Male' | 'Female' | 'Other';
 import { MobileAppHeader } from './MobileAppHeader';
 import { MobileBottomNav, MobileNavTab } from './MobileBottomNav';
 import { PrivilegePassCard } from '../shared/PrivilegePassCard';
 import {
   Home,
   Users,
-  DollarSign,
-  Bell,
+  CreditCard,
+  Calendar,
   Layers,
   UserPlus,
   TrendingUp,
-  CreditCard,
-  Building2,
   Search,
-  Filter,
   CheckCircle2,
   AlertCircle,
   Sparkles,
   Zap,
   LogOut,
-  ArrowUpRight,
-  ArrowDownRight,
   Clock,
   Phone,
   Mail,
-  Scale,
-  Flame,
+  DollarSign,
+  Briefcase,
   Award,
   ChevronRight,
   Check,
-  Calendar,
-  ShieldCheck,
   Send,
-  Plus
+  Plus,
+  ArrowUpRight,
+  ArrowDownRight,
+  TrendingDown,
+  Building,
+  Bell,
+  Copy,
+  ExternalLink,
+  MessageSquare,
+  KeyRound,
+  ShieldCheck,
+  ShieldAlert,
+  FileText,
+  Eye,
+  EyeOff,
+  RefreshCw,
+  Lock
 } from 'lucide-react';
 
-type Gender = 'Male' | 'Female' | 'Other';
-type OwnerScreen = 
+type OwnerScreen =
   | 'home'
   | 'members'
   | 'finance'
-  | 'alerts'
+  | 'attendance'
   | 'more'
   | 'add-member'
   | 'member-profile'
   | 'add-trainer'
   | 'add-expense'
   | 'broadcast'
+  | 'audit-logs'
   | 'member-created-success';
 
 export const MobileOwnerApp: React.FC = () => {
@@ -63,8 +74,12 @@ export const MobileOwnerApp: React.FC = () => {
     transactions,
     expenses,
     attendance,
+    auditLogs,
     addExpense,
-    addMember,
+    provisionMemberWithAccount,
+    resetMemberPassword,
+    updateAccountStatus,
+    resendMemberCredentials,
     addEmployee,
     sendBulkNotification,
     signOutApp,
@@ -76,6 +91,10 @@ export const MobileOwnerApp: React.FC = () => {
   const [previousScreen, setPreviousScreen] = useState<OwnerScreen>('home');
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [newlyCreatedMember, setNewlyCreatedMember] = useState<Member | null>(null);
+  const [newlyCreatedTempPassword, setNewlyCreatedTempPassword] = useState<string>('');
+  const [newlyCreatedWhatsAppUrl, setNewlyCreatedWhatsAppUrl] = useState<string>('');
+  const [newlyCreatedWhatsAppStatus, setNewlyCreatedWhatsAppStatus] = useState<'SENT' | 'FAILED' | 'NOT_SENT'>('NOT_SENT');
+  
   const [searchMember, setSearchMember] = useState('');
   const [goalFilter, setGoalFilter] = useState<string>('all');
 
@@ -89,6 +108,8 @@ export const MobileOwnerApp: React.FC = () => {
   const [memHeight, setMemHeight] = useState(175);
   const [memWeight, setMemWeight] = useState(75);
   const [memTrainerId, setMemTrainerId] = useState('');
+  const [autoCreateLogin, setAutoCreateLogin] = useState(true);
+  const [autoSendWhatsApp, setAutoSendWhatsApp] = useState(true);
   const [isSubmittingMember, setIsSubmittingMember] = useState(false);
 
   // Add Trainer Form
@@ -111,6 +132,14 @@ export const MobileOwnerApp: React.FC = () => {
   const [notifMessage, setNotifMessage] = useState('');
   const [notifSuccess, setNotifSuccess] = useState('');
   const [isSendingBroadcast, setIsSendingBroadcast] = useState(false);
+
+  // Member Profile Credential States
+  const [showPasswordMap, setShowPasswordMap] = useState<Record<string, boolean>>({});
+  const [copiedField, setCopiedField] = useState<string>('');
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [isResendingWhatsApp, setIsResendingWhatsApp] = useState(false);
+  const [resetModalOpen, setResetModalOpen] = useState(false);
+  const [resetResult, setResetResult] = useState<{ password: string; whatsappUrl?: string } | null>(null);
 
   const currentBranch = (branches || []).find((b) => b?.id === selectedBranchId) || branches?.[0] || {
     id: selectedBranchId || 'branch-1',
@@ -150,6 +179,14 @@ export const MobileOwnerApp: React.FC = () => {
     setCurrentScreen(previousScreen === currentScreen ? 'home' : previousScreen);
   };
 
+  const copyToClipboard = (text: string, label: string) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      setCopiedField(label);
+      setTimeout(() => setCopiedField(''), 2500);
+    }
+  };
+
   // Filtered members list with strict null safety
   const filteredMembers = (members || []).filter((m) => {
     if (!m) return false;
@@ -176,7 +213,7 @@ export const MobileOwnerApp: React.FC = () => {
       const expiry = new Date();
       expiry.setDate(today.getDate() + (selectedPlan?.durationDays || 30));
 
-      const created = await addMember({
+      const res = await provisionMemberWithAccount({
         name: memName.trim(),
         mobile: memMobile.trim(),
         email: memEmail.trim() || `${memName.toLowerCase().replace(/\s+/g, '')}@gmail.com`,
@@ -211,9 +248,16 @@ export const MobileOwnerApp: React.FC = () => {
         totalPlanAmount: selectedPlan?.totalPrice || selectedPlan?.basePrice || 1500,
         faceEnrolled: false,
         lockerNumber: `L-${Math.floor(10 + Math.random() * 90)}`,
+      }, {
+        createLogin: autoCreateLogin,
+        sendWhatsApp: autoSendWhatsApp
       });
 
-      setNewlyCreatedMember(created);
+      setNewlyCreatedMember(res.member);
+      setNewlyCreatedTempPassword(res.tempPassword || '');
+      setNewlyCreatedWhatsAppUrl(res.whatsappDirectUrl || '');
+      setNewlyCreatedWhatsAppStatus(res.whatsappStatus);
+
       setMemName('');
       setMemMobile('');
       setMemEmail('');
@@ -221,6 +265,50 @@ export const MobileOwnerApp: React.FC = () => {
     } finally {
       setIsSubmittingMember(false);
     }
+  };
+
+  const handleResetPassword = async () => {
+    if (!selectedMember) return;
+    setIsResettingPassword(true);
+    try {
+      const res = await resetMemberPassword(selectedMember.id);
+      setResetResult({
+        password: res.newTempPassword,
+        whatsappUrl: res.whatsappDirectUrl,
+      });
+      // Refresh local selected member state
+      setSelectedMember(prev => prev ? {
+        ...prev,
+        tempPassword: res.newTempPassword,
+        mustChangePassword: true,
+        whatsappStatus: 'SENT'
+      } : null);
+    } finally {
+      setIsResettingPassword(false);
+    }
+  };
+
+  const handleResendCredentials = async () => {
+    if (!selectedMember) return;
+    setIsResendingWhatsApp(true);
+    try {
+      const res = await resendMemberCredentials(selectedMember.id);
+      if (res.whatsappDirectUrl) {
+        window.open(res.whatsappDirectUrl, '_blank');
+      }
+      setSelectedMember(prev => prev ? { ...prev, whatsappStatus: 'SENT' } : null);
+      setCopiedField('WhatsApp Resent!');
+      setTimeout(() => setCopiedField(''), 2500);
+    } finally {
+      setIsResendingWhatsApp(false);
+    }
+  };
+
+  const handleToggleAccountStatus = async (targetMember: Member) => {
+    const isCurrentlyActive = targetMember.status === 'Active';
+    const nextStatus = !isCurrentlyActive;
+    await updateAccountStatus(targetMember.id, nextStatus);
+    setSelectedMember(prev => prev ? { ...prev, status: nextStatus ? 'Active' : 'Suspended' } : null);
   };
 
   const handleCreateTrainer = async (e: React.FormEvent) => {
@@ -299,14 +387,15 @@ export const MobileOwnerApp: React.FC = () => {
     'add-trainer',
     'add-expense',
     'broadcast',
+    'audit-logs',
     'member-created-success'
   ].includes(currentScreen);
 
   const bottomNavTabs: MobileNavTab[] = [
     { id: 'home', label: 'Home', icon: Home },
     { id: 'members', label: 'Members', icon: Users, badge: members.length },
-    { id: 'finance', label: 'Finance', icon: DollarSign },
-    { id: 'alerts', label: 'Alerts', icon: Bell, badge: unreadNotifs.length > 0 ? unreadNotifs.length : undefined },
+    { id: 'finance', label: 'Finance', icon: CreditCard },
+    { id: 'attendance', label: 'Attendance', icon: Calendar, badge: todayCheckins.length > 0 ? todayCheckins.length : undefined },
     { id: 'more', label: 'More', icon: Layers },
   ];
 
@@ -316,20 +405,21 @@ export const MobileOwnerApp: React.FC = () => {
       {/* ── 1. COMPACT NATIVE MOBILE HEADER ── */}
       <MobileAppHeader
         title={isSubPage ? undefined : 'Smart Gym'}
-        subtitle={isSubPage ? undefined : `${currentBranch?.name} (${currentBranch?.city})`}
-        role={currentRole}
+        subtitle={isSubPage ? undefined : `${currentBranch.name} • ${currentBranch.code}`}
+        role="Admin"
         accentColor="#4F7CFF"
         unreadCount={unreadNotifs.length}
-        onOpenNotifications={() => navigateTo('alerts')}
+        onOpenNotifications={() => navigateTo('broadcast')}
         onSignOut={signOutApp}
         backAction={isSubPage ? goBack : undefined}
         backTitle={
-          currentScreen === 'add-member' ? 'Admission Form' :
+          currentScreen === 'add-member' ? 'Add Member' :
           currentScreen === 'member-profile' ? 'Member Profile' :
-          currentScreen === 'add-trainer' ? 'New Coach' :
-          currentScreen === 'add-expense' ? 'Record Expense' :
-          currentScreen === 'broadcast' ? 'Broadcast Push' :
-          currentScreen === 'member-created-success' ? 'Pass Generated' : 'Back'
+          currentScreen === 'add-trainer' ? 'Add Coach' :
+          currentScreen === 'add-expense' ? 'Add Expense' :
+          currentScreen === 'broadcast' ? 'Broadcast Alerts' :
+          currentScreen === 'audit-logs' ? 'Audit Logs' :
+          currentScreen === 'member-created-success' ? 'Member Created' : 'Back'
         }
       />
 
@@ -337,59 +427,61 @@ export const MobileOwnerApp: React.FC = () => {
       <main className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-24 max-w-lg mx-auto w-full">
 
         {/* ═══════════════════════════════════════════════════════════
-            SCREEN 1: HOME DASHBOARD
+            SCREEN 1: HOME OVERVIEW (EXECUTIVE DASHBOARD)
         ═══════════════════════════════════════════════════════════ */}
         {currentScreen === 'home' && (
           <div className="space-y-4 animate-in fade-in duration-200">
             
             {/* Net Operating Profit Card */}
-            <div className="relative overflow-hidden bg-gradient-to-br from-[#121727] via-[#0E1322] to-[#0A0D18] p-5 rounded-3xl border border-white/10 shadow-2xl">
+            <div className="bg-gradient-to-br from-[#121727] via-[#0E1322] to-[#0A0D18] p-5 rounded-3xl border border-white/10 shadow-2xl relative overflow-hidden">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-black tracking-widest text-slate-400 uppercase">
+                <span className="text-xs font-black text-slate-400 uppercase tracking-wider">
                   Net Operating Profit
                 </span>
-                <span
-                  className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-1 border ${
-                    isProfitPositive
-                      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                      : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
-                  }`}
-                >
+                <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1 ${
+                  isProfitPositive
+                    ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                    : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                }`}>
                   {isProfitPositive ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                  {isProfitPositive ? 'Surplus' : 'Deficit'}
+                  <span>{isProfitPositive ? 'Surplus' : 'Deficit'}</span>
                 </span>
               </div>
 
               <div className="mt-2">
-                <div className="text-3xl font-black tracking-tight text-white">
-                  ₹{netProfit.toLocaleString('en-IN')}
+                <div className="text-3xl font-black text-white tracking-tight">
+                  ₹{Math.abs(netProfit).toLocaleString('en-IN')}
                 </div>
-                <div className="flex items-center gap-4 mt-3 pt-3 border-t border-white/10 text-xs">
-                  <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">Collections</span>
-                    <span className="text-emerald-400 font-black">₹{totalCollections.toLocaleString('en-IN')}</span>
+                <div className="flex items-center gap-4 mt-2 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                    <span className="text-slate-400">Collections:</span>
+                    <strong className="text-emerald-400">₹{totalCollections.toLocaleString('en-IN')}</strong>
                   </div>
-                  <div className="w-[1px] h-6 bg-white/10" />
-                  <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">Expenses</span>
-                    <span className="text-rose-400 font-black">₹{totalExpenseAmount.toLocaleString('en-IN')}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-rose-400" />
+                    <span className="text-slate-400">Expenses:</span>
+                    <strong className="text-rose-400">₹{totalExpenseAmount.toLocaleString('en-IN')}</strong>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* 3 Metrics Cards Grid */}
+            {/* 3 Metric Cards */}
             <div className="grid grid-cols-3 gap-2.5">
               <div
                 onClick={() => navigateTo('members')}
                 className="bg-[#101422] hover:bg-[#151A2E] p-3.5 rounded-2xl border border-white/10 text-center cursor-pointer transition-all active:scale-95 shadow-md"
               >
-                <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Active</div>
-                <div className="text-xl font-black text-white mt-0.5">{members.filter(m => m.status === 'Active').length}</div>
-                <span className="text-[9px] text-[#4F7CFF] font-bold block mt-0.5">Members →</span>
+                <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Members</div>
+                <div className="text-xl font-black text-white mt-0.5">{members.length}</div>
+                <span className="text-[9px] text-[#4F7CFF] font-bold block mt-0.5">Directory →</span>
               </div>
 
-              <div className="bg-[#101422] p-3.5 rounded-2xl border border-white/10 text-center shadow-md">
+              <div
+                onClick={() => navigateTo('attendance')}
+                className="bg-[#101422] hover:bg-[#151A2E] p-3.5 rounded-2xl border border-white/10 text-center cursor-pointer transition-all active:scale-95 shadow-md"
+              >
                 <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Check-ins</div>
                 <div className="text-xl font-black text-emerald-400 mt-0.5">{todayCheckins.length}</div>
                 <span className="text-[9px] text-slate-400 font-bold block mt-0.5">Today</span>
@@ -405,7 +497,7 @@ export const MobileOwnerApp: React.FC = () => {
               </div>
             </div>
 
-            {/* Quick Actions Title */}
+            {/* Touch-Friendly 2x2 Quick Action Grid */}
             <div className="pt-2">
               <h3 className="text-xs font-black text-slate-400 uppercase tracking-wider mb-2.5">
                 Quick Actions
@@ -419,7 +511,7 @@ export const MobileOwnerApp: React.FC = () => {
                     <UserPlus className="w-5 h-5" />
                   </div>
                   <div className="font-black text-xs text-white">+ Add Member</div>
-                  <div className="text-[10px] text-slate-400 font-medium mt-0.5">Enroll new student</div>
+                  <div className="text-[10px] text-slate-400 font-medium mt-0.5">Auto-provision & WhatsApp</div>
                 </button>
 
                 <button
@@ -429,8 +521,8 @@ export const MobileOwnerApp: React.FC = () => {
                   <div className="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
                     <Award className="w-5 h-5" />
                   </div>
-                  <div className="font-black text-xs text-white">+ Add Trainer</div>
-                  <div className="text-[10px] text-slate-400 font-medium mt-0.5">Register gym coach</div>
+                  <div className="font-black text-xs text-white">+ Add Coach</div>
+                  <div className="text-[10px] text-slate-400 font-medium mt-0.5">PT & trainer roster</div>
                 </button>
 
                 <button
@@ -441,27 +533,27 @@ export const MobileOwnerApp: React.FC = () => {
                     <DollarSign className="w-5 h-5" />
                   </div>
                   <div className="font-black text-xs text-white">+ Record Expense</div>
-                  <div className="text-[10px] text-slate-400 font-medium mt-0.5">Add operational cost</div>
+                  <div className="text-[10px] text-slate-400 font-medium mt-0.5">Bills, rent & repairs</div>
                 </button>
 
                 <button
                   onClick={() => navigateTo('broadcast')}
-                  className="bg-gradient-to-br from-[#1A2238] to-[#121727] hover:from-[#202B47] hover:to-[#161D32] active:scale-95 p-4 rounded-2xl border border-emerald-500/30 text-left transition-all shadow-lg group"
+                  className="bg-gradient-to-br from-[#1A2238] to-[#121727] hover:from-[#202B47] hover:to-[#161D32] active:scale-95 p-4 rounded-2xl border border-amber-500/30 text-left transition-all shadow-lg group"
                 >
-                  <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                  <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
                     <Send className="w-5 h-5" />
                   </div>
                   <div className="font-black text-xs text-white">Push Broadcast</div>
-                  <div className="text-[10px] text-slate-400 font-medium mt-0.5">Notify entire gym</div>
+                  <div className="text-[10px] text-slate-400 font-medium mt-0.5">Alert all members</div>
                 </button>
               </div>
             </div>
 
-            {/* Recent Admissions Feed */}
+            {/* Recent Member Admissions Stream */}
             <div className="pt-2">
               <div className="flex items-center justify-between mb-2.5">
                 <h3 className="text-xs font-black text-slate-400 uppercase tracking-wider">
-                  Recent Admissions
+                  Recent Members
                 </h3>
                 <button
                   onClick={() => navigateTo('members')}
@@ -472,7 +564,7 @@ export const MobileOwnerApp: React.FC = () => {
               </div>
 
               <div className="space-y-2">
-                {members.slice(0, 4).map((member) => (
+                {filteredMembers.slice(0, 4).map((member) => (
                   <div
                     key={member.id}
                     onClick={() => {
@@ -490,7 +582,7 @@ export const MobileOwnerApp: React.FC = () => {
                       <div>
                         <h4 className="text-xs font-black text-white">{member.name}</h4>
                         <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
-                          <span>{member.membershipNo}</span>
+                          <span>{member.username || member.membershipNo}</span>
                           <span>•</span>
                           <span className="text-[#4F7CFF] font-semibold">{member.planName}</span>
                         </div>
@@ -512,29 +604,29 @@ export const MobileOwnerApp: React.FC = () => {
         )}
 
         {/* ═══════════════════════════════════════════════════════════
-            SCREEN 2: MEMBERS MANAGEMENT
+            SCREEN 2: MEMBERS DIRECTORY
         ═══════════════════════════════════════════════════════════ */}
         {currentScreen === 'members' && (
           <div className="space-y-3.5 animate-in fade-in duration-200">
             
-            {/* Search Bar & Add CTA */}
+            {/* Search & Add Member */}
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Search name, ID or mobile..."
+                  placeholder="Search member, username, mobile..."
                   value={searchMember}
                   onChange={(e) => setSearchMember(e.target.value)}
-                  className="w-full pl-10 pr-3.5 py-2.5 bg-[#101422] rounded-2xl border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#4F7CFF] transition-all"
+                  className="w-full pl-10 pr-3.5 py-2.5 bg-[#101422] rounded-2xl border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#4F7CFF]"
                 />
               </div>
               <button
                 onClick={() => navigateTo('add-member')}
-                className="px-3.5 py-2.5 rounded-2xl bg-[#4F7CFF] hover:bg-[#3D69EB] active:scale-95 text-white font-black text-xs flex items-center gap-1 shadow-lg shadow-[#4F7CFF]/20"
+                className="px-3.5 py-2.5 rounded-2xl bg-[#4F7CFF] hover:bg-[#3D69EB] active:scale-95 text-white font-black text-xs flex items-center gap-1 shadow-md"
               >
                 <UserPlus className="w-4 h-4" />
-                <span>+ Admission</span>
+                <span>+ Member</span>
               </button>
             </div>
 
@@ -557,326 +649,220 @@ export const MobileOwnerApp: React.FC = () => {
 
             {/* Members List */}
             <div className="space-y-2.5">
-              {filteredMembers.length === 0 ? (
-                <div className="py-12 text-center text-slate-400">
-                  <Users className="w-10 h-10 text-slate-600 mx-auto mb-2" />
-                  <p className="text-xs font-bold">No members found</p>
-                </div>
-              ) : (
-                filteredMembers.map((m) => (
-                  <div
-                    key={m.id}
-                    onClick={() => {
-                      setSelectedMember(m);
-                      navigateTo('member-profile');
-                    }}
-                    className="p-3.5 bg-[#101422] hover:bg-[#151A2E] active:scale-[0.98] rounded-2xl border border-white/10 flex items-center justify-between cursor-pointer transition-all shadow-sm"
-                  >
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={m.photoUrl}
-                        alt={m.name}
-                        className="w-11 h-11 rounded-2xl object-cover border border-[#4F7CFF]/50 shadow-inner"
-                      />
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-xs font-black text-white">{m.name}</h4>
-                          <span
-                            className={`text-[8px] font-black px-1.5 py-0.5 rounded-full border uppercase ${
-                              m.status === 'Active'
-                                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                                : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
-                            }`}
-                          >
-                            {m.status}
-                          </span>
-                        </div>
-                        <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-2">
-                          <span>{m.membershipNo}</span>
-                          <span>•</span>
-                          <span className="text-[#4F7CFF] font-semibold">{m.planName}</span>
-                        </div>
+              {filteredMembers.map((member) => (
+                <div
+                  key={member.id}
+                  onClick={() => {
+                    setSelectedMember(member);
+                    navigateTo('member-profile');
+                  }}
+                  className="p-3.5 bg-[#101422] hover:bg-[#151A2E] active:scale-[0.98] rounded-2xl border border-white/10 flex items-center justify-between cursor-pointer transition-all shadow-sm"
+                >
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={member.photoUrl}
+                      alt={member.name}
+                      className="w-11 h-11 rounded-2xl object-cover border border-[#4F7CFF]/50 shadow-inner"
+                    />
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-xs font-black text-white">{member.name}</h4>
+                        <span className="text-[8px] font-black px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 uppercase">
+                          {member.status}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-2">
+                        <span>{member.username || member.membershipNo}</span>
+                        <span>•</span>
+                        <span className="text-[#4F7CFF] font-semibold">{member.goal}</span>
                       </div>
                     </div>
-
-                    <div className="text-right">
-                      <div className="text-xs font-black text-white">₹{m.paymentStatus === 'Paid' ? '1,500' : '0'}</div>
-                      <span className="text-[9px] text-slate-400 block mt-0.5">Exp: {m.endDate}</span>
-                    </div>
                   </div>
-                ))
-              )}
+
+                  <div className="text-right">
+                    <span className="text-xs font-black text-slate-200">{member.planName}</span>
+                    <span className="text-[9px] text-slate-400 block mt-0.5">Exp: {member.endDate}</span>
+                  </div>
+                </div>
+              ))}
             </div>
 
           </div>
         )}
 
         {/* ═══════════════════════════════════════════════════════════
-            SCREEN 3: FINANCE & EXPENSES
+            SCREEN 3: FINANCE & CASHFLOW
         ═══════════════════════════════════════════════════════════ */}
         {currentScreen === 'finance' && (
           <div className="space-y-4 animate-in fade-in duration-200">
-            
-            {/* Financial Overview Card */}
             <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 shadow-xl space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-black text-slate-400 uppercase tracking-wider">Financial Health</span>
+                <span className="text-xs font-black text-slate-400 uppercase tracking-wider">Branch Cashflow</span>
                 <button
                   onClick={() => navigateTo('add-expense')}
-                  className="px-3 py-1.5 rounded-xl bg-rose-500 hover:bg-rose-600 active:scale-95 text-white font-black text-[10px] flex items-center gap-1 shadow-md"
+                  className="px-3 py-1.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-black text-[10px] flex items-center gap-1 shadow-md"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>+ Record Expense</span>
+                  <span>Record Expense</span>
                 </button>
               </div>
 
               <div className="grid grid-cols-2 gap-2.5 pt-1">
                 <div className="p-3 bg-[#0B0E17] rounded-2xl border border-white/10">
-                  <span className="text-[10px] text-slate-400 font-medium block">Total Collections</span>
-                  <span className="text-lg font-black text-emerald-400">₹{totalCollections.toLocaleString('en-IN')}</span>
-                  <span className="text-[9px] text-slate-500 block mt-0.5">{branchTransactions.length} Transactions</span>
+                  <div className="text-[10px] text-slate-400 font-medium uppercase">Collections</div>
+                  <div className="text-lg font-black text-emerald-400 mt-0.5">₹{totalCollections.toLocaleString('en-IN')}</div>
                 </div>
                 <div className="p-3 bg-[#0B0E17] rounded-2xl border border-white/10">
-                  <span className="text-[10px] text-slate-400 font-medium block">Total Expenses</span>
-                  <span className="text-lg font-black text-rose-400">₹{totalExpenseAmount.toLocaleString('en-IN')}</span>
-                  <span className="text-[9px] text-slate-500 block mt-0.5">{branchExpenses.length} Records</span>
+                  <div className="text-[10px] text-slate-400 font-medium uppercase">Expenses</div>
+                  <div className="text-lg font-black text-rose-400 mt-0.5">₹{totalExpenseAmount.toLocaleString('en-IN')}</div>
                 </div>
-              </div>
-
-              <div className="p-3 bg-[#07090E] rounded-2xl border border-white/10 flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-300">Net Operational Balance</span>
-                <span className={`text-base font-black ${isProfitPositive ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  ₹{netProfit.toLocaleString('en-IN')}
-                </span>
               </div>
             </div>
 
             {/* Recent Expenses List */}
-            <div className="space-y-2.5">
-              <h3 className="text-xs font-black text-slate-400 uppercase tracking-wider">
-                Expense Records ({branchExpenses.length})
-              </h3>
-
-              {branchExpenses.map((exp) => (
-                <div key={exp.id} className="p-3.5 bg-[#101422] rounded-2xl border border-white/10 flex items-center justify-between">
-                  <div>
-                    <h4 className="text-xs font-black text-white">{exp.name}</h4>
-                    <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
-                      <span className="px-1.5 py-0.5 rounded bg-white/5 text-slate-300 font-medium">{exp.category}</span>
-                      <span>•</span>
-                      <span>{exp.date}</span>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-xs font-black text-rose-400">-₹{exp.amount.toLocaleString('en-IN')}</span>
-                    <span className="text-[9px] text-emerald-400 block font-semibold">{exp.status}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-          </div>
-        )}
-
-        {/* ═══════════════════════════════════════════════════════════
-            SCREEN 4: ALERTS & BROADCAST
-        ═══════════════════════════════════════════════════════════ */}
-        {currentScreen === 'alerts' && (
-          <div className="space-y-4 animate-in fade-in duration-200">
-            
-            {/* Composer Card */}
             <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 shadow-xl space-y-3">
-              <h3 className="text-xs font-black text-white flex items-center gap-2">
-                <Send className="w-4 h-4 text-[#4F7CFF]" />
-                <span>Compose Push Notification</span>
-              </h3>
-
-              {notifSuccess && (
-                <div className="p-3 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  <span>{notifSuccess}</span>
-                </div>
-              )}
-
-              <form onSubmit={handleBroadcast} className="space-y-3">
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
-                    Target Audience
-                  </label>
-                  <select
-                    value={notifTarget}
-                    onChange={(e) => setNotifTarget(e.target.value as any)}
-                    className="w-full p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white focus:outline-none focus:border-[#4F7CFF]"
-                  >
-                    <option value="all">All Members & Coaches</option>
-                    <option value="active">Active Members Only</option>
-                    <option value="expired">Expired Members (Renewal Promo)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
-                    Notification Title
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Special Holiday Hours / New Batch"
-                    value={notifTitle}
-                    onChange={(e) => setNotifTitle(e.target.value)}
-                    required
-                    className="w-full p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#4F7CFF]"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
-                    Message Body
-                  </label>
-                  <textarea
-                    rows={3}
-                    placeholder="Type broadcast message for instant push delivery..."
-                    value={notifMessage}
-                    onChange={(e) => setNotifMessage(e.target.value)}
-                    required
-                    className="w-full p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#4F7CFF]"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isSendingBroadcast}
-                  className="w-full py-3 rounded-2xl bg-[#4F7CFF] hover:bg-[#3D69EB] active:scale-95 disabled:opacity-50 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-[#4F7CFF]/20"
-                >
-                  <Send className="w-4 h-4" />
-                  <span>{isSendingBroadcast ? 'Broadcasting Push...' : 'Send Broadcast Push'}</span>
-                </button>
-              </form>
-            </div>
-
-            {/* Notification Log History */}
-            <div className="space-y-2">
-              <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider">
-                Recent Broadcasts
-              </h4>
-              {notifications.map((n) => (
-                <div key={n.id} className="p-3 bg-[#101422] rounded-2xl border border-white/10 space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-black text-white">{n.title}</span>
-                    <span className="text-[9px] text-slate-400">{n.timestamp}</span>
+              <span className="text-xs font-black text-slate-400 uppercase tracking-wider block">Recent Expenses Log</span>
+              <div className="space-y-2">
+                {branchExpenses.map((exp) => (
+                  <div key={exp.id} className="p-3 bg-[#0B0E17] rounded-2xl border border-white/10 flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-black text-white">{exp.name}</div>
+                      <div className="text-[10px] text-slate-400">{exp.category} • {exp.date}</div>
+                    </div>
+                    <span className="text-xs font-black text-rose-400">-₹{exp.amount.toLocaleString('en-IN')}</span>
                   </div>
-                  <p className="text-[11px] text-slate-300 font-medium">{n.message}</p>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-
           </div>
         )}
 
         {/* ═══════════════════════════════════════════════════════════
-            SCREEN 5: MORE / SETTINGS
+            SCREEN 4: ATTENDANCE
+        ═══════════════════════════════════════════════════════════ */}
+        {currentScreen === 'attendance' && (
+          <div className="space-y-4 animate-in fade-in duration-200">
+            <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 shadow-xl space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-slate-400 uppercase tracking-wider">Today's Check-in Log</span>
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[10px] font-black">
+                  {todayCheckins.length} Active In Gym
+                </span>
+              </div>
+
+              <div className="space-y-2 pt-1">
+                {todayCheckins.map((rec) => (
+                  <div key={rec.id} className="p-3 bg-[#0B0E17] rounded-2xl border border-white/10 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <img src={rec.memberPhoto} alt={rec.memberName} className="w-8 h-8 rounded-xl object-cover border border-white/20" />
+                      <div>
+                        <div className="text-xs font-black text-white">{rec.memberName}</div>
+                        <div className="text-[10px] text-slate-400">{rec.verificationMethod} • {rec.entryTime}</div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-black text-emerald-400">Verified ✓</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════
+            SCREEN 5: MORE / SETTINGS / AUDIT LOGS
         ═══════════════════════════════════════════════════════════ */}
         {currentScreen === 'more' && (
           <div className="space-y-4 animate-in fade-in duration-200">
             
-            {/* Branch Facility Picker */}
-            <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 shadow-xl space-y-3">
-              <h3 className="text-xs font-black text-white flex items-center gap-2">
-                <Building2 className="w-4 h-4 text-[#4F7CFF]" />
-                <span>Active Facility Branch</span>
-              </h3>
-
-              <div className="space-y-2">
+            {/* Branch Selector */}
+            <div className="p-4 bg-[#101422] rounded-3xl border border-white/10 shadow-xl space-y-3">
+              <span className="text-xs font-black text-slate-400 uppercase tracking-wider block">
+                Active Gym Branch
+              </span>
+              <div className="grid grid-cols-3 gap-2">
                 {branches.map((b) => (
-                  <div
+                  <button
                     key={b.id}
-                    onClick={() => setSelectedBranchId(b.id as BranchId)}
-                    className={`p-3 rounded-2xl border flex items-center justify-between cursor-pointer transition-all ${
+                    onClick={() => setSelectedBranchId(b.id)}
+                    className={`p-2.5 rounded-2xl text-left border transition-all ${
                       selectedBranchId === b.id
-                        ? 'bg-[#4F7CFF]/15 border-[#4F7CFF] text-white font-bold'
-                        : 'bg-[#0B0E17] border-white/10 text-slate-300 hover:bg-[#151A2E]'
+                        ? 'bg-[#4F7CFF]/20 border-[#4F7CFF] text-white'
+                        : 'bg-[#0B0E17] border-white/10 text-slate-400 hover:text-white'
                     }`}
                   >
-                    <div>
-                      <div className="text-xs font-black">{b.name}</div>
-                      <div className="text-[10px] text-slate-400">{b.city} • {b.phone}</div>
-                    </div>
-                    {selectedBranchId === b.id && <Check className="w-4 h-4 text-[#4F7CFF]" />}
-                  </div>
+                    <div className="text-xs font-black">{b.name}</div>
+                    <div className="text-[9px] mt-0.5">{b.code}</div>
+                  </button>
                 ))}
               </div>
             </div>
 
-            {/* Gym Trainers Directory */}
-            <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 shadow-xl space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-black text-white flex items-center gap-2">
-                  <Award className="w-4 h-4 text-purple-400" />
-                  <span>Certified Coaches ({trainers.length})</span>
-                </h3>
-                <button
-                  onClick={() => navigateTo('add-trainer')}
-                  className="text-[10px] font-black text-[#4F7CFF] hover:underline"
-                >
-                  + Add Coach
-                </button>
-              </div>
-
-              <div className="space-y-2">
-                {trainers.map((tr) => (
-                  <div key={tr.id} className="p-3 bg-[#0B0E17] rounded-2xl border border-white/10 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <img src={tr.photoUrl} alt={tr.name} className="w-9 h-9 rounded-xl object-cover border border-purple-500/40" />
-                      <div>
-                        <div className="text-xs font-black text-white">{tr.name}</div>
-                        <div className="text-[10px] text-purple-400 font-semibold">{tr.specialization}</div>
-                      </div>
-                    </div>
-                    <div className="text-right text-[10px] text-slate-400">
-                      <div>Salary: ₹{tr.baseSalary.toLocaleString('en-IN')}</div>
-                      <div className="text-emerald-400 font-semibold">{tr.shift}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Security & Sign Out */}
-            <div className="p-4 bg-[#101422] rounded-3xl border border-white/10 space-y-3">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-400 font-bold">Smart Gym App OS</span>
-                <span className="text-[#4F7CFF] font-mono text-[10px]">v4.5 Android Edition</span>
-              </div>
+            {/* Quick Management Links */}
+            <div className="bg-[#101422] rounded-3xl border border-white/10 overflow-hidden shadow-xl divide-y divide-white/5">
+              <button
+                onClick={() => navigateTo('add-trainer')}
+                className="w-full p-4 flex items-center justify-between text-left hover:bg-[#151A2E] active:bg-[#1B2238] transition-all"
+              >
+                <div className="flex items-center gap-3">
+                  <Award className="w-5 h-5 text-purple-400" />
+                  <span className="text-xs font-bold text-white">Add Trainer / Coach</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-500" />
+              </button>
 
               <button
-                onClick={signOutApp}
-                className="w-full py-3 rounded-2xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-400 font-black text-xs flex items-center justify-center gap-2 transition-all active:scale-95"
+                onClick={() => navigateTo('broadcast')}
+                className="w-full p-4 flex items-center justify-between text-left hover:bg-[#151A2E] active:bg-[#1B2238] transition-all"
               >
-                <LogOut className="w-4 h-4" />
-                <span>Sign Out of Owner Account</span>
+                <div className="flex items-center gap-3">
+                  <Send className="w-5 h-5 text-amber-400" />
+                  <span className="text-xs font-bold text-white">Push Broadcast Notification</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-500" />
+              </button>
+
+              <button
+                onClick={() => navigateTo('audit-logs')}
+                className="w-full p-4 flex items-center justify-between text-left hover:bg-[#151A2E] active:bg-[#1B2238] transition-all"
+              >
+                <div className="flex items-center gap-3">
+                  <FileText className="w-5 h-5 text-cyan-400" />
+                  <span className="text-xs font-bold text-white">Security & Audit Logs</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-500" />
               </button>
             </div>
+
+            {/* Sign Out */}
+            <button
+              onClick={signOutApp}
+              className="w-full py-3 rounded-2xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-400 font-black text-xs flex items-center justify-center gap-2 transition-all active:scale-95"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Sign Out of Owner Account</span>
+            </button>
 
           </div>
         )}
 
         {/* ═══════════════════════════════════════════════════════════
-            SUBPAGE 1: ADD MEMBER (NATIVE IN-APP FORM)
+            SUBPAGE 1: ADD MEMBER (+ AUTO PROVISION & WHATSAPP)
         ═══════════════════════════════════════════════════════════ */}
         {currentScreen === 'add-member' && (
-          <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 shadow-2xl space-y-4 animate-in fade-in duration-200">
+          <div className="bg-[#101422] p-4 sm:p-5 rounded-3xl border border-white/10 shadow-2xl space-y-4 animate-in fade-in duration-200">
             <h3 className="text-sm font-black text-white flex items-center gap-2 pb-2 border-b border-white/10">
               <UserPlus className="w-4 h-4 text-[#4F7CFF]" />
-              <span>Student Admission & VIP Pass Creation</span>
+              <span>New Member Admission & Account Setup</span>
             </h3>
 
-            <form onSubmit={handleCreateMember} className="space-y-3 text-xs">
+            <form onSubmit={handleCreateMember} className="space-y-3.5 text-xs">
               <div>
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
                   Full Name *
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Vikram Sharma"
+                  placeholder="e.g. Rahul Roy"
                   value={memName}
                   onChange={(e) => setMemName(e.target.value)}
                   required
@@ -887,11 +873,11 @@ export const MobileOwnerApp: React.FC = () => {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
-                    Mobile No *
+                    WhatsApp Phone *
                   </label>
                   <input
                     type="tel"
-                    placeholder="+91 98765 43210"
+                    placeholder="+91 98765 00000"
                     value={memMobile}
                     onChange={(e) => setMemMobile(e.target.value)}
                     required
@@ -900,11 +886,11 @@ export const MobileOwnerApp: React.FC = () => {
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
-                    Email Address
+                    Email
                   </label>
                   <input
                     type="email"
-                    placeholder="name@gmail.com"
+                    placeholder="name@email.com"
                     value={memEmail}
                     onChange={(e) => setMemEmail(e.target.value)}
                     className="w-full p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#4F7CFF]"
@@ -929,7 +915,7 @@ export const MobileOwnerApp: React.FC = () => {
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
-                    Primary Goal
+                    Fitness Target
                   </label>
                   <select
                     value={memGoal}
@@ -938,9 +924,9 @@ export const MobileOwnerApp: React.FC = () => {
                   >
                     <option value="Muscle Building">Muscle Building</option>
                     <option value="Weight Loss">Weight Loss</option>
-                    <option value="Endurance">Endurance</option>
-                    <option value="Strength">Strength</option>
-                    <option value="Flexibility">Flexibility</option>
+                    <option value="Body Recomposition">Body Recomposition</option>
+                    <option value="Endurance & Cardio">Endurance & Cardio</option>
+                    <option value="Rehab & Mobility">Rehab & Mobility</option>
                   </select>
                 </div>
               </div>
@@ -971,23 +957,50 @@ export const MobileOwnerApp: React.FC = () => {
                   onChange={(e) => setMemTrainerId(e.target.value)}
                   className="w-full p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white focus:outline-none focus:border-[#4F7CFF]"
                 >
-                  <option value="">Auto-Assign Primary Master Trainer</option>
-                  {trainers.map((tr) => (
-                    <option key={tr.id} value={tr.id}>
-                      Coach {tr.name} ({tr.specialization})
+                  <option value="">Auto Assign Default Coach</option>
+                  {trainers.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.specialization})
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* Automatic Provisioning & WhatsApp Options */}
+              <div className="p-3.5 bg-[#07090E] rounded-2xl border border-white/10 space-y-2.5">
+                <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                  Automatic Account & WhatsApp Setup
+                </div>
+
+                <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={autoCreateLogin}
+                    onChange={(e) => setAutoCreateLogin(e.target.checked)}
+                    className="w-4 h-4 rounded text-[#4F7CFF] bg-[#121727] border-white/20 focus:ring-0"
+                  />
+                  <span>Create Member Login Account Automatically</span>
+                </label>
+
+                <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={autoSendWhatsApp}
+                    onChange={(e) => setAutoSendWhatsApp(e.target.checked)}
+                    className="w-4 h-4 rounded text-emerald-500 bg-[#121727] border-white/20 focus:ring-0"
+                  />
+                  <span>Send Login Credentials via WhatsApp</span>
+                </label>
               </div>
 
               <div className="pt-2">
                 <button
                   type="submit"
                   disabled={isSubmittingMember}
-                  className="w-full py-3 rounded-2xl bg-[#4F7CFF] hover:bg-[#3D69EB] active:scale-95 disabled:opacity-50 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-[#4F7CFF]/20"
+                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#4F7CFF] to-[#27D980] hover:opacity-95 active:scale-95 disabled:opacity-50 text-black font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-[#4F7CFF]/20"
                 >
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>{isSubmittingMember ? 'Generating Obsidian Pass...' : 'Create Member & Issue VIP Pass'}</span>
+                  <span>{isSubmittingMember ? 'Creating Account & Dispatching WhatsApp...' : 'Create Member & Dispatch Credentials'}</span>
                 </button>
               </div>
             </form>
@@ -995,24 +1008,100 @@ export const MobileOwnerApp: React.FC = () => {
         )}
 
         {/* ═══════════════════════════════════════════════════════════
-            SUBPAGE 2: MEMBER CREATED SUCCESS
+            SUBPAGE 2: MEMBER CREATED SUCCESS & CREDENTIALS
         ═══════════════════════════════════════════════════════════ */}
         {currentScreen === 'member-created-success' && newlyCreatedMember && (
-          <div className="space-y-4 text-center animate-in zoom-in-95 duration-200">
-            <div className="w-14 h-14 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto border border-emerald-500/40 shadow-lg">
-              <CheckCircle2 className="w-7 h-7" />
+          <div className="space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="text-center space-y-1">
+              <div className="w-14 h-14 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto border border-emerald-500/40 shadow-lg">
+                <CheckCircle2 className="w-7 h-7" />
+              </div>
+              <h3 className="text-base font-black text-white">Member Admitted & Account Created!</h3>
+              <p className="text-xs text-slate-400">Credentials generated and linked successfully</p>
             </div>
 
-            <div>
-              <h3 className="text-base font-black text-white">Member Admitted Successfully!</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Obsidian Gold VIP Access Pass is Active</p>
+            {/* Credentials Card */}
+            <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 shadow-xl space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                <div>
+                  <div className="text-sm font-black text-white">{newlyCreatedMember.name}</div>
+                  <div className="text-[10px] text-slate-400">ID: {newlyCreatedMember.membershipNo}</div>
+                </div>
+                <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-[#27D980]/15 text-[#27D980] border border-[#27D980]/30">
+                  {newlyCreatedMember.planName}
+                </span>
+              </div>
+
+              {/* Login Credentials Box */}
+              <div className="p-3 bg-[#07090E] rounded-2xl border border-white/10 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Username</span>
+                  <div className="flex items-center gap-2">
+                    <strong className="text-xs font-mono text-white font-black">{newlyCreatedMember.username || newlyCreatedMember.membershipNo}</strong>
+                    <button
+                      onClick={() => copyToClipboard(newlyCreatedMember.username || newlyCreatedMember.membershipNo, 'Username')}
+                      className="p-1 rounded-md bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white"
+                      title="Copy Username"
+                    >
+                      {copiedField === 'Username' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1 border-t border-white/5">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Temporary Password</span>
+                  <div className="flex items-center gap-2">
+                    <strong className="text-xs font-mono text-amber-400 font-black">{newlyCreatedTempPassword || newlyCreatedMember.tempPassword || 'Gym@48291'}</strong>
+                    <button
+                      onClick={() => copyToClipboard(newlyCreatedTempPassword || newlyCreatedMember.tempPassword || 'Gym@48291', 'Password')}
+                      className="p-1 rounded-md bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white"
+                      title="Copy Password"
+                    >
+                      {copiedField === 'Password' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* WhatsApp Status */}
+              <div className="flex items-center justify-between p-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-xs">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-emerald-400" />
+                  <span className="text-emerald-300 font-bold">
+                    {newlyCreatedWhatsAppStatus === 'SENT' ? 'Credentials Sent via WhatsApp' : 'WhatsApp Ready'}
+                  </span>
+                </div>
+                {newlyCreatedWhatsAppUrl && (
+                  <button
+                    onClick={() => window.open(newlyCreatedWhatsAppUrl, '_blank')}
+                    className="px-2.5 py-1 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-black font-black text-[10px] flex items-center gap-1 shadow-sm"
+                  >
+                    <span>Open Chat</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+
+              {/* Copy Full Text */}
+              <button
+                onClick={() => {
+                  const fullText = `Welcome to Smart Gym!\n\nHi ${newlyCreatedMember.name},\nYour member account is created.\nMember ID: ${newlyCreatedMember.membershipNo}\nUsername: ${newlyCreatedMember.username}\nTemporary Password: ${newlyCreatedTempPassword}\n\nPlease log in and set your new password.`;
+                  copyToClipboard(fullText, 'FullCredentials');
+                }}
+                className="w-full py-2.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white text-xs font-bold flex items-center justify-center gap-2"
+              >
+                {copiedField === 'FullCredentials' ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                <span>{copiedField === 'FullCredentials' ? 'Copied Full Credentials Message!' : 'Copy Full Credentials Message'}</span>
+              </button>
             </div>
 
+            {/* Membership Pass Card */}
             <div className="w-full max-w-sm mx-auto">
               <PrivilegePassCard member={newlyCreatedMember} />
             </div>
 
-            <div className="flex items-center gap-2 pt-2">
+            {/* Actions */}
+            <div className="flex items-center gap-2 pt-1">
               <button
                 onClick={() => {
                   setSelectedMember(newlyCreatedMember);
@@ -1026,14 +1115,14 @@ export const MobileOwnerApp: React.FC = () => {
                 onClick={() => navigateTo('members')}
                 className="flex-1 py-3 rounded-2xl bg-[#4F7CFF] hover:bg-[#3D69EB] text-white font-black text-xs"
               >
-                Members Directory
+                Done
               </button>
             </div>
           </div>
         )}
 
         {/* ═══════════════════════════════════════════════════════════
-            SUBPAGE 3: MEMBER PROFILE (MOBILE-FIRST)
+            SUBPAGE 3: MEMBER PROFILE & LOGIN ACCOUNT MANAGEMENT
         ═══════════════════════════════════════════════════════════ */}
         {currentScreen === 'member-profile' && selectedMember && (
           <div className="space-y-4 animate-in fade-in duration-200">
@@ -1048,11 +1137,17 @@ export const MobileOwnerApp: React.FC = () => {
               <div className="flex-1">
                 <div className="flex items-center gap-2">
                   <h3 className="text-sm font-black text-white">{selectedMember.name}</h3>
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[9px] font-black uppercase">
+                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                    selectedMember.status === 'Active'
+                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                      : 'bg-red-500/15 text-red-400 border border-red-500/30'
+                  }`}>
                     {selectedMember.status}
                   </span>
                 </div>
-                <div className="text-[10px] text-slate-400 mt-0.5">ID: {selectedMember.membershipNo} • {selectedMember.mobile}</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">
+                  ID: {selectedMember.membershipNo} • {selectedMember.mobile}
+                </div>
                 <div className="text-[10px] text-[#4F7CFF] font-bold mt-0.5">Goal: {selectedMember.goal}</div>
               </div>
             </div>
@@ -1060,6 +1155,119 @@ export const MobileOwnerApp: React.FC = () => {
             {/* Obsidian Gold Card */}
             <div className="w-full max-w-sm mx-auto">
               <PrivilegePassCard member={selectedMember} />
+            </div>
+
+            {/* ── DEDICATED LOGIN ACCOUNT & CREDENTIALS SECTION ── */}
+            <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 shadow-xl space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                <div className="flex items-center gap-2">
+                  <KeyRound className="w-4 h-4 text-[#4F7CFF]" />
+                  <span className="text-xs font-black text-white uppercase tracking-wider">Login Account</span>
+                </div>
+                <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${
+                  selectedMember.status === 'Active'
+                    ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                    : 'bg-red-500/15 text-red-400 border border-red-500/30'
+                }`}>
+                  {selectedMember.status === 'Active' ? 'Account Active' : 'Account Disabled'}
+                </span>
+              </div>
+
+              {/* Username row */}
+              <div className="p-3 bg-[#07090E] rounded-2xl border border-white/10 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block">Username</span>
+                  <strong className="text-xs font-mono text-white font-black">{selectedMember.username || selectedMember.membershipNo}</strong>
+                </div>
+                <button
+                  onClick={() => copyToClipboard(selectedMember.username || selectedMember.membershipNo, 'ProfileUsername')}
+                  className="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-slate-300 flex items-center gap-1.5"
+                >
+                  {copiedField === 'ProfileUsername' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedField === 'ProfileUsername' ? 'Copied' : 'Copy'}</span>
+                </button>
+              </div>
+
+              {/* Password row */}
+              <div className="p-3 bg-[#07090E] rounded-2xl border border-white/10 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block">Password</span>
+                  <strong className="text-xs font-mono text-amber-400 font-black">
+                    {showPasswordMap[selectedMember.id]
+                      ? (selectedMember.tempPassword || 'Gym@48291')
+                      : '••••••••••••'}
+                  </strong>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() =>
+                      setShowPasswordMap((prev) => ({
+                        ...prev,
+                        [selectedMember.id]: !prev[selectedMember.id],
+                      }))
+                    }
+                    className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10"
+                    title={showPasswordMap[selectedMember.id] ? 'Hide Password' : 'Show Password'}
+                  >
+                    {showPasswordMap[selectedMember.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                  <button
+                    onClick={() => copyToClipboard(selectedMember.tempPassword || 'Gym@48291', 'ProfilePassword')}
+                    className="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-slate-300 flex items-center gap-1"
+                  >
+                    {copiedField === 'ProfilePassword' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>Copy</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Account Status Flags & WhatsApp Status */}
+              <div className="grid grid-cols-2 gap-2 text-[10px]">
+                <div className="p-2.5 bg-[#07090E] rounded-xl border border-white/10">
+                  <span className="text-slate-400 block font-medium">First Login Status:</span>
+                  <strong className={selectedMember.mustChangePassword ? 'text-amber-400 font-bold' : 'text-emerald-400 font-bold'}>
+                    {selectedMember.mustChangePassword ? 'Pending Setup' : 'Completed ✓'}
+                  </strong>
+                </div>
+                <div className="p-2.5 bg-[#07090E] rounded-xl border border-white/10">
+                  <span className="text-slate-400 block font-medium">WhatsApp Delivery:</span>
+                  <strong className="text-emerald-400 font-bold">
+                    {selectedMember.whatsappStatus === 'SENT' ? 'Delivered ✓' : (selectedMember.whatsappStatus || 'Ready')}
+                  </strong>
+                </div>
+              </div>
+
+              {/* Action Buttons for Login Account */}
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  onClick={() => setResetModalOpen(true)}
+                  className="py-2.5 rounded-xl bg-[#1A2238] hover:bg-[#202B47] border border-[#4F7CFF]/30 text-[#4F7CFF] font-black text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>Reset Password</span>
+                </button>
+
+                <button
+                  onClick={handleResendCredentials}
+                  disabled={isResendingWhatsApp}
+                  className="py-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 font-black text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>{isResendingWhatsApp ? 'Sending...' : 'Resend WhatsApp'}</span>
+                </button>
+              </div>
+
+              {/* Enable / Disable Account Toggle */}
+              <button
+                onClick={() => handleToggleAccountStatus(selectedMember)}
+                className={`w-full py-2 rounded-xl text-xs font-bold border transition-all ${
+                  selectedMember.status === 'Active'
+                    ? 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/20'
+                    : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/20'
+                }`}
+              >
+                {selectedMember.status === 'Active' ? 'Disable / Suspend Account Access' : 'Enable Account Access'}
+              </button>
             </div>
 
             {/* Details & Metrics */}
@@ -1072,7 +1280,9 @@ export const MobileOwnerApp: React.FC = () => {
 
               <div className="p-3.5 bg-[#101422] rounded-2xl border border-white/10">
                 <span className="text-[10px] text-slate-400 font-medium block">Payment Status</span>
-                <span className="text-xs font-black text-emerald-400 block mt-0.5">₹1,500 Paid (UPI)</span>
+                <span className="text-xs font-black text-emerald-400 block mt-0.5">
+                  ₹{(selectedMember.paidAmount || 1500).toLocaleString('en-IN')} Paid (UPI)
+                </span>
                 <span className="text-[9px] text-emerald-400 mt-1 block font-semibold">Active Clear</span>
               </div>
             </div>
@@ -1098,12 +1308,45 @@ export const MobileOwnerApp: React.FC = () => {
                 <span>Call Client</span>
               </button>
             </div>
-
           </div>
         )}
 
         {/* ═══════════════════════════════════════════════════════════
-            SUBPAGE 4: ADD TRAINER
+            SUBPAGE 4: SECURITY & AUDIT LOGS
+        ═══════════════════════════════════════════════════════════ */}
+        {currentScreen === 'audit-logs' && (
+          <div className="space-y-3.5 animate-in fade-in duration-200">
+            <div className="p-4 bg-[#101422] rounded-3xl border border-white/10 shadow-xl space-y-2">
+              <h3 className="text-xs font-black text-white flex items-center gap-2">
+                <FileText className="w-4 h-4 text-cyan-400" />
+                <span>Security Audit Log (Account Events)</span>
+              </h3>
+              <p className="text-[10px] text-slate-400">
+                Tamper-evident record of account creations, password resets, and WhatsApp dispatches.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              {(auditLogs || []).map((log) => (
+                <div key={log.id} className="p-3 bg-[#101422] rounded-2xl border border-white/10 text-xs space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-black text-white text-[11px]">{log.eventType.replace(/_/g, ' ')}</span>
+                    <span className="text-[9px] text-slate-400 font-mono">
+                      {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-slate-300">{log.details}</div>
+                  <div className="text-[9px] text-slate-500 font-mono">
+                    Member: {log.memberName} • Actor: {log.actorRole}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════
+            SUBPAGE 5: ADD TRAINER
         ═══════════════════════════════════════════════════════════ */}
         {currentScreen === 'add-trainer' && (
           <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 shadow-2xl space-y-4 animate-in fade-in duration-200">
@@ -1198,7 +1441,7 @@ export const MobileOwnerApp: React.FC = () => {
         )}
 
         {/* ═══════════════════════════════════════════════════════════
-            SUBPAGE 5: ADD EXPENSE
+            SUBPAGE 6: ADD EXPENSE
         ═══════════════════════════════════════════════════════════ */}
         {currentScreen === 'add-expense' && (
           <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 shadow-2xl space-y-4 animate-in fade-in duration-200">
@@ -1271,16 +1514,149 @@ export const MobileOwnerApp: React.FC = () => {
           </div>
         )}
 
+        {/* ═══════════════════════════════════════════════════════════
+            SUBPAGE 7: BROADCAST NOTIFICATIONS
+        ═══════════════════════════════════════════════════════════ */}
+        {currentScreen === 'broadcast' && (
+          <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 shadow-2xl space-y-4 animate-in fade-in duration-200">
+            <h3 className="text-sm font-black text-white flex items-center gap-2 pb-2 border-b border-white/10">
+              <Send className="w-4 h-4 text-amber-400" />
+              <span>Broadcast Push Alert to Members</span>
+            </h3>
+
+            {notifSuccess && (
+              <div className="p-3 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{notifSuccess}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleBroadcast} className="space-y-3 text-xs">
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
+                  Recipient Audience
+                </label>
+                <select
+                  value={notifTarget}
+                  onChange={(e) => setNotifTarget(e.target.value as any)}
+                  className="w-full p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white focus:outline-none focus:border-amber-400"
+                >
+                  <option value="all">All Gym Members ({members.length})</option>
+                  <option value="active">Active Plan Holders</option>
+                  <option value="expired">Expired Members (Renewal Alert)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
+                  Alert Title *
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Special Weekend Boot Camp / Holiday Hours"
+                  value={notifTitle}
+                  onChange={(e) => setNotifTitle(e.target.value)}
+                  required
+                  className="w-full p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
+                  Message Content *
+                </label>
+                <textarea
+                  rows={4}
+                  placeholder="Write clear notification message..."
+                  value={notifMessage}
+                  onChange={(e) => setNotifMessage(e.target.value)}
+                  required
+                  className="w-full p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={isSendingBroadcast}
+                  className="w-full py-3 rounded-2xl bg-amber-500 hover:bg-amber-600 active:scale-95 disabled:opacity-50 text-black font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>{isSendingBroadcast ? 'Broadcasting...' : 'Broadcast Instant Alert'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
       </main>
 
-      {/* ── 3. FIXED BOTTOM MOBILE NAVIGATION ── */}
+      {/* ── 3. PASSWORD RESET CONFIRMATION MODAL ── */}
+      {resetModalOpen && selectedMember && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#101422] border border-white/15 rounded-3xl p-5 max-w-sm w-full space-y-4 shadow-2xl animate-in zoom-in-95">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto border border-amber-500/40">
+              <KeyRound className="w-6 h-6" />
+            </div>
+
+            <div className="text-center">
+              <h3 className="text-sm font-black text-white">Reset Member Login Password?</h3>
+              <p className="text-xs text-slate-400 mt-1">
+                This will invalidate {selectedMember.name}'s previous credentials, generate a new temporary password, and prepare a WhatsApp message.
+              </p>
+            </div>
+
+            {resetResult ? (
+              <div className="p-3.5 bg-[#07090E] rounded-2xl border border-white/10 space-y-2 text-xs">
+                <div className="text-[10px] text-slate-400 uppercase font-black">New Temporary Password</div>
+                <div className="text-base font-mono text-amber-400 font-black">{resetResult.password}</div>
+                {resetResult.whatsappUrl && (
+                  <button
+                    onClick={() => window.open(resetResult.whatsappUrl, '_blank')}
+                    className="w-full py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-black font-black text-xs flex items-center justify-center gap-1.5 shadow-md mt-2"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    <span>Send New Password via WhatsApp</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setResetModalOpen(false);
+                    setResetResult(null);
+                  }}
+                  className="w-full py-2 rounded-xl bg-white/10 text-white font-bold text-xs mt-1"
+                >
+                  Close
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  onClick={() => setResetModalOpen(false)}
+                  className="flex-1 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleResetPassword}
+                  disabled={isResettingPassword}
+                  className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-black font-black text-xs flex items-center justify-center gap-1"
+                >
+                  <span>{isResettingPassword ? 'Generating...' : 'Confirm Reset'}</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── 4. FIXED BOTTOM MOBILE NAVIGATION ── */}
       <MobileBottomNav
         tabs={bottomNavTabs}
         activeTab={
           ['add-member', 'member-profile', 'member-created-success'].includes(currentScreen) ? 'members' :
           currentScreen === 'add-expense' ? 'finance' :
-          currentScreen === 'broadcast' ? 'alerts' :
-          currentScreen === 'add-trainer' ? 'more' :
+          ['broadcast', 'audit-logs', 'add-trainer'].includes(currentScreen) ? 'more' :
           currentScreen
         }
         onSelectTab={(tabId) => navigateTo(tabId as OwnerScreen)}
