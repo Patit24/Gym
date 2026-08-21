@@ -112,21 +112,33 @@ export const MobileOwnerApp: React.FC = () => {
   const [notifSuccess, setNotifSuccess] = useState('');
   const [isSendingBroadcast, setIsSendingBroadcast] = useState(false);
 
-  const currentBranch = branches.find((b) => b.id === selectedBranchId) || branches[0];
-  const trainers = employees.filter((e) => e.role === 'Trainer' || e.role === 'Dietitian');
-  const unreadNotifs = notifications.filter((n) => !n.read);
+  const currentBranch = (branches || []).find((b) => b?.id === selectedBranchId) || branches?.[0] || {
+    id: selectedBranchId || 'branch-1',
+    name: 'Main Flagship',
+    code: 'HQ',
+    city: 'Downtown',
+    address: 'Fitness Blvd',
+    phone: '+91 98765 00000',
+    activeMembers: 0,
+    currentCheckIns: 0,
+    monthlyRevenue: 0,
+    capacity: 100,
+    manager: 'Admin'
+  };
+  const trainers = (employees || []).filter((e) => e && (e.role === 'Trainer' || e.role === 'Dietitian'));
+  const unreadNotifs = (notifications || []).filter((n) => n && !n.read);
 
   // Financial Calculations
-  const branchTransactions = transactions.filter((t) => t.branchId === selectedBranchId);
-  const branchExpenses = expenses.filter((e) => e.branchId === selectedBranchId);
-  const totalCollections = branchTransactions.reduce((acc, t) => acc + t.amount, 0);
-  const totalExpenseAmount = branchExpenses.reduce((acc, e) => acc + e.amount, 0);
+  const branchTransactions = (transactions || []).filter((t) => t && t.branchId === selectedBranchId);
+  const branchExpenses = (expenses || []).filter((e) => e && e.branchId === selectedBranchId);
+  const totalCollections = branchTransactions.reduce((acc, t) => acc + (t?.amount || 0), 0);
+  const totalExpenseAmount = branchExpenses.reduce((acc, e) => acc + (e?.amount || 0), 0);
   const netProfit = totalCollections - totalExpenseAmount;
   const isProfitPositive = netProfit >= 0;
 
   // Attendance
   const todayStr = new Date().toISOString().split('T')[0];
-  const todayCheckins = attendance.filter((a) => a.date === todayStr);
+  const todayCheckins = (attendance || []).filter((a) => a && a.date === todayStr);
 
   const navigateTo = (screen: OwnerScreen) => {
     setPreviousScreen(currentScreen);
@@ -138,12 +150,17 @@ export const MobileOwnerApp: React.FC = () => {
     setCurrentScreen(previousScreen === currentScreen ? 'home' : previousScreen);
   };
 
-  // Filtered members list
-  const filteredMembers = members.filter((m) => {
+  // Filtered members list with strict null safety
+  const filteredMembers = (members || []).filter((m) => {
+    if (!m) return false;
+    const nameStr = m.name || '';
+    const membershipNoStr = m.membershipNo || '';
+    const mobileStr = m.mobile || '';
+    const query = (searchMember || '').toLowerCase();
     const matchesSearch =
-      m.name.toLowerCase().includes(searchMember.toLowerCase()) ||
-      m.membershipNo.toLowerCase().includes(searchMember.toLowerCase()) ||
-      m.mobile.includes(searchMember);
+      nameStr.toLowerCase().includes(query) ||
+      membershipNoStr.toLowerCase().includes(query) ||
+      mobileStr.includes(query);
     const matchesGoal = goalFilter === 'all' || m.goal === goalFilter;
     return matchesSearch && matchesGoal;
   });

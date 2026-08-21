@@ -110,12 +110,17 @@ export const MobileTrainerApp: React.FC = () => {
     setCurrentScreen(previousScreen === currentScreen ? 'home' : previousScreen);
   };
 
-  // Filtered clients list
-  const filteredClients = myClients.filter((m) => {
+  // Filtered clients list with strict null safety
+  const filteredClients = (myClients || []).filter((m) => {
+    if (!m) return false;
+    const nameStr = m.name || '';
+    const membershipNoStr = m.membershipNo || '';
+    const mobileStr = m.mobile || '';
+    const query = (searchQuery || '').toLowerCase();
     const matchesSearch =
-      m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      m.membershipNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      m.mobile.includes(searchQuery);
+      nameStr.toLowerCase().includes(query) ||
+      membershipNoStr.toLowerCase().includes(query) ||
+      mobileStr.includes(query);
     const matchesGoal = goalFilter === 'all' || m.goal === goalFilter;
     return matchesSearch && matchesGoal;
   });
