@@ -24,10 +24,10 @@ export const AdminAppDashboard: React.FC<AdminAppDashboardProps> = ({ erpContent
   const currentBranch = branches.find(b => b.id === selectedBranchId) || branches[0];
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
+    <div className="space-y-0 md:space-y-6 animate-in fade-in duration-300">
       
-      {/* Top Banner: Admin Welcome & View Switcher */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-[#101422] p-4 sm:p-5 rounded-3xl border border-white/10 shadow-xl">
+      {/* Top Banner: Admin Welcome & View Switcher (Desktop Only) */}
+      <div className="hidden md:flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-[#101422] p-4 sm:p-5 rounded-3xl border border-white/10 shadow-xl">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#4F7CFF] to-[#27D980] p-[2px] shadow-lg shadow-gym-accentGlow">
             <div className="w-full h-full bg-[#0B0D12] rounded-[14px] flex items-center justify-center">
@@ -76,7 +76,7 @@ export const AdminAppDashboard: React.FC<AdminAppDashboardProps> = ({ erpContent
 
       {/* ── 1. MOBILE PHONE APP SIMULATOR VIEW (DEFAULT) ── */}
       {viewMode === 'mobile' && (
-        <div className="flex justify-center py-2">
+        <div className="w-full flex justify-center p-0 md:py-2">
           <AdminMobileAppSimulator />
         </div>
       )}

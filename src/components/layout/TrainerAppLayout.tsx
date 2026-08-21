@@ -33,8 +33,8 @@ export const TrainerAppLayout: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#090C13] text-slate-100 flex flex-col justify-between selection:bg-[#4F7CFF] selection:text-white">
       
-      {/* ── TRAINER APP HEADER ── */}
-      <header className="sticky top-0 z-50 bg-[#0E131F]/95 backdrop-blur-xl border-b border-white/10 px-4 lg:px-8 py-3.5 transition-all">
+      {/* ── TRAINER APP HEADER (DESKTOP ONLY) ── */}
+      <header className="hidden md:block sticky top-0 z-50 bg-[#0E131F]/95 backdrop-blur-xl border-b border-white/10 px-4 lg:px-8 py-3.5 transition-all">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
           
           {/* Brand & Trainer Tag */}
@@ -143,12 +143,12 @@ export const TrainerAppLayout: React.FC = () => {
       </header>
 
       {/* ── TRAINER MAIN VIEW ── */}
-      <main className="max-w-7xl mx-auto px-4 lg:px-8 py-6 w-full flex-1" id="trainer-app-main">
+      <main className="w-full flex-1 max-w-7xl mx-auto p-0 md:px-4 lg:px-8 md:py-6" id="trainer-app-main">
         <Outlet />
       </main>
 
-      {/* ── TRAINER FOOTER ── */}
-      <footer className="border-t border-white/10 py-4 px-6 text-center text-xs text-slate-500">
+      {/* ── TRAINER FOOTER (DESKTOP ONLY) ── */}
+      <footer className="hidden md:block border-t border-white/10 py-4 px-6 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px]">
           <span>Smart Gym Trainer Mobile Suite © 2026</span>
           <div className="flex items-center gap-4 text-[#4F7CFF]">

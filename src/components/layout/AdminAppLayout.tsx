@@ -55,8 +55,8 @@ export const AdminAppLayout: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#0B0D12] text-slate-100 flex flex-col justify-between selection:bg-[#4F7CFF] selection:text-white">
       
-      {/* ── ADMIN ERP HEADER ── */}
-      <header className="sticky top-0 z-50 bg-[#0B0D12]/95 backdrop-blur-xl border-b border-gym-border/80 px-4 lg:px-8 py-3 transition-all" role="banner">
+      {/* ── ADMIN ERP HEADER (DESKTOP ONLY) ── */}
+      <header className="hidden md:block sticky top-0 z-50 bg-[#0B0D12]/95 backdrop-blur-xl border-b border-gym-border/80 px-4 lg:px-8 py-3 transition-all" role="banner">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
           
           {/* Brand Logo & Admin Console Title */}
@@ -218,12 +218,12 @@ export const AdminAppLayout: React.FC = () => {
       </header>
 
       {/* ── ADMIN MAIN CONTENT ── */}
-      <main className="max-w-7xl mx-auto px-4 lg:px-8 py-6 w-full flex-1" id="admin-app-main">
+      <main className="w-full flex-1 max-w-7xl mx-auto p-0 md:px-4 lg:px-8 md:py-6" id="admin-app-main">
         <Outlet />
       </main>
 
-      {/* ── ADMIN FOOTER ── */}
-      <footer className="border-t border-gym-border/60 py-4 px-6 text-center text-xs text-gym-subtext" role="contentinfo">
+      {/* ── ADMIN FOOTER (DESKTOP ONLY) ── */}
+      <footer className="hidden md:block border-t border-gym-border/60 py-4 px-6 text-center text-xs text-gym-subtext" role="contentinfo">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
           <span>Smart Gym Enterprise ERP © 2026 Admin Management Systems</span>
           <div className="flex items-center gap-4 text-[11px]">

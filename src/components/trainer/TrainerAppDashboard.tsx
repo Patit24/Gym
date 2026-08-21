@@ -95,10 +95,10 @@ export const TrainerAppDashboard: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
+    <div className="space-y-0 md:space-y-6 animate-in fade-in duration-300">
       
-      {/* Top Banner: Trainer Welcome & Mode Switcher */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-[#101524] p-5 rounded-3xl border border-white/10 shadow-xl">
+      {/* Top Banner: Trainer Welcome & Mode Switcher (Desktop Only) */}
+      <div className="hidden md:flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-[#101524] p-5 rounded-3xl border border-white/10 shadow-xl">
         <div className="flex items-center gap-3.5">
           <img
             src={currentTrainer?.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(currentTrainer?.name || 'Trainer')}`}
@@ -147,7 +147,7 @@ export const TrainerAppDashboard: React.FC = () => {
 
       {/* ── 1. MOBILE PHONE APP SIMULATOR (DEFAULT) ── */}
       {viewMode === 'mobile' && (
-        <div className="flex justify-center py-2">
+        <div className="w-full flex justify-center p-0 md:py-2">
           <TrainerMobileAppSimulator />
         </div>
       )}

@@ -292,13 +292,13 @@ export const AdminMobileAppSimulator: React.FC = () => {
   ].includes(currentScreen);
 
   return (
-    <div className="flex items-center justify-center py-2 animate-in fade-in duration-300">
+    <div className="w-full flex items-center justify-center p-0 md:py-2 animate-in fade-in duration-300">
       
-      {/* ── IPHONE 16 PRO ADMIN MOBILE DEVICE FRAME ── */}
-      <div className="relative w-[410px] h-[820px] bg-[#0A0D14] border-[10px] border-[#1E2330] rounded-[56px] shadow-[0_0_60px_rgba(0,0,0,0.85)] flex flex-col justify-between overflow-hidden ring-2 ring-white/20">
+      {/* ── ADMIN MOBILE APP FRAME (Full Screen on Mobile / App, Phone Bezel on Desktop) ── */}
+      <div className="relative w-full min-h-screen md:min-h-0 md:w-[410px] md:h-[840px] bg-[#0A0D14] md:border-[10px] md:border-[#1E2330] md:rounded-[56px] md:shadow-[0_0_60px_rgba(0,0,0,0.85)] md:ring-2 md:ring-white/20 flex flex-col justify-between overflow-hidden">
         
-        {/* 1. Status Bar & Dynamic Island */}
-        <div className="relative z-30 pt-3 px-7 pb-2 flex items-center justify-between text-xs text-white bg-[#0A0D14] border-b border-white/10 shrink-0">
+        {/* 1. Status Bar & Dynamic Island (Desktop Simulator Only) */}
+        <div className="hidden md:flex relative z-30 pt-3 px-7 pb-2 items-center justify-between text-xs text-white bg-[#0A0D14] border-b border-white/10 shrink-0">
           <span className="font-extrabold text-xs tracking-tight text-white">9:41</span>
           
           <div className="w-28 h-6 bg-black rounded-full flex items-center justify-between px-3 text-[10px] text-[#4F7CFF] font-mono border border-white/20 shadow-inner">

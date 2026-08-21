@@ -32,10 +32,10 @@ export const UserAppDashboard: React.FC = () => {
   const memberTransactions = transactions.filter((t) => t.memberId === activeMember?.id);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
+    <div className="space-y-0 md:space-y-6 animate-in fade-in duration-300">
       
-      {/* Top Banner: Member Welcome & View Switcher */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-[#101422] p-4 sm:p-5 rounded-3xl border border-white/10 shadow-xl">
+      {/* Top Banner: Member Welcome & View Switcher (Desktop Only) */}
+      <div className="hidden md:flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-[#101422] p-4 sm:p-5 rounded-3xl border border-white/10 shadow-xl">
         <div className="flex items-center gap-3">
           <img
             src={activeMember?.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(activeMember?.name || 'Member')}`}
@@ -84,7 +84,7 @@ export const UserAppDashboard: React.FC = () => {
 
       {/* ── 1. NATIVE MOBILE APP SIMULATOR VIEW ── */}
       {viewMode === 'mobile' && (
-        <div className="flex justify-center py-2">
+        <div className="w-full flex justify-center p-0 md:py-2">
           <MobileAppSimulator />
         </div>
       )}

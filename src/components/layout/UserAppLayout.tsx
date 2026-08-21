@@ -31,8 +31,8 @@ export const UserAppLayout: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#0A0D14] text-slate-100 flex flex-col justify-between selection:bg-[#27D980] selection:text-black">
       
-      {/* ── USER APP HEADER (MEMBERS ONLY) ── */}
-      <header className="sticky top-0 z-50 bg-[#0B0F19]/90 backdrop-blur-xl border-b border-white/10 px-4 lg:px-8 py-3.5 transition-all">
+      {/* ── USER APP HEADER (DESKTOP ONLY) ── */}
+      <header className="hidden md:block sticky top-0 z-50 bg-[#0B0F19]/90 backdrop-blur-xl border-b border-white/10 px-4 lg:px-8 py-3.5 transition-all">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
           
           {/* Brand Logo & Member Tag */}
@@ -141,12 +141,12 @@ export const UserAppLayout: React.FC = () => {
       </header>
 
       {/* ── USER MAIN CONTENT AREA ── */}
-      <main className="max-w-7xl mx-auto px-4 lg:px-8 py-6 w-full flex-1" id="user-app-main">
+      <main className="w-full flex-1 max-w-7xl mx-auto p-0 md:px-4 lg:px-8 md:py-6" id="user-app-main">
         <Outlet />
       </main>
 
-      {/* ── USER FOOTER ── */}
-      <footer className="border-t border-white/10 py-4 px-6 text-center text-xs text-slate-500">
+      {/* ── USER FOOTER (DESKTOP ONLY) ── */}
+      <footer className="hidden md:block border-t border-white/10 py-4 px-6 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px]">
           <span>Smart Gym Member App OS © 2026</span>
           <div className="flex items-center gap-4 text-[#27D980]">
