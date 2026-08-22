@@ -13,6 +13,7 @@ export type Role =
 export interface AppUser {
   id: string;
   username: string;         // auto-generated e.g. MEM00125
+  email?: string;           // email address or internal auth email
   password?: string;        // temporary or hashed password
   role: Role;
   linkedId: string;         // memberId or employeeId

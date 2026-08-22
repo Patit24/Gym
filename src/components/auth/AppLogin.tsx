@@ -4,6 +4,7 @@ import {
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
   sendPasswordResetEmail,
+  updatePassword,
   signOut
 } from 'firebase/auth';
 import { auth } from '../../firebase';
@@ -33,6 +34,7 @@ export const AppLogin: React.FC = () => {
     firebaseUser, 
     appUserAccount, 
     appUsers, 
+    members,
     isAuthLoading, 
     addMember, 
     plans, 
@@ -92,53 +94,116 @@ export const AppLogin: React.FC = () => {
     setIsLoading(true);
 
     const cleanInput = identifier.trim();
+    const cleanPass = password.trim();
 
-    // Check if input matches an existing generated AppUser username (e.g. MEM00125)
+    if (!cleanInput || !cleanPass) {
+      setError('Please enter your Username / Email and Password.');
+      setIsLoading(false);
+      return;
+    }
+
+    // 1. Look up user by username (e.g. MEM00125), email, or linked ID
     const matchedUser = appUsers.find(
       (u) =>
-        u.username.toUpperCase() === cleanInput.toUpperCase() ||
         u.username.toLowerCase() === cleanInput.toLowerCase() ||
-        u.id === cleanInput
+        (u.email && u.email.toLowerCase() === cleanInput.toLowerCase()) ||
+        u.id.toLowerCase() === cleanInput.toLowerCase() ||
+        u.linkedId.toLowerCase() === cleanInput.toLowerCase()
     );
 
-    if (matchedUser) {
-      if (matchedUser.isActive === false) {
-        setError('This member account has been suspended or disabled by gym management.');
-        setIsLoading(false);
-        return;
-      }
+    const matchedMember = members.find(
+      (m) =>
+        (m.username && m.username.toLowerCase() === cleanInput.toLowerCase()) ||
+        (m.membershipNo && m.membershipNo.toLowerCase() === cleanInput.toLowerCase()) ||
+        (m.email && m.email.toLowerCase() === cleanInput.toLowerCase()) ||
+        (m.mobile && m.mobile.replace(/\D/g, '') === cleanInput.replace(/\D/g, ''))
+    );
 
-      // If user is using generated temporary password
-      if (matchedUser.password && (matchedUser.password === password || matchedUser.tempPassword === password)) {
-        localStorage.setItem('gym_auth_context', 'app');
+    // Account suspension check
+    if (matchedUser && matchedUser.isActive === false) {
+      setError('This account has been deactivated or suspended by gym management.');
+      setIsLoading(false);
+      return;
+    }
+    if (matchedMember && (matchedMember.status === 'Cancelled' || matchedMember.status === 'Suspended')) {
+      setError('This membership is currently suspended. Please contact the front desk.');
+      setIsLoading(false);
+      return;
+    }
 
-        if (matchedUser.mustChangePassword) {
-          setPendingUserId(matchedUser.id);
-          setAuthMode('first-login-change-password');
-          setIsLoading(false);
-          return;
+    // Determine the Firebase Auth compatible email
+    let authEmail = '';
+    if (cleanInput.includes('@')) {
+      authEmail = cleanInput.toLowerCase();
+    } else if (matchedUser?.email && matchedUser.email.includes('@')) {
+      authEmail = matchedUser.email.toLowerCase();
+    } else if (matchedMember?.email && matchedMember.email.includes('@')) {
+      authEmail = matchedMember.email.toLowerCase();
+    } else {
+      const uname = (matchedUser?.username || matchedMember?.username || cleanInput).toLowerCase().replace(/[^a-z0-9]/g, '');
+      authEmail = `${uname}@smartgym.internal`;
+    }
+
+    // Check if the user entered the matching database/temporary password
+    const isMatchingLocalPassword =
+      (matchedUser && (matchedUser.password === cleanPass || matchedUser.tempPassword === cleanPass)) ||
+      (matchedMember && (matchedMember.tempPassword === cleanPass));
+
+    try {
+      localStorage.setItem('gym_auth_context', 'app');
+      
+      // Step A: Attempt standard sign-in with Firebase Auth
+      await signInWithEmailAndPassword(auth, authEmail, cleanPass);
+    } catch (fbErr: any) {
+      // Step B: If Firebase Auth doesn't have the user yet (because they were provisioned in Firestore),
+      // and their credentials match the generated account:
+      if (
+        isMatchingLocalPassword &&
+        (fbErr.code === 'auth/user-not-found' ||
+          fbErr.code === 'auth/invalid-credential' ||
+          fbErr.code === 'auth/invalid-email' ||
+          fbErr.code === 'auth/wrong-password')
+      ) {
+        try {
+          // Auto-create this user in Firebase Auth with identical credentials so they are authorized in Firebase Auth!
+          await createUserWithEmailAndPassword(auth, authEmail, cleanPass);
+        } catch (createErr: any) {
+          if (createErr.code === 'auth/email-already-in-use') {
+            // Re-attempt sign in
+            try {
+              await signInWithEmailAndPassword(auth, authEmail, cleanPass);
+            } catch {
+              // Ignore, state resolution in GymContext will handle session
+            }
+          } else {
+            console.warn('Firebase Auth creation notice:', createErr);
+          }
         }
-
-        // Route directly if password change was already satisfied
-        if (matchedUser.role === 'Member') {
-          navigate('/app/user/dashboard', { replace: true });
-        } else if (matchedUser.role === 'Trainer') {
-          navigate('/app/trainer/dashboard', { replace: true });
+      } else {
+        // Report friendly human-readable error messages instead of raw Firebase strings
+        if (fbErr.code === 'auth/wrong-password' || fbErr.code === 'auth/invalid-credential') {
+          setError('Incorrect password. Please verify your temporary or permanent password.');
+        } else if (fbErr.code === 'auth/user-not-found') {
+          setError('User not found. Please check your Member ID or Username (e.g. MEM00125).');
+        } else if (fbErr.code === 'auth/too-many-requests') {
+          setError('Access temporarily disabled due to many failed attempts. Please try again later.');
         } else {
-          navigate('/app/admin/dashboard', { replace: true });
+          setError('Login failed. Please check your Username / Email and Password.');
         }
+        setIsLoading(false);
         return;
       }
     }
 
-    try {
-      localStorage.setItem('gym_auth_context', 'app');
-      await signInWithEmailAndPassword(auth, cleanInput, password);
-    } catch (err: any) {
-      setError(
-        err.message || 'Invalid credentials. Please verify your Username/Email and Password.'
-      );
+    // Step C: If user must change password on first login
+    const targetUserId = matchedUser?.id || matchedMember?.userId || matchedMember?.id || '';
+    const mustChange = matchedUser?.mustChangePassword || matchedMember?.mustChangePassword;
+
+    if (mustChange) {
+      setPendingUserId(targetUserId);
+      setAuthMode('first-login-change-password');
       setIsLoading(false);
+      return;
     }
   };
 
@@ -147,12 +212,15 @@ export const AppLogin: React.FC = () => {
     setError('');
     setSuccessMsg('');
 
-    if (newPassword.length < 6) {
+    const cleanNewPass = newPassword.trim();
+    const cleanConfirmPass = confirmPassword.trim();
+
+    if (cleanNewPass.length < 6) {
       setError('New password must be at least 6 characters.');
       return;
     }
 
-    if (newPassword !== confirmPassword) {
+    if (cleanNewPass !== cleanConfirmPass) {
       setError('Passwords do not match. Please re-enter.');
       return;
     }
@@ -160,13 +228,23 @@ export const AppLogin: React.FC = () => {
     setIsLoading(true);
 
     try {
+      // 1. Update password in Firebase Auth Auth Service if user is active
+      if (auth.currentUser) {
+        try {
+          await updatePassword(auth.currentUser, cleanNewPass);
+        } catch (authPwdErr) {
+          console.warn('Firebase Auth password update note:', authPwdErr);
+        }
+      }
+
+      // 2. Update password in Firestore database
       const targetId = pendingUserId || appUserAccount?.id || '';
-      await completeFirstLoginPasswordChange(targetId, newPassword);
+      await completeFirstLoginPasswordChange(targetId, cleanNewPass);
 
       setSuccessMsg('✓ Password updated successfully! Accessing Member Dashboard...');
       setTimeout(() => {
         navigate('/app/user/dashboard', { replace: true });
-      }, 1000);
+      }, 800);
     } catch (err: any) {
       setError(err?.message || 'Failed to update password. Please try again.');
       setIsLoading(false);
@@ -289,8 +367,8 @@ export const AppLogin: React.FC = () => {
           </h1>
           <p className="text-xs text-slate-400 font-medium">
             {authMode === 'first-login-change-password'
-              ? 'Security Setup — Set Your New Password'
-              : 'Enterprise Member, Trainer & Owner Application'}
+              ? 'Security Setup — Set Your Personal Password'
+              : 'Member, Trainer & Owner Portal'}
           </p>
         </div>
 
@@ -347,7 +425,7 @@ export const AppLogin: React.FC = () => {
                 <span>First Login Security Requirement</span>
               </div>
               <p className="text-[11px] text-amber-200/90 leading-relaxed">
-                You logged in with a temporary password sent via WhatsApp. For your security, please create a new permanent password.
+                You logged in with a temporary password sent via WhatsApp. For your security, please create your new permanent personal password.
               </p>
             </div>
 
@@ -359,7 +437,7 @@ export const AppLogin: React.FC = () => {
                 <Lock className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
                 <input
                   type={showNewPassword ? 'text' : 'password'}
-                  placeholder="Create strong password"
+                  placeholder="Create new password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   className="w-full bg-[#07090E] border border-white/15 focus:border-[#27D980] rounded-2xl pl-10 pr-10 py-2.5 text-white text-xs font-semibold placeholder-slate-600 outline-none"
@@ -383,7 +461,7 @@ export const AppLogin: React.FC = () => {
                 <Lock className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
                 <input
                   type="password"
-                  placeholder="Confirm password"
+                  placeholder="Confirm new password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   className="w-full bg-[#07090E] border border-white/15 focus:border-[#27D980] rounded-2xl pl-10 pr-4 py-2.5 text-white text-xs font-semibold placeholder-slate-600 outline-none"
@@ -397,14 +475,14 @@ export const AppLogin: React.FC = () => {
               disabled={isLoading}
               className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#27D980] to-[#4F7CFF] text-black font-black text-xs shadow-xl shadow-[#27D980]/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
-              <span>{isLoading ? 'Establishing Password...' : 'Save Password & Enter App'}</span>
+              <span>{isLoading ? 'Saving New Password...' : 'Save Password & Enter App'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
         )}
 
         {/* ═══════════════════════════════════════════════════════════
-            MODE 2: NORMAL SIGN IN FORM (SUPPORTS USERNAME & EMAIL)
+            MODE 2: SIGN IN FORM (AUTO-MAPPING USERNAME & FIREBASE AUTH)
         ═══════════════════════════════════════════════════════════ */}
         {authMode === 'signin' && (
           <form onSubmit={handleSignIn} className="space-y-4">
@@ -416,7 +494,7 @@ export const AppLogin: React.FC = () => {
                 <User className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
                 <input
                   type="text"
-                  placeholder="e.g. MEM00125 or admin@smartgym.com"
+                  placeholder="e.g. MEM00125 or rahul@gmail.com"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   className="w-full bg-[#07090E] border border-white/15 focus:border-[#27D980] rounded-2xl pl-10 pr-4 py-2.5 text-white text-xs font-semibold placeholder-slate-600 outline-none transition-colors"
@@ -440,7 +518,7 @@ export const AppLogin: React.FC = () => {
                 <Lock className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
                 <input
                   type="password"
-                  placeholder="••••••••"
+                  placeholder="Temporary or personal password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full bg-[#07090E] border border-white/15 focus:border-[#27D980] rounded-2xl pl-10 pr-4 py-2.5 text-white text-xs font-semibold placeholder-slate-600 outline-none transition-colors"
@@ -454,7 +532,7 @@ export const AppLogin: React.FC = () => {
               disabled={isLoading}
               className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#27D980] via-[#4F7CFF] to-[#27D980] bg-[length:200%_auto] hover:bg-[position:right_center] text-black font-black text-xs shadow-xl shadow-[#27D980]/20 hover:scale-[1.01] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
-              <span>{isLoading ? 'Verifying Account...' : 'Log In to Smart Gym'}</span>
+              <span>{isLoading ? 'Verifying Credentials...' : 'Log In to Smart Gym'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
 
@@ -480,7 +558,7 @@ export const AppLogin: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => fillQuickDemo('MEM00125', 'Gym@48291')}
+                  onClick={() => fillQuickDemo('member@smartgym.com', 'member123')}
                   className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-[10px] font-bold text-[#27D980] hover:text-white border border-[#27D980]/30 text-center transition-all"
                 >
                   👤 Member

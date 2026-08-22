@@ -14,8 +14,8 @@ export const AppTrainerRoute: React.FC = () => {
     );
   }
 
-  // Not logged in -> go to App Login
-  if (!firebaseUser) {
+  // Not logged in -> redirect to App Login
+  if (!firebaseUser && !appUserAccount) {
     return <Navigate to="/app/login" replace />;
   }
 

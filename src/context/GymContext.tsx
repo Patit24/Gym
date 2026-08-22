@@ -385,8 +385,18 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    const email = firebaseUser.email?.toLowerCase();
-    const foundUser = appUsers.find(u => u.username.toLowerCase() === email || u.id === firebaseUser.uid);
+    const rawEmail = (firebaseUser.email || '').toLowerCase();
+    const emailPrefix = rawEmail.includes('@') ? rawEmail.split('@')[0] : rawEmail;
+
+    // Try to match AppUser by email, username, id, or linkedId
+    const foundUser = appUsers.find(
+      u =>
+        (u.email && u.email.toLowerCase() === rawEmail) ||
+        u.username.toLowerCase() === rawEmail ||
+        u.username.toLowerCase() === emailPrefix ||
+        u.id === firebaseUser.uid ||
+        u.linkedId === firebaseUser.uid
+    );
 
     if (foundUser) {
       setAppUserAccount(foundUser);
@@ -394,7 +404,12 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSelectedBranchId(foundUser.branchId || 'branch-1');
 
       if (foundUser.role === 'Member') {
-        const memberRec = members.find(m => m.id === foundUser.linkedId || m.email?.toLowerCase() === email);
+        const memberRec = members.find(
+          m =>
+            m.id === foundUser.linkedId ||
+            (m.username && m.username.toLowerCase() === foundUser.username.toLowerCase()) ||
+            (m.email && m.email.toLowerCase() === rawEmail)
+        );
         if (memberRec) {
           setActiveMemberIdState(memberRec.id);
           const isExpired = memberRec.status === 'Expired' || new Date(memberRec.expiryDate || memberRec.endDate) < new Date();
@@ -405,115 +420,156 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } else {
         setSubscriptionStatus('active');
       }
-    } else {
-      if (email === 'admin@smartgym.com') {
-        const adminAccount: AppUser = {
-          id: firebaseUser.uid,
-          username: 'admin@smartgym.com',
-          password: '••••••••',
-          role: 'Super Admin',
-          linkedId: 'EMP-ADMIN',
-          linkedName: 'System Admin',
-          branchId: 'branch-1',
-          createdAt: new Date().toISOString(),
-          createdByAdminId: 'system',
-          isActive: true,
-          permissions: {
-            canViewDashboard: true,
-            canEditWorkouts: true,
-            canEditDiets: true,
-            canViewMembers: true,
-            canManageFinance: true,
-            canAccessAdmin: true,
-          }
-        };
-        setAppUserAccount(adminAccount);
-        setCurrentRole('Super Admin');
-        setSelectedBranchId('branch-1');
-        setSubscriptionStatus('active');
-      } else if (email === 'member@smartgym.com') {
-        const memberAccount: AppUser = {
-          id: firebaseUser.uid,
-          username: 'member@smartgym.com',
-          password: '••••••••',
-          role: 'Member',
-          linkedId: 'MEM-2026-001',
-          linkedName: 'Alex Morgan',
-          branchId: 'branch-1',
-          createdAt: new Date().toISOString(),
-          createdByAdminId: 'system',
-          isActive: true,
-          permissions: {
-            canViewDashboard: true,
-            canEditWorkouts: false,
-            canEditDiets: false,
-            canViewMembers: false,
-            canManageFinance: false,
-            canAccessAdmin: false,
-          }
-        };
-        setAppUserAccount(memberAccount);
-        setCurrentRole('Member');
-        setActiveMemberIdState('MEM-2026-001');
-        setSelectedBranchId('branch-1');
-        setSubscriptionStatus('active');
-      } else if (email === 'trainer@smartgym.com') {
-        const trainerAccount: AppUser = {
-          id: firebaseUser.uid,
-          username: 'trainer@smartgym.com',
-          password: '••••••••',
-          role: 'Trainer',
-          linkedId: 'EMP-001',
-          linkedName: 'Vikram Rajput',
-          branchId: 'branch-1',
-          createdAt: new Date().toISOString(),
-          createdByAdminId: 'system',
-          isActive: true,
-          permissions: {
-            canViewDashboard: true,
-            canEditWorkouts: true,
-            canEditDiets: true,
-            canViewMembers: true,
-            canManageFinance: false,
-            canAccessAdmin: false,
-          }
-        };
-        setAppUserAccount(trainerAccount);
-        setCurrentRole('Trainer');
-        setSelectedBranchId('branch-1');
-        setSubscriptionStatus('active');
-      } else {
-        const matchingMember = members.find(m => m.email?.toLowerCase() === email);
-        const matchingEmployee = employees.find(e => e.email?.toLowerCase() === email);
-        const dynamicUser: AppUser = {
-          id: firebaseUser.uid,
-          username: email || firebaseUser.uid,
-          password: '••••••••',
-          role: matchingMember ? 'Member' : (matchingEmployee ? matchingEmployee.role : 'Member'),
-          linkedId: matchingMember ? matchingMember.id : (matchingEmployee ? matchingEmployee.id : firebaseUser.uid),
-          linkedName: matchingMember ? matchingMember.name : (matchingEmployee ? matchingEmployee.name : (firebaseUser.displayName || 'User')),
-          branchId: matchingMember?.branchId || matchingEmployee?.branchId || 'branch-1',
-          createdAt: new Date().toISOString(),
-          createdByAdminId: 'self',
-          isActive: true,
-          permissions: {
-            canViewDashboard: true,
-            canEditWorkouts: matchingEmployee ? (matchingEmployee.role === 'Trainer' || matchingEmployee.role === 'Super Admin') : false,
-            canEditDiets: matchingEmployee ? (matchingEmployee.role === 'Trainer' || matchingEmployee.role === 'Dietitian' || matchingEmployee.role === 'Super Admin') : false,
-            canViewMembers: matchingEmployee ? true : false,
-            canManageFinance: matchingEmployee ? (matchingEmployee.role === 'Super Admin' || matchingEmployee.role === 'Owner' || matchingEmployee.role === 'Accountant') : false,
-            canAccessAdmin: matchingEmployee ? (matchingEmployee.role !== 'Employee') : false,
-          }
-        };
-        setAppUserAccount(dynamicUser);
-        setCurrentRole(dynamicUser.role);
-        if (matchingMember) {
-          setActiveMemberIdState(matchingMember.id);
-          const isExpired = matchingMember.status === 'Expired' || new Date(matchingMember.expiryDate || matchingMember.endDate) < new Date();
-          setSubscriptionStatus(isExpired ? 'expired' : 'active');
-        } else {
-          setSubscriptionStatus('active');
+      return;
+    }
+
+    // Also check if this Firebase User corresponds directly to a member in members collection
+    const matchingMember = members.find(
+      m =>
+        (m.email && m.email.toLowerCase() === rawEmail) ||
+        (m.username && m.username.toLowerCase() === emailPrefix) ||
+        (m.membershipNo && m.membershipNo.toLowerCase() === emailPrefix) ||
+        m.id === firebaseUser.uid ||
+        m.userId === firebaseUser.uid
+    );
+
+    if (matchingMember) {
+      const memberAccount: AppUser = {
+        id: matchingMember.userId || firebaseUser.uid,
+        username: matchingMember.username || emailPrefix.toUpperCase(),
+        email: matchingMember.email || rawEmail,
+        role: 'Member',
+        linkedId: matchingMember.id,
+        linkedName: matchingMember.name,
+        branchId: matchingMember.branchId || 'branch-1',
+        createdAt: matchingMember.startDate || new Date().toISOString(),
+        createdByAdminId: 'system',
+        isActive: matchingMember.status !== 'Cancelled',
+        permissions: {
+          canViewDashboard: true,
+          canEditWorkouts: false,
+          canEditDiets: false,
+          canViewMembers: false,
+          canManageFinance: false,
+          canAccessAdmin: false,
         }
+      };
+      setAppUserAccount(memberAccount);
+      setCurrentRole('Member');
+      setActiveMemberIdState(matchingMember.id);
+      const isExpired = matchingMember.status === 'Expired' || new Date(matchingMember.expiryDate || matchingMember.endDate) < new Date();
+      setSubscriptionStatus(isExpired ? 'expired' : 'active');
+      return;
+    }
+
+    if (rawEmail === 'admin@smartgym.com') {
+      const adminAccount: AppUser = {
+        id: firebaseUser.uid,
+        username: 'admin@smartgym.com',
+        email: 'admin@smartgym.com',
+        role: 'Super Admin',
+        linkedId: 'EMP-ADMIN',
+        linkedName: 'System Admin',
+        branchId: 'branch-1',
+        createdAt: new Date().toISOString(),
+        createdByAdminId: 'system',
+        isActive: true,
+        permissions: {
+          canViewDashboard: true,
+          canEditWorkouts: true,
+          canEditDiets: true,
+          canViewMembers: true,
+          canManageFinance: true,
+          canAccessAdmin: true,
+        }
+      };
+      setAppUserAccount(adminAccount);
+      setCurrentRole('Super Admin');
+      setSelectedBranchId('branch-1');
+      setSubscriptionStatus('active');
+    } else if (rawEmail === 'member@smartgym.com') {
+      const memberAccount: AppUser = {
+        id: firebaseUser.uid,
+        username: 'member@smartgym.com',
+        email: 'member@smartgym.com',
+        role: 'Member',
+        linkedId: 'MEM-2026-001',
+        linkedName: 'Alex Morgan',
+        branchId: 'branch-1',
+        createdAt: new Date().toISOString(),
+        createdByAdminId: 'system',
+        isActive: true,
+        permissions: {
+          canViewDashboard: true,
+          canEditWorkouts: false,
+          canEditDiets: false,
+          canViewMembers: false,
+          canManageFinance: false,
+          canAccessAdmin: false,
+        }
+      };
+      setAppUserAccount(memberAccount);
+      setCurrentRole('Member');
+      setActiveMemberIdState('MEM-2026-001');
+      setSelectedBranchId('branch-1');
+      setSubscriptionStatus('active');
+    } else if (rawEmail === 'trainer@smartgym.com') {
+      const trainerAccount: AppUser = {
+        id: firebaseUser.uid,
+        username: 'trainer@smartgym.com',
+        email: 'trainer@smartgym.com',
+        role: 'Trainer',
+        linkedId: 'EMP-001',
+        linkedName: 'Vikram Rajput',
+        branchId: 'branch-1',
+        createdAt: new Date().toISOString(),
+        createdByAdminId: 'system',
+        isActive: true,
+        permissions: {
+          canViewDashboard: true,
+          canEditWorkouts: true,
+          canEditDiets: true,
+          canViewMembers: true,
+          canManageFinance: false,
+          canAccessAdmin: false,
+        }
+      };
+      setAppUserAccount(trainerAccount);
+      setCurrentRole('Trainer');
+      setSelectedBranchId('branch-1');
+      setSubscriptionStatus('active');
+    } else {
+      const matchingMember = members.find(m => m.email?.toLowerCase() === rawEmail);
+      const matchingEmployee = employees.find(e => e.email?.toLowerCase() === rawEmail);
+      const dynamicUser: AppUser = {
+        id: firebaseUser.uid,
+        username: rawEmail || firebaseUser.uid,
+        email: rawEmail,
+        password: '••••••••',
+        role: matchingMember ? 'Member' : (matchingEmployee ? matchingEmployee.role : 'Member'),
+        linkedId: matchingMember ? matchingMember.id : (matchingEmployee ? matchingEmployee.id : firebaseUser.uid),
+        linkedName: matchingMember ? matchingMember.name : (matchingEmployee ? matchingEmployee.name : (firebaseUser.displayName || 'User')),
+        branchId: matchingMember?.branchId || matchingEmployee?.branchId || 'branch-1',
+        createdAt: new Date().toISOString(),
+        createdByAdminId: 'self',
+        isActive: true,
+        permissions: {
+          canViewDashboard: true,
+          canEditWorkouts: matchingEmployee ? (matchingEmployee.role === 'Trainer' || matchingEmployee.role === 'Super Admin') : false,
+          canEditDiets: matchingEmployee ? (matchingEmployee.role === 'Trainer' || matchingEmployee.role === 'Dietitian' || matchingEmployee.role === 'Super Admin') : false,
+          canViewMembers: matchingEmployee ? true : false,
+          canManageFinance: matchingEmployee ? (matchingEmployee.role === 'Super Admin' || matchingEmployee.role === 'Owner' || matchingEmployee.role === 'Accountant') : false,
+          canAccessAdmin: matchingEmployee ? (matchingEmployee.role !== 'Employee') : false,
+        }
+      };
+      setAppUserAccount(dynamicUser);
+      setCurrentRole(dynamicUser.role);
+      if (matchingMember) {
+        setActiveMemberIdState(matchingMember.id);
+        const isExpired = matchingMember.status === 'Expired' || new Date(matchingMember.expiryDate || matchingMember.endDate) < new Date();
+        setSubscriptionStatus(isExpired ? 'expired' : 'active');
+      } else {
+        setSubscriptionStatus('active');
       }
     }
   }, [firebaseUser, appUsers, members]);
@@ -910,6 +966,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAppUser = {
         id: userId,
         username,
+        email: newMemberData.email || `${username.toLowerCase()}@smartgym.internal`,
         password: tempPassword,
         tempPassword,
         role: 'Member',

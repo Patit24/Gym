@@ -15,7 +15,7 @@ export const AppUserRoute: React.FC = () => {
   }
 
   // Not logged in -> go to App Login
-  if (!firebaseUser) {
+  if (!firebaseUser && !appUserAccount) {
     return <Navigate to="/app/login" replace />;
   }
 
