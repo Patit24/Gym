@@ -42,6 +42,21 @@ export const FinanceReports: React.FC = () => {
   // Tab State
   const [activeFinanceTab, setActiveFinanceTab] = useState<'overview' | 'income' | 'expenses' | 'pnl' | 'types'>('overview');
 
+  // Strict Financial Access Gate for Trainers & Non-Admin Staff
+  if (currentRole === 'Trainer' || currentRole === 'Dietitian' || currentRole === 'Employee') {
+    return (
+      <div className="p-8 glass-card rounded-3xl border border-red-500/20 text-center space-y-4 max-w-md mx-auto my-12 animate-in fade-in">
+        <div className="w-14 h-14 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center mx-auto text-red-400">
+          <AlertCircle className="w-8 h-8" />
+        </div>
+        <h3 className="text-lg font-black text-white">Financial Dashboard Restricted</h3>
+        <p className="text-xs text-gym-subtext leading-relaxed">
+          Financial statements, cash collection books, P&L reports, and operational expense logs are strictly restricted to Gym Owners, Super Admins, and Accountants.
+        </p>
+      </div>
+    );
+  }
+
   // Expense Modals & Form State
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);

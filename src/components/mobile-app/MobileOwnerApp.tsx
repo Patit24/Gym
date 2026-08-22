@@ -48,6 +48,10 @@ import {
   Lock
 } from 'lucide-react';
 
+import {
+  Building2
+} from 'lucide-react';
+
 type OwnerScreen =
   | 'home'
   | 'members'
@@ -60,7 +64,9 @@ type OwnerScreen =
   | 'add-expense'
   | 'broadcast'
   | 'audit-logs'
-  | 'member-created-success';
+  | 'member-created-success'
+  | 'add-branch'
+  | 'trainer-created-success';
 
 export const MobileOwnerApp: React.FC = () => {
   const {
@@ -77,9 +83,11 @@ export const MobileOwnerApp: React.FC = () => {
     auditLogs,
     addExpense,
     provisionMemberWithAccount,
+    provisionTrainerWithAccount,
     resetMemberPassword,
     updateAccountStatus,
     resendMemberCredentials,
+    addBranch,
     addEmployee,
     sendBulkNotification,
     signOutApp,
@@ -95,6 +103,13 @@ export const MobileOwnerApp: React.FC = () => {
   const [newlyCreatedWhatsAppUrl, setNewlyCreatedWhatsAppUrl] = useState<string>('');
   const [newlyCreatedWhatsAppStatus, setNewlyCreatedWhatsAppStatus] = useState<'SENT' | 'FAILED' | 'NOT_SENT'>('NOT_SENT');
   
+  // Trainer Created State
+  const [newlyCreatedTrainer, setNewlyCreatedTrainer] = useState<any>(null);
+  const [newlyCreatedTrainerUser, setNewlyCreatedTrainerUser] = useState<any>(null);
+  const [newlyCreatedTrainerTempPassword, setNewlyCreatedTrainerTempPassword] = useState<string>('');
+  const [newlyCreatedTrainerWhatsAppUrl, setNewlyCreatedTrainerWhatsAppUrl] = useState<string>('');
+  const [newlyCreatedTrainerWhatsAppStatus, setNewlyCreatedTrainerWhatsAppStatus] = useState<'SENT' | 'FAILED' | 'NOT_SENT'>('NOT_SENT');
+
   const [searchMember, setSearchMember] = useState('');
   const [goalFilter, setGoalFilter] = useState<string>('all');
 
@@ -119,6 +134,16 @@ export const MobileOwnerApp: React.FC = () => {
   const [trSpecialization, setTrSpecialization] = useState('Strength & Conditioning');
   const [trSalary, setTrSalary] = useState(35000);
   const [isSubmittingTrainer, setIsSubmittingTrainer] = useState(false);
+
+  // Add Branch Form
+  const [brName, setBrName] = useState('');
+  const [brCode, setBrCode] = useState('');
+  const [brCity, setBrCity] = useState('');
+  const [brAddress, setBrAddress] = useState('');
+  const [brPhone, setBrPhone] = useState('+91 98765 00000');
+  const [brCapacity, setBrCapacity] = useState(150);
+  const [brManager, setBrManager] = useState('');
+  const [isSubmittingBranch, setIsSubmittingBranch] = useState(false);
 
   // Add Expense Form
   const [expTitle, setExpTitle] = useState('');
@@ -317,8 +342,7 @@ export const MobileOwnerApp: React.FC = () => {
     setIsSubmittingTrainer(true);
 
     try {
-      await addEmployee({
-        id: `EMP-${Date.now()}`,
+      const res = await provisionTrainerWithAccount({
         name: trName.trim(),
         photoUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(trName)}`,
         role: 'Trainer',
@@ -332,13 +356,50 @@ export const MobileOwnerApp: React.FC = () => {
         shift: 'Morning 6AM - 2PM',
         attendanceDays: 0,
         specialization: trSpecialization,
+      }, {
+        sendWhatsApp: true,
       });
+
+      setNewlyCreatedTrainer(res.employee);
+      setNewlyCreatedTrainerUser(res.appUser);
+      setNewlyCreatedTrainerTempPassword(res.tempPassword);
+      setNewlyCreatedTrainerWhatsAppUrl(res.whatsappDirectUrl || '');
+      setNewlyCreatedTrainerWhatsAppStatus(res.whatsappStatus);
+
       setTrName('');
       setTrMobile('');
       setTrEmail('');
-      setCurrentScreen('more');
+      setCurrentScreen('trainer-created-success');
     } finally {
       setIsSubmittingTrainer(false);
+    }
+  };
+
+  const handleCreateBranch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!brName.trim() || !brCode.trim()) return;
+    setIsSubmittingBranch(true);
+
+    try {
+      const newBranch = await addBranch({
+        name: brName.trim(),
+        code: brCode.trim().toUpperCase(),
+        city: brCity.trim() || 'Smart City',
+        address: brAddress.trim() || 'Fitness Boulevard',
+        phone: brPhone.trim() || '+91 98765 00000',
+        capacity: brCapacity || 150,
+        manager: brManager.trim() || 'Branch General Manager',
+      });
+
+      setSelectedBranchId(newBranch.id);
+      setBrName('');
+      setBrCode('');
+      setBrCity('');
+      setBrAddress('');
+      setBrManager('');
+      setCurrentScreen('home');
+    } finally {
+      setIsSubmittingBranch(false);
     }
   };
 
@@ -388,7 +449,9 @@ export const MobileOwnerApp: React.FC = () => {
     'add-expense',
     'broadcast',
     'audit-logs',
-    'member-created-success'
+    'member-created-success',
+    'add-branch',
+    'trainer-created-success'
   ].includes(currentScreen);
 
   const bottomNavTabs: MobileNavTab[] = [
@@ -419,6 +482,8 @@ export const MobileOwnerApp: React.FC = () => {
           currentScreen === 'add-expense' ? 'Add Expense' :
           currentScreen === 'broadcast' ? 'Broadcast Alerts' :
           currentScreen === 'audit-logs' ? 'Audit Logs' :
+          currentScreen === 'add-branch' ? 'New Branch' :
+          currentScreen === 'trainer-created-success' ? 'Coach Created' :
           currentScreen === 'member-created-success' ? 'Member Created' : 'Back'
         }
       />
@@ -432,11 +497,45 @@ export const MobileOwnerApp: React.FC = () => {
         {currentScreen === 'home' && (
           <div className="space-y-4 animate-in fade-in duration-200">
             
+            {/* Live Branch Selector Pill */}
+            <div className="flex items-center justify-between p-3.5 rounded-2xl bg-[#101422] border border-white/10 shadow-lg">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-[#4F7CFF]/15 text-[#4F7CFF] flex items-center justify-center">
+                  <Building2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Active Branch</div>
+                  <div className="text-xs font-black text-white">{currentBranch.name} ({currentBranch.code})</div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedBranchId}
+                  onChange={(e) => setSelectedBranchId(e.target.value)}
+                  className="bg-[#07090E] text-white text-xs font-bold px-3 py-1.5 rounded-xl border border-white/10 outline-none cursor-pointer focus:border-[#4F7CFF]"
+                >
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} ({b.code})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => navigateTo('add-branch')}
+                  className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-[#4F7CFF]"
+                  title="Add New Branch"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
             {/* Net Operating Profit Card */}
             <div className="bg-gradient-to-br from-[#121727] via-[#0E1322] to-[#0A0D18] p-5 rounded-3xl border border-white/10 shadow-2xl relative overflow-hidden">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-black text-slate-400 uppercase tracking-wider">
-                  Net Operating Profit
+                  Net Operating Profit ({currentBranch.code})
                 </span>
                 <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1 ${
                   isProfitPositive
@@ -695,9 +794,34 @@ export const MobileOwnerApp: React.FC = () => {
         ═══════════════════════════════════════════════════════════ */}
         {currentScreen === 'finance' && (
           <div className="space-y-4 animate-in fade-in duration-200">
+            {/* Live Branch Selector Pill */}
+            <div className="flex items-center justify-between p-3.5 rounded-2xl bg-[#101422] border border-white/10 shadow-lg">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center">
+                  <DollarSign className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Branch Accounting</div>
+                  <div className="text-xs font-black text-white">{currentBranch.name} ({currentBranch.code})</div>
+                </div>
+              </div>
+
+              <select
+                value={selectedBranchId}
+                onChange={(e) => setSelectedBranchId(e.target.value)}
+                className="bg-[#07090E] text-white text-xs font-bold px-3 py-1.5 rounded-xl border border-white/10 outline-none cursor-pointer focus:border-[#4F7CFF]"
+              >
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name} ({b.code})
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 shadow-xl space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-black text-slate-400 uppercase tracking-wider">Branch Cashflow</span>
+                <span className="text-xs font-black text-slate-400 uppercase tracking-wider">Branch Cashflow ({currentBranch.code})</span>
                 <button
                   onClick={() => navigateTo('add-expense')}
                   className="px-3 py-1.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-black text-[10px] flex items-center gap-1 shadow-md"
@@ -776,9 +900,19 @@ export const MobileOwnerApp: React.FC = () => {
             
             {/* Branch Selector */}
             <div className="p-4 bg-[#101422] rounded-3xl border border-white/10 shadow-xl space-y-3">
-              <span className="text-xs font-black text-slate-400 uppercase tracking-wider block">
-                Active Gym Branch
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-slate-400 uppercase tracking-wider block">
+                  Active Gym Branch
+                </span>
+                <button
+                  onClick={() => navigateTo('add-branch')}
+                  className="px-2.5 py-1 rounded-xl bg-[#4F7CFF]/20 hover:bg-[#4F7CFF]/30 text-[#4F7CFF] border border-[#4F7CFF]/30 text-[10px] font-black flex items-center gap-1"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Branch</span>
+                </button>
+              </div>
+
               <div className="grid grid-cols-3 gap-2">
                 {branches.map((b) => (
                   <button
@@ -786,12 +920,12 @@ export const MobileOwnerApp: React.FC = () => {
                     onClick={() => setSelectedBranchId(b.id)}
                     className={`p-2.5 rounded-2xl text-left border transition-all ${
                       selectedBranchId === b.id
-                        ? 'bg-[#4F7CFF]/20 border-[#4F7CFF] text-white'
+                        ? 'bg-[#4F7CFF]/20 border-[#4F7CFF] text-white shadow-md'
                         : 'bg-[#0B0E17] border-white/10 text-slate-400 hover:text-white'
                     }`}
                   >
-                    <div className="text-xs font-black">{b.name}</div>
-                    <div className="text-[9px] mt-0.5">{b.code}</div>
+                    <div className="text-xs font-black truncate">{b.name}</div>
+                    <div className="text-[9px] mt-0.5">{b.code} • {b.city}</div>
                   </button>
                 ))}
               </div>
@@ -800,12 +934,29 @@ export const MobileOwnerApp: React.FC = () => {
             {/* Quick Management Links */}
             <div className="bg-[#101422] rounded-3xl border border-white/10 overflow-hidden shadow-xl divide-y divide-white/5">
               <button
+                onClick={() => navigateTo('add-branch')}
+                className="w-full p-4 flex items-center justify-between text-left hover:bg-[#151A2E] active:bg-[#1B2238] transition-all"
+              >
+                <div className="flex items-center gap-3">
+                  <Building2 className="w-5 h-5 text-[#4F7CFF]" />
+                  <div>
+                    <span className="text-xs font-bold text-white block">+ Add New Gym Branch</span>
+                    <span className="text-[10px] text-slate-400">Expand franchise network & multi-branch P&L</span>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-500" />
+              </button>
+
+              <button
                 onClick={() => navigateTo('add-trainer')}
                 className="w-full p-4 flex items-center justify-between text-left hover:bg-[#151A2E] active:bg-[#1B2238] transition-all"
               >
                 <div className="flex items-center gap-3">
                   <Award className="w-5 h-5 text-purple-400" />
-                  <span className="text-xs font-bold text-white">Add Trainer / Coach</span>
+                  <div>
+                    <span className="text-xs font-bold text-white block">+ Add Trainer / Coach</span>
+                    <span className="text-[10px] text-slate-400">Auto-generate login, temp password & WhatsApp</span>
+                  </div>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-500" />
               </button>
@@ -1586,6 +1737,223 @@ export const MobileOwnerApp: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════
+            SUBPAGE 8: ADD GYM BRANCH FORM
+        ═══════════════════════════════════════════════════════════ */}
+        {currentScreen === 'add-branch' && (
+          <div className="bg-[#101422] p-4 sm:p-5 rounded-3xl border border-white/10 shadow-2xl space-y-4 animate-in fade-in duration-200">
+            <h3 className="text-sm font-black text-white flex items-center gap-2 pb-2 border-b border-white/10">
+              <Building2 className="w-4 h-4 text-[#4F7CFF]" />
+              <span>Add New Gym Branch to Network</span>
+            </h3>
+
+            <form onSubmit={handleCreateBranch} className="space-y-3.5 text-xs">
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
+                  Branch Name *
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Kolkata South Flagship"
+                  value={brName}
+                  onChange={(e) => setBrName(e.target.value)}
+                  required
+                  className="w-full p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#4F7CFF]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
+                    Branch Code *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. KS or DWTN"
+                    value={brCode}
+                    onChange={(e) => setBrCode(e.target.value)}
+                    required
+                    className="w-full p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white uppercase placeholder-slate-500 focus:outline-none focus:border-[#4F7CFF]"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
+                    City *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Kolkata"
+                    value={brCity}
+                    onChange={(e) => setBrCity(e.target.value)}
+                    required
+                    className="w-full p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#4F7CFF]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
+                  Full Street Address
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 14 Park Street, Tech Hub"
+                  value={brAddress}
+                  onChange={(e) => setBrAddress(e.target.value)}
+                  className="w-full p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#4F7CFF]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
+                    Helpdesk Phone
+                  </label>
+                  <input
+                    type="tel"
+                    placeholder="+91 98765 00000"
+                    value={brPhone}
+                    onChange={(e) => setBrPhone(e.target.value)}
+                    className="w-full p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#4F7CFF]"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
+                    Max Capacity (Members)
+                  </label>
+                  <input
+                    type="number"
+                    value={brCapacity}
+                    onChange={(e) => setBrCapacity(Number(e.target.value))}
+                    className="w-full p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white focus:outline-none focus:border-[#4F7CFF]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
+                  Branch General Manager
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Rohit Deshmukh"
+                  value={brManager}
+                  onChange={(e) => setBrManager(e.target.value)}
+                  className="w-full p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#4F7CFF]"
+                />
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={isSubmittingBranch}
+                  className="w-full py-3.5 rounded-2xl bg-[#4F7CFF] hover:bg-[#3D69EB] active:scale-95 disabled:opacity-50 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-[#4F7CFF]/20"
+                >
+                  <Building2 className="w-4 h-4" />
+                  <span>{isSubmittingBranch ? 'Provisioning Branch Network...' : 'Create & Switch to New Branch'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════
+            SUBPAGE 9: TRAINER CREATED SUCCESS & CREDENTIALS
+        ═══════════════════════════════════════════════════════════ */}
+        {currentScreen === 'trainer-created-success' && newlyCreatedTrainer && (
+          <div className="space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="text-center space-y-1">
+              <div className="w-14 h-14 bg-purple-500/20 text-purple-400 rounded-full flex items-center justify-center mx-auto border border-purple-500/40 shadow-lg">
+                <Award className="w-7 h-7" />
+              </div>
+              <h3 className="text-base font-black text-white">Coach Onboarded & Account Created!</h3>
+              <p className="text-xs text-slate-400">Trainer portal account linked with restricted financial view</p>
+            </div>
+
+            {/* Credentials Card */}
+            <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 shadow-xl space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                <div>
+                  <div className="text-sm font-black text-white">{newlyCreatedTrainer.name}</div>
+                  <div className="text-[10px] text-slate-400">ID: {newlyCreatedTrainer.id} • {newlyCreatedTrainer.specialization}</div>
+                </div>
+                <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                  Trainer / Coach
+                </span>
+              </div>
+
+              {/* Login Credentials Box */}
+              <div className="p-3 bg-[#07090E] rounded-2xl border border-white/10 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Username</span>
+                  <div className="flex items-center gap-2">
+                    <strong className="text-xs font-mono text-white font-black">{newlyCreatedTrainerUser?.username || newlyCreatedTrainer.email}</strong>
+                    <button
+                      onClick={() => copyToClipboard(newlyCreatedTrainerUser?.username || newlyCreatedTrainer.email, 'TrUsername')}
+                      className="p-1 rounded-md bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white"
+                      title="Copy Username"
+                    >
+                      {copiedField === 'TrUsername' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1 border-t border-white/5">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Temporary Password</span>
+                  <div className="flex items-center gap-2">
+                    <strong className="text-xs font-mono text-amber-400 font-black">{newlyCreatedTrainerTempPassword || 'Fit#73192'}</strong>
+                    <button
+                      onClick={() => copyToClipboard(newlyCreatedTrainerTempPassword || 'Fit#73192', 'TrPassword')}
+                      className="p-1 rounded-md bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white"
+                      title="Copy Password"
+                    >
+                      {copiedField === 'TrPassword' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* WhatsApp Status */}
+              <div className="flex items-center justify-between p-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-xs">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-emerald-400" />
+                  <span className="text-emerald-300 font-bold">
+                    {newlyCreatedTrainerWhatsAppStatus === 'SENT' ? 'Credentials Sent via WhatsApp' : 'WhatsApp Ready'}
+                  </span>
+                </div>
+                {newlyCreatedTrainerWhatsAppUrl && (
+                  <button
+                    onClick={() => window.open(newlyCreatedTrainerWhatsAppUrl, '_blank')}
+                    className="px-2.5 py-1 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-black font-black text-[10px] flex items-center gap-1 shadow-sm"
+                  >
+                    <span>Open Chat</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+
+              {/* Copy Full Text */}
+              <button
+                onClick={() => {
+                  const fullText = `Welcome to Smart Gym!\n\nHi ${newlyCreatedTrainer.name},\nYour Trainer portal account is created.\nRole: Trainer\nID: ${newlyCreatedTrainer.id}\nUsername: ${newlyCreatedTrainerUser?.username || newlyCreatedTrainer.email}\nTemporary Password: ${newlyCreatedTrainerTempPassword}\n\nPlease log in and set your new personal password.`;
+                  copyToClipboard(fullText, 'FullTrCredentials');
+                }}
+                className="w-full py-2.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white text-xs font-bold flex items-center justify-center gap-2"
+              >
+                {copiedField === 'FullTrCredentials' ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                <span>{copiedField === 'FullTrCredentials' ? 'Copied Coach Credentials!' : 'Copy Full Credentials Message'}</span>
+              </button>
+
+              <button
+                onClick={() => navigateTo('more')}
+                className="w-full py-2.5 rounded-2xl bg-[#4F7CFF] hover:bg-[#3D69EB] text-white text-xs font-black"
+              >
+                Done
+              </button>
+            </div>
           </div>
         )}
 

@@ -82,12 +82,16 @@ const ERpLayout: React.FC = () => {
     { id: 'aistudio', label: 'AI Coach Studio', icon: Brain, roles: ['Super Admin', 'Trainer', 'Dietitian'] },
   ];
 
+  // Strictly filter visible tabs according to the authenticated user's role
+  const visibleTabs = erpTabs.filter(tab => !tab.roles || tab.roles.includes(currentRole));
+  const activeTabId = visibleTabs.some(t => t.id === erpTab) ? erpTab : (visibleTabs[0]?.id || 'dashboard');
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-gym-border/60 scrollbar-none" role="tablist" aria-label="ERP Workspace Tabs">
-        {erpTabs.map((tab) => {
+        {visibleTabs.map((tab) => {
           const IconComponent = tab.icon;
-          const isActive = erpTab === tab.id;
+          const isActive = activeTabId === tab.id;
           return (
             <button
               key={tab.id}
@@ -109,9 +113,9 @@ const ERpLayout: React.FC = () => {
       </div>
 
       <Suspense fallback={<TabLoadingFallback />}>
-        <div id={`tabpanel-${erpTab}`} role="tabpanel" tabIndex={0}>
-          {erpTab === 'planner' && <AdvancedPlannerStudio />}
-          {erpTab === 'dashboard' && (
+        <div id={`tabpanel-${activeTabId}`} role="tabpanel" tabIndex={0}>
+          {activeTabId === 'planner' && <AdvancedPlannerStudio />}
+          {activeTabId === 'dashboard' && (
             currentRole === 'Owner' ? (
               <OwnerDashboard />
             ) : currentRole === 'Trainer' ? (

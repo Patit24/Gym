@@ -27,6 +27,7 @@ import {
 } from '../types/gym';
 import {
   generateUniqueUsername,
+  generateUniqueStaffUsername,
   generateSecureTemporaryPassword,
   normalizePhoneNumber,
   buildWhatsAppCredentialMessage,
@@ -111,10 +112,21 @@ interface GymContextType {
     whatsappDirectUrl?: string;
     whatsappStatus: 'SENT' | 'FAILED' | 'NOT_SENT';
   }>;
+  provisionTrainerWithAccount: (
+    empData: Omit<Employee, 'id'>,
+    options?: { sendWhatsApp?: boolean }
+  ) => Promise<{
+    employee: Employee;
+    appUser: AppUser;
+    tempPassword: string;
+    whatsappDirectUrl?: string;
+    whatsappStatus: 'SENT' | 'FAILED' | 'NOT_SENT';
+  }>;
   resetMemberPassword: (memberId: string) => Promise<{ newTempPassword: string; whatsappDirectUrl?: string }>;
   updateAccountStatus: (memberId: string, isActive: boolean) => Promise<void>;
   completeFirstLoginPasswordChange: (userId: string, newPassword: string) => Promise<void>;
   resendMemberCredentials: (memberId: string) => Promise<{ success: boolean; whatsappDirectUrl?: string }>;
+  addBranch: (newBranchData: Omit<Branch, 'id' | 'activeMembers' | 'currentCheckIns' | 'monthlyRevenue'>) => Promise<Branch>;
 
   generateNewToken: (memberId: string) => string;
   scanDoorQR: (qrToken: string, targetBranchId: BranchId, verificationMethod?: 'Dynamic QR' | 'Face ID') => { success: boolean; message: string; member?: Member };
@@ -1027,6 +1039,125 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   };
 
+  const provisionTrainerWithAccount = async (
+    empData: Omit<Employee, 'id'>,
+    options: { sendWhatsApp?: boolean } = { sendWhatsApp: true }
+  ): Promise<{
+    employee: Employee;
+    appUser: AppUser;
+    tempPassword: string;
+    whatsappDirectUrl?: string;
+    whatsappStatus: 'SENT' | 'FAILED' | 'NOT_SENT';
+  }> => {
+    const employeeId = `EMP-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
+    const existingUsernames = appUsers.map((u) => u.username);
+    const username = generateUniqueStaffUsername('TRN', employees.length + 1, existingUsernames);
+    const tempPassword = generateSecureTemporaryPassword();
+    const userId = `USR-TRN-${Date.now()}`;
+    const normalizedPhone = normalizePhoneNumber(empData.mobile);
+
+    let initialWhatsAppStatus: 'NOT_SENT' | 'SENT' | 'FAILED' = 'NOT_SENT';
+    let whatsappDirectUrl = '';
+
+    if (options.sendWhatsApp && normalizedPhone) {
+      const msg = buildWhatsAppCredentialMessage({
+        memberName: empData.name,
+        memberId: employeeId,
+        username,
+        tempPassword,
+        role: empData.role || 'Trainer',
+      });
+      const res = await dispatchWhatsAppCredentials(normalizedPhone, msg);
+      initialWhatsAppStatus = res.status;
+      whatsappDirectUrl = res.directUrl || '';
+
+      await recordAuditLog(
+        res.success ? 'WHATSAPP_SENT' : 'WHATSAPP_FAILED',
+        employeeId,
+        empData.name,
+        `Trainer credentials sent via WhatsApp (${res.status}) to ${normalizedPhone}`
+      );
+    }
+
+    const newEmployee: Employee = {
+      ...empData,
+      id: employeeId,
+      email: empData.email || `${username.toLowerCase()}@smartgym.internal`,
+    };
+
+    setEmployees((prev) => [newEmployee, ...prev]);
+    safeDbWrite(setDoc(doc(db, 'employees', employeeId), newEmployee));
+
+    const createdAppUser: AppUser = {
+      id: userId,
+      username,
+      email: newEmployee.email,
+      password: tempPassword,
+      tempPassword,
+      role: newEmployee.role || 'Trainer',
+      linkedId: employeeId,
+      linkedName: newEmployee.name,
+      branchId: newEmployee.branchId || selectedBranchId || 'branch-1',
+      createdAt: new Date().toISOString(),
+      createdByAdminId: appUserAccount?.id || 'admin-system',
+      isActive: true,
+      mustChangePassword: true,
+      whatsappStatus: initialWhatsAppStatus,
+      whatsappSentAt: initialWhatsAppStatus === 'SENT' ? new Date().toISOString() : undefined,
+      permissions: {
+        canViewDashboard: true,
+        canEditWorkouts: true,
+        canEditDiets: true,
+        canViewMembers: true,
+        canManageFinance: false, // Strict financial restriction
+        canAccessAdmin: false,   // Strict admin restriction
+      },
+    };
+
+    setAppUsers((prev) => [createdAppUser, ...prev]);
+    safeDbWrite(setDoc(doc(db, 'users', userId), createdAppUser));
+
+    await recordAuditLog(
+      'ACCOUNT_PROVISIONED',
+      employeeId,
+      newEmployee.name,
+      `Trainer account provisioned with username ${username} (Role: ${newEmployee.role})`
+    );
+
+    return {
+      employee: newEmployee,
+      appUser: createdAppUser,
+      tempPassword,
+      whatsappDirectUrl,
+      whatsappStatus: initialWhatsAppStatus,
+    };
+  };
+
+  const addBranch = async (
+    newBranchData: Omit<Branch, 'id' | 'activeMembers' | 'currentCheckIns' | 'monthlyRevenue'>
+  ): Promise<Branch> => {
+    const branchId = `branch-${branches.length + 1}`;
+    const newBranch: Branch = {
+      ...newBranchData,
+      id: branchId,
+      activeMembers: 0,
+      currentCheckIns: 0,
+      monthlyRevenue: 0,
+    };
+
+    setBranches((prev) => [...prev, newBranch]);
+    safeDbWrite(setDoc(doc(db, 'branches', branchId), newBranch));
+
+    await recordAuditLog(
+      'ACCOUNT_ENABLED',
+      branchId,
+      newBranch.name,
+      `New gym branch "${newBranch.name}" (${newBranch.code}) added to network.`
+    );
+
+    return newBranch;
+  };
+
   const resetMemberPassword = async (
     memberId: string
   ): Promise<{ newTempPassword: string; whatsappDirectUrl?: string }> => {
@@ -1731,10 +1862,12 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         appUsers,
         auditLogs,
         provisionMemberWithAccount,
+        provisionTrainerWithAccount,
         resetMemberPassword,
         updateAccountStatus,
         completeFirstLoginPasswordChange,
         resendMemberCredentials,
+        addBranch,
         generateNewToken,
         scanDoorQR,
         addMember,

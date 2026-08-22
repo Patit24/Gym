@@ -75,6 +75,42 @@ export function generateUniqueUsername(
 }
 
 /**
+ * Generates a clean, unique, case-insensitive staff username in format: TRN / ADM + 5-digit number.
+ * e.g. TRN00012, ADM00001
+ */
+export function generateUniqueStaffUsername(
+  prefix: 'TRN' | 'ADM' | 'EMP' = 'TRN',
+  baseNumber: number | string,
+  existingUsernames: string[] = []
+): string {
+  const existingSet = new Set(
+    existingUsernames.map((u) => (u || '').trim().toUpperCase())
+  );
+
+  const numStr = String(baseNumber).replace(/\D/g, '');
+  let numVal = parseInt(numStr, 10);
+  if (isNaN(numVal) || numVal <= 0) {
+    numVal = Math.floor(10 + Math.random() * 90);
+  }
+
+  let candidate = `${prefix}${String(numVal).padStart(5, '0')}`;
+
+  let attempts = 0;
+  while (existingSet.has(candidate) && attempts < 50) {
+    numVal += 1;
+    candidate = `${prefix}${String(numVal).padStart(5, '0')}`;
+    attempts++;
+  }
+
+  if (existingSet.has(candidate)) {
+    const suffix = Math.random().toString(36).substring(2, 4).toUpperCase();
+    candidate = `${prefix}${String(numVal).padStart(5, '0')}${suffix}`;
+  }
+
+  return candidate;
+}
+
+/**
  * Generates a strong, non-guessable temporary password.
  * Min 10 chars, uppercase, lowercase, numbers, special characters.
  * e.g. Gym@48291, Fit#73192, Smart@63821
@@ -101,21 +137,25 @@ export interface WhatsAppCredentialPayload {
   username: string;
   tempPassword: string;
   gymName?: string;
+  role?: string;
 }
 
 /**
  * Builds the professional WhatsApp welcome message with login credentials.
  */
 export function buildWhatsAppCredentialMessage(payload: WhatsAppCredentialPayload): string {
-  const { memberName, memberId, username, tempPassword, gymName = 'Smart Gym' } = payload;
+  const { memberName, memberId, username, tempPassword, gymName = 'Smart Gym', role = 'Member' } = payload;
+
+  const isStaff = role !== 'Member';
 
   return `Welcome to ${gymName}!
 
 Hi ${memberName},
 
-Your ${gymName} member account has been created.
+Your ${gymName} ${isStaff ? `${role} portal` : 'member'} account has been created.
 
-Member ID: ${memberId}
+Role: ${role}
+ID: ${memberId}
 Username: ${username}
 Temporary Password: ${tempPassword}
 

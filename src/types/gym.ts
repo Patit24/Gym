@@ -38,7 +38,7 @@ export interface AppUser {
   };
 }
 
-export type BranchId = 'branch-1' | 'branch-2' | 'branch-3';
+export type BranchId = string;
 
 export type GoalType = 'Weight Loss' | 'Muscle Building' | 'Body Recomposition' | 'Endurance & Cardio' | 'Rehab & Mobility';
 
