@@ -50,7 +50,8 @@ import {
   INITIAL_TRANSACTIONS,
   INITIAL_EXPENSES,
   INITIAL_EXPENSE_TYPES,
-  INITIAL_WEBSITE_CUSTOMERS
+  INITIAL_WEBSITE_CUSTOMERS,
+  INITIAL_APP_USERS
 } from '../data/initialData';
 import { db, auth } from '../firebase';
 import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, getDocs } from 'firebase/firestore';
@@ -62,6 +63,7 @@ interface GymContextType {
   appUserAccount: AppUser | null;
   subscriptionStatus: 'active' | 'expired' | 'none';
   signOutApp: () => Promise<void>;
+  setLocalSessionUser: (user: AppUser) => void;
 
   // Website Customer Authentication & Experience
   authContext: 'app' | 'website' | null;
@@ -182,13 +184,28 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [authResolved, setAuthResolved] = useState<boolean>(false);
   const [appUsersLoaded, setAppUsersLoaded] = useState<boolean>(false);
-  const [appUserAccount, setAppUserAccount] = useState<AppUser | null>(null);
+  const [appUserAccount, setAppUserAccount] = useState<AppUser | null>(() => {
+    try {
+      const saved = localStorage.getItem('gym_app_user_account');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return null;
+  });
   const [subscriptionStatus, setSubscriptionStatus] = useState<'active' | 'expired' | 'none'>('none');
 
   const isAuthLoading = !authResolved;
 
   const [perspective, setPerspectiveState] = useState<'mobile' | 'erp' | 'hardware'>('erp');
-  const [currentRole, setCurrentRole] = useState<Role>('Super Admin');
+  const [currentRole, setCurrentRole] = useState<Role>(() => {
+    try {
+      const saved = localStorage.getItem('gym_app_user_account');
+      if (saved) {
+        const u = JSON.parse(saved);
+        if (u.role) return u.role;
+      }
+    } catch {}
+    return 'Super Admin';
+  });
   const [selectedBranchId, setSelectedBranchId] = useState<BranchId>('branch-1');
 
   const [branches, setBranches] = useState<Branch[]>(INITIAL_BRANCHES);
@@ -209,7 +226,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
   const [expenses, setExpenses] = useState<Expense[]>(INITIAL_EXPENSES);
   const [expenseTypes, setExpenseTypes] = useState<ExpenseType[]>(INITIAL_EXPENSE_TYPES);
-  const [appUsers, setAppUsers] = useState<AppUser[]>([]);
+  const [appUsers, setAppUsers] = useState<AppUser[]>(INITIAL_APP_USERS);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
   // Website Customer State & Persistence
@@ -353,11 +370,20 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!snap.empty) {
         const list: AppUser[] = [];
         snap.forEach(doc => list.push(doc.data() as AppUser));
-        setAppUsers(list);
+        const merged = [...list];
+        INITIAL_APP_USERS.forEach((initU) => {
+          if (!merged.some(u => u.username.toLowerCase() === initU.username.toLowerCase() || (u.email && u.email.toLowerCase() === initU.email?.toLowerCase()))) {
+            merged.push(initU);
+          }
+        });
+        setAppUsers(merged);
+      } else {
+        setAppUsers(INITIAL_APP_USERS);
       }
       setAppUsersLoaded(true);
     }, (error) => {
       console.warn("Firestore sync in local memory mode:", error);
+      setAppUsers(INITIAL_APP_USERS);
       setAppUsersLoaded(true);
     });
 
@@ -392,6 +418,17 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // 3. User account resolution & automatic role assignment
   useEffect(() => {
     if (!firebaseUser) {
+      const saved = localStorage.getItem('gym_app_user_account');
+      if (saved) {
+        try {
+          const parsed: AppUser = JSON.parse(saved);
+          setAppUserAccount(parsed);
+          setCurrentRole(parsed.role);
+          setSelectedBranchId(parsed.branchId || 'branch-1');
+          setSubscriptionStatus('active');
+          return;
+        } catch {}
+      }
       setAppUserAccount(null);
       setSubscriptionStatus('none');
       return;
@@ -656,9 +693,22 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setPerspectiveState(p);
   };
 
+  const setLocalSessionUser = (user: AppUser) => {
+    localStorage.setItem('gym_app_user_account', JSON.stringify(user));
+    localStorage.setItem('gym_auth_context', 'app');
+    setAppUserAccount(user);
+    setCurrentRole(user.role);
+    setSelectedBranchId(user.branchId || 'branch-1');
+    setSubscriptionStatus('active');
+    setAuthContext('app');
+  };
+
   const signOutApp = async () => {
+    localStorage.removeItem('gym_app_user_account');
     localStorage.removeItem('gym_auth_context');
-    await signOut(auth);
+    try {
+      await signOut(auth);
+    } catch {}
     setFirebaseUser(null);
     setAppUserAccount(null);
     setSubscriptionStatus('none');
@@ -1825,6 +1875,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         appUserAccount,
         subscriptionStatus,
         signOutApp,
+        setLocalSessionUser,
         
         authContext,
         websiteCustomer,

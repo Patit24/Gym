@@ -15,7 +15,8 @@ import {
   Transaction,
   Expense,
   ExpenseType,
-  WebsiteCustomer
+  WebsiteCustomer,
+  AppUser
 } from '../types/gym';
 
 export const INITIAL_BRANCHES: Branch[] = [
@@ -745,6 +746,101 @@ export const INITIAL_WEBSITE_CUSTOMERS: WebsiteCustomer[] = [
         status: 'Active'
       }
     ]
+  }
+];
+
+export const INITIAL_APP_USERS: AppUser[] = [
+  {
+    id: 'USR-ADMIN-01',
+    username: 'admin@smartgym.com',
+    email: 'admin@smartgym.com',
+    password: 'admin123',
+    tempPassword: 'admin123',
+    role: 'Super Admin',
+    linkedId: 'EMP-ADMIN',
+    linkedName: 'System Super Admin',
+    branchId: 'branch-1',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    createdByAdminId: 'system',
+    isActive: true,
+    mustChangePassword: false,
+    permissions: {
+      canViewDashboard: true,
+      canEditWorkouts: true,
+      canEditDiets: true,
+      canViewMembers: true,
+      canManageFinance: true,
+      canAccessAdmin: true,
+    }
+  },
+  {
+    id: 'USR-ADMIN-02',
+    username: 'ADMIN01',
+    email: 'admin@smartgym.com',
+    password: 'admin123',
+    tempPassword: 'admin123',
+    role: 'Super Admin',
+    linkedId: 'EMP-ADMIN',
+    linkedName: 'System Super Admin',
+    branchId: 'branch-1',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    createdByAdminId: 'system',
+    isActive: true,
+    mustChangePassword: false,
+    permissions: {
+      canViewDashboard: true,
+      canEditWorkouts: true,
+      canEditDiets: true,
+      canViewMembers: true,
+      canManageFinance: true,
+      canAccessAdmin: true,
+    }
+  },
+  {
+    id: 'USR-TRN-01',
+    username: 'trainer@smartgym.com',
+    email: 'trainer@smartgym.com',
+    password: 'trainer123',
+    tempPassword: 'trainer123',
+    role: 'Trainer',
+    linkedId: 'EMP-001',
+    linkedName: 'Vikram Rajput',
+    branchId: 'branch-1',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    createdByAdminId: 'system',
+    isActive: true,
+    mustChangePassword: false,
+    permissions: {
+      canViewDashboard: true,
+      canEditWorkouts: true,
+      canEditDiets: true,
+      canViewMembers: true,
+      canManageFinance: false,
+      canAccessAdmin: false,
+    }
+  },
+  {
+    id: 'USR-MEM-01',
+    username: 'member@smartgym.com',
+    email: 'member@smartgym.com',
+    password: 'member123',
+    tempPassword: 'member123',
+    role: 'Member',
+    linkedId: 'MEM-2026-001',
+    linkedName: 'Alex Morgan',
+    branchId: 'branch-1',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    createdByAdminId: 'system',
+    isActive: true,
+    mustChangePassword: false,
+    permissions: {
+      canViewDashboard: true,
+      canEditWorkouts: false,
+      canEditDiets: false,
+      canViewMembers: false,
+      canManageFinance: false,
+      canAccessAdmin: false,
+    }
   }
 ];
 

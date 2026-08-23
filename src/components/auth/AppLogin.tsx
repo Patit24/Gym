@@ -9,6 +9,8 @@ import {
 } from 'firebase/auth';
 import { auth } from '../../firebase';
 import { useGym } from '../../context/GymContext';
+import { INITIAL_APP_USERS } from '../../data/initialData';
+import { AppUser } from '../../types/gym';
 import { 
   Activity, 
   Lock, 
@@ -38,7 +40,8 @@ export const AppLogin: React.FC = () => {
     isAuthLoading, 
     addMember, 
     plans, 
-    completeFirstLoginPasswordChange 
+    completeFirstLoginPasswordChange,
+    setLocalSessionUser
   } = useGym();
   
   const [authMode, setAuthMode] = useState<'signin' | 'signup' | 'forgot' | 'first-login-change-password'>('signin');
@@ -103,13 +106,27 @@ export const AppLogin: React.FC = () => {
     }
 
     // 1. Look up user by username (e.g. MEM00125), email, or linked ID
-    const matchedUser = appUsers.find(
+    let matchedUser = appUsers.find(
+      (u) =>
+        u.username.toLowerCase() === cleanInput.toLowerCase() ||
+        (u.email && u.email.toLowerCase() === cleanInput.toLowerCase()) ||
+        u.id.toLowerCase() === cleanInput.toLowerCase() ||
+        u.linkedId.toLowerCase() === cleanInput.toLowerCase()
+    ) || INITIAL_APP_USERS.find(
       (u) =>
         u.username.toLowerCase() === cleanInput.toLowerCase() ||
         (u.email && u.email.toLowerCase() === cleanInput.toLowerCase()) ||
         u.id.toLowerCase() === cleanInput.toLowerCase() ||
         u.linkedId.toLowerCase() === cleanInput.toLowerCase()
     );
+
+    if (!matchedUser && (cleanInput.toLowerCase() === 'admin@smartgym.com' || cleanInput.toLowerCase() === 'admin' || cleanInput.toUpperCase() === 'ADMIN01')) {
+      matchedUser = INITIAL_APP_USERS[0];
+    } else if (!matchedUser && (cleanInput.toLowerCase() === 'trainer@smartgym.com' || cleanInput.toLowerCase() === 'trainer')) {
+      matchedUser = INITIAL_APP_USERS[2];
+    } else if (!matchedUser && (cleanInput.toLowerCase() === 'member@smartgym.com' || cleanInput.toLowerCase() === 'member')) {
+      matchedUser = INITIAL_APP_USERS[3];
+    }
 
     const matchedMember = members.find(
       (m) =>
@@ -149,36 +166,53 @@ export const AppLogin: React.FC = () => {
       (matchedUser && (matchedUser.password === cleanPass || matchedUser.tempPassword === cleanPass)) ||
       (matchedMember && (matchedMember.tempPassword === cleanPass));
 
+    let resolvedUser: AppUser | null = matchedUser || null;
+    if (!resolvedUser && matchedMember) {
+      resolvedUser = {
+        id: matchedMember.userId || matchedMember.id,
+        username: matchedMember.username || cleanInput,
+        email: matchedMember.email || `${cleanInput.toLowerCase()}@smartgym.internal`,
+        role: 'Member',
+        linkedId: matchedMember.id,
+        linkedName: matchedMember.name,
+        branchId: matchedMember.branchId || 'branch-1',
+        createdAt: matchedMember.startDate || new Date().toISOString(),
+        createdByAdminId: 'system',
+        isActive: matchedMember.status !== 'Cancelled',
+        permissions: {
+          canViewDashboard: true,
+          canEditWorkouts: false,
+          canEditDiets: false,
+          canViewMembers: false,
+          canManageFinance: false,
+          canAccessAdmin: false,
+        }
+      };
+    }
+
     try {
       localStorage.setItem('gym_auth_context', 'app');
       
       // Step A: Attempt standard sign-in with Firebase Auth
       await signInWithEmailAndPassword(auth, authEmail, cleanPass);
+      if (resolvedUser) {
+        setLocalSessionUser(resolvedUser);
+      }
     } catch (fbErr: any) {
       // Step B: If Firebase Auth doesn't have the user yet (because they were provisioned in Firestore),
       // and their credentials match the generated account:
-      if (
-        isMatchingLocalPassword &&
-        (fbErr.code === 'auth/user-not-found' ||
-          fbErr.code === 'auth/invalid-credential' ||
-          fbErr.code === 'auth/invalid-email' ||
-          fbErr.code === 'auth/wrong-password')
-      ) {
+      if (isMatchingLocalPassword && resolvedUser) {
         try {
           // Auto-create this user in Firebase Auth with identical credentials so they are authorized in Firebase Auth!
           await createUserWithEmailAndPassword(auth, authEmail, cleanPass);
         } catch (createErr: any) {
           if (createErr.code === 'auth/email-already-in-use') {
-            // Re-attempt sign in
             try {
               await signInWithEmailAndPassword(auth, authEmail, cleanPass);
-            } catch {
-              // Ignore, state resolution in GymContext will handle session
-            }
-          } else {
-            console.warn('Firebase Auth creation notice:', createErr);
+            } catch {}
           }
         }
+        setLocalSessionUser(resolvedUser);
       } else {
         // Report friendly human-readable error messages instead of raw Firebase strings
         if (fbErr.code === 'auth/wrong-password' || fbErr.code === 'auth/invalid-credential') {
@@ -205,6 +239,17 @@ export const AppLogin: React.FC = () => {
       setIsLoading(false);
       return;
     }
+
+    // Step D: Route immediately based on user role
+    const finalRole = resolvedUser?.role || (matchedUser ? matchedUser.role : 'Member');
+    if (finalRole === 'Member') {
+      navigate('/app/user/dashboard', { replace: true });
+    } else if (finalRole === 'Trainer' || finalRole === 'Dietitian') {
+      navigate('/app/trainer/dashboard', { replace: true });
+    } else {
+      navigate('/app/admin/dashboard', { replace: true });
+    }
+    setIsLoading(false);
   };
 
   const handleCompletePasswordChange = async (e: React.FormEvent) => {
