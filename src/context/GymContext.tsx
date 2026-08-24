@@ -173,13 +173,15 @@ interface GymContextType {
 
 const GymContext = createContext<GymContextType | undefined>(undefined);
 
-// Safe background write wrapper with timeout so offline or disabled Firestore never hangs UI
-const safeDbWrite = (promise: Promise<any>, timeoutMs = 1500) => {
+// Safe background write wrapper with 15s timeout so cloud latency never triggers false local-mode warnings
+const safeDbWrite = (promise: Promise<any>, timeoutMs = 15000) => {
   const timeoutPromise = new Promise((_, reject) =>
     setTimeout(() => reject(new Error('Firestore operation timeout')), timeoutMs)
   );
   return Promise.race([promise, timeoutPromise]).catch((err) => {
-    console.warn('Firestore sync completed in local mode:', err?.message || err);
+    if (err?.message !== 'Firestore operation timeout') {
+      console.warn('Firestore sync note:', err?.message || err);
+    }
     return null;
   });
 };
