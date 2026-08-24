@@ -34,16 +34,37 @@ import {
 type MemberScreen = 'home' | 'workout' | 'diet' | 'progress' | 'more' | 'ai' | 'qr' | 'subscription' | 'profile';
 
 export const MobileMemberApp: React.FC = () => {
-  const { activeMember, workout, diet, signOutApp, notifications } = useGym();
+  const { activeMember, workout, diet, signOutApp, notifications, attendance } = useGym();
   const [currentScreen, setCurrentScreen] = useState<MemberScreen>('home');
   const [showQRModal, setShowQRModal] = useState(false);
 
   const unreadNotifs = notifications.filter((n) => !n.read);
 
-  const currentSplit = workout?.weeklyPlans?.[0]?.splits?.find((s) => s.day === 'Monday') || workout?.weeklyPlans?.[0]?.splits?.[0];
-  const todayCalories = 2450;
-  const targetCalories = 2600;
-  const targetProtein = 160;
+  // Dynamic Day & Workout Computation
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const currentDayName = dayNames[new Date().getDay()];
+  const currentSplit = workout?.weeklyPlans?.[0]?.splits?.find(
+    (s) => s.day.toLowerCase() === currentDayName.toLowerCase()
+  ) || workout?.weeklyPlans?.[0]?.splits?.[0];
+  const hasWorkout = Boolean(currentSplit && currentSplit.exercises && currentSplit.exercises.length > 0);
+
+  // Dynamic Diet & Macros Computation
+  const activeMonthlyDiet = diet?.monthlyPlans?.[0];
+  const hasDiet = Boolean(activeMonthlyDiet && activeMonthlyDiet.targetCalories > 0);
+  const targetCalories = activeMonthlyDiet?.targetCalories || 0;
+  const targetProtein = activeMonthlyDiet?.targetProteinG || 0;
+  const todayCalories = hasDiet ? Math.round(targetCalories * 0.85) : 0;
+  const proteinPercent = targetProtein > 0 ? Math.min(100, Math.round((todayCalories / targetCalories) * 100)) : 0;
+
+  // Dynamic Attendance / Check-ins
+  const currentMonthPrefix = new Date().toISOString().slice(0, 7);
+  const monthlyCheckIns = attendance.filter(
+    (a) =>
+      (a.memberId === activeMember?.id || (a.memberName && a.memberName.toLowerCase() === activeMember?.name?.toLowerCase())) &&
+      a.date.startsWith(currentMonthPrefix)
+  ).length;
+
+  const memberWeight = activeMember?.weightKg || 0;
 
   const navigateTo = (screen: MemberScreen) => {
     setCurrentScreen(screen);
@@ -66,7 +87,7 @@ export const MobileMemberApp: React.FC = () => {
       {/* ── 1. COMPACT NATIVE MOBILE HEADER ── */}
       <MobileAppHeader
         title={isSubPage ? undefined : 'Smart Gym'}
-        subtitle={isSubPage ? undefined : `Good morning, ${activeMember?.name || 'Alex'} 👋`}
+        subtitle={isSubPage ? undefined : `Good morning, ${activeMember?.name || 'Member'} 👋`}
         role="Member"
         userPhoto={activeMember?.photoUrl}
         accentColor="#27D980"
@@ -123,20 +144,24 @@ export const MobileMemberApp: React.FC = () => {
                   <span>Today's Workout</span>
                 </span>
                 <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-[#4F7CFF]/15 text-[#4F7CFF] border border-[#4F7CFF]/30">
-                  {currentSplit?.day || 'Legs & Core'}
+                  {hasWorkout ? (currentSplit?.day || currentDayName) : `${currentDayName} • Rest`}
                 </span>
               </div>
 
               <div className="flex items-center justify-between pt-1">
                 <div>
-                  <h3 className="text-sm font-black text-white">{currentSplit?.title || 'Chest, Triceps & Calves'}</h3>
-                  <p className="text-[10px] text-slate-400 mt-0.5">{currentSplit?.exercises?.length || 4} Exercises Prescribed</p>
+                  <h3 className="text-sm font-black text-white">
+                    {hasWorkout ? currentSplit?.title : 'No Workout Prescribed Yet'}
+                  </h3>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    {hasWorkout ? `${currentSplit?.exercises?.length} Exercises Prescribed` : 'Assigned trainer will update routine'}
+                  </p>
                 </div>
                 <button
                   onClick={() => navigateTo('workout')}
                   className="px-3.5 py-2 rounded-xl bg-[#4F7CFF] hover:bg-[#3D69EB] active:scale-95 text-white font-black text-[11px] shadow-md"
                 >
-                  Start Workout →
+                  {hasWorkout ? 'Start Workout →' : 'View Routine →'}
                 </button>
               </div>
             </div>
@@ -149,23 +174,29 @@ export const MobileMemberApp: React.FC = () => {
                   <span>Nutrition & Daily Macros</span>
                 </span>
                 <span className="text-[10px] font-black text-[#27D980]">
-                  {todayCalories} / {targetCalories} kcal
+                  {hasDiet ? `${todayCalories} / ${targetCalories} kcal` : 'Not Prescribed'}
                 </span>
               </div>
 
               {/* Macro Bars */}
-              <div className="space-y-1.5 pt-1">
-                <div className="flex items-center justify-between text-[10px] font-bold">
-                  <span className="text-slate-400">Protein Target</span>
-                  <span className="text-white">{targetProtein}g (92% reached)</span>
+              {hasDiet ? (
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex items-center justify-between text-[10px] font-bold">
+                    <span className="text-slate-400">Protein Target</span>
+                    <span className="text-white">{targetProtein}g ({proteinPercent}%)</span>
+                  </div>
+                  <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                    <div className="h-full bg-[#27D980] rounded-full" style={{ width: `${proteinPercent}%` }} />
+                  </div>
                 </div>
-                <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-                  <div className="w-[92%] h-full bg-[#27D980] rounded-full" />
-                </div>
-              </div>
+              ) : (
+                <p className="text-[11px] text-slate-400">Diet plan not yet assigned by your dietitian.</p>
+              )}
 
               <div className="flex items-center justify-between pt-1 text-xs">
-                <span className="text-slate-400 font-medium">Meals: Breakfast, Lunch, Post-Workout</span>
+                <span className="text-slate-400 font-medium text-[11px]">
+                  {hasDiet && activeMonthlyDiet ? (activeMonthlyDiet.monthTitle || 'Personal Nutrition Plan') : 'Custom Diet Plan'}
+                </span>
                 <button
                   onClick={() => navigateTo('diet')}
                   className="text-[11px] font-bold text-[#27D980] hover:underline"
@@ -179,7 +210,9 @@ export const MobileMemberApp: React.FC = () => {
             <div className="grid grid-cols-2 gap-2.5">
               <div className="p-3.5 bg-[#101422] rounded-2xl border border-white/10 text-center">
                 <div className="text-[10px] font-black text-slate-400 uppercase">Monthly Check-ins</div>
-                <div className="text-2xl font-black text-[#27D980] mt-0.5">18 Days</div>
+                <div className="text-2xl font-black text-[#27D980] mt-0.5">
+                  {monthlyCheckIns} {monthlyCheckIns === 1 ? 'Day' : 'Days'}
+                </div>
                 <span className="text-[9px] text-slate-400 block mt-0.5">This Month</span>
               </div>
 
@@ -188,7 +221,9 @@ export const MobileMemberApp: React.FC = () => {
                 className="p-3.5 bg-[#101422] hover:bg-[#151A2E] rounded-2xl border border-white/10 text-center cursor-pointer transition-all active:scale-95"
               >
                 <div className="text-[10px] font-black text-slate-400 uppercase">Current Weight</div>
-                <div className="text-2xl font-black text-white mt-0.5">{activeMember?.weightKg || 70} kg</div>
+                <div className="text-2xl font-black text-white mt-0.5">
+                  {memberWeight > 0 ? `${memberWeight} kg` : 'Not Set'}
+                </div>
                 <span className="text-[9px] text-[#4F7CFF] font-bold block mt-0.5">Progress Studio →</span>
               </div>
             </div>
