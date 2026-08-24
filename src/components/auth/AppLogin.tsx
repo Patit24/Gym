@@ -108,6 +108,7 @@ export const AppLogin: React.FC = () => {
     // 1. Check if user is Master Admin
     const isMasterAdminInput =
       cleanInput.toUpperCase() === 'MASTERADMIN' ||
+      cleanInput.toLowerCase() === 'masteradmin@smartgym.com' ||
       cleanInput.toLowerCase() === 'masteradmin@smartgym.internal' ||
       cleanInput.toLowerCase() === 'admin' ||
       cleanInput.toUpperCase() === 'ADMIN01' ||
@@ -150,7 +151,7 @@ export const AppLogin: React.FC = () => {
     // Determine the Firebase Auth compatible email
     let authEmail = '';
     if (isMasterAdminInput) {
-      authEmail = 'masteradmin@smartgym.internal';
+      authEmail = 'masteradmin@smartgym.com';
     } else if (cleanInput.includes('@')) {
       authEmail = cleanInput.toLowerCase();
     } else if (matchedUser?.email && matchedUser.email.includes('@')) {
@@ -159,7 +160,7 @@ export const AppLogin: React.FC = () => {
       authEmail = matchedMember.email.toLowerCase();
     } else {
       const uname = (matchedUser?.username || matchedMember?.username || cleanInput).toLowerCase().replace(/[^a-z0-9]/g, '');
-      authEmail = `${uname}@smartgym.internal`;
+      authEmail = `${uname}@smartgym.com`;
     }
 
     // MASTER ADMIN DIRECT AUTHENTICATION PATH
@@ -169,7 +170,7 @@ export const AppLogin: React.FC = () => {
       const masterAccount: AppUser = {
         id: 'USR-MASTERADMIN',
         username: 'MASTERADMIN',
-        email: 'masteradmin@smartgym.internal',
+        email: 'masteradmin@smartgym.com',
         role: 'Super Admin',
         linkedId: 'EMP-MASTERADMIN',
         linkedName: 'Master Administrator',

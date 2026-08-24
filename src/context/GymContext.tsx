@@ -443,12 +443,12 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const emailPrefix = rawEmail.includes('@') ? rawEmail.split('@')[0] : rawEmail;
 
     // 1. Master Admin resolution
-    if (rawEmail === 'masteradmin@smartgym.internal' || emailPrefix === 'masteradmin') {
-      const existingMaster = appUsers.find(u => u.username.toUpperCase() === 'MASTERADMIN' || (u.email && u.email.toLowerCase() === 'masteradmin@smartgym.internal'));
+    if (rawEmail === 'masteradmin@smartgym.com' || rawEmail === 'masteradmin@smartgym.internal' || emailPrefix === 'masteradmin') {
+      const existingMaster = appUsers.find(u => u.username.toUpperCase() === 'MASTERADMIN' || (u.email && u.email.toLowerCase().includes('masteradmin')));
       const masterAccount: AppUser = {
         id: firebaseUser.uid,
         username: 'MASTERADMIN',
-        email: 'masteradmin@smartgym.internal',
+        email: 'masteradmin@smartgym.com',
         role: 'Super Admin',
         linkedId: 'EMP-MASTERADMIN',
         linkedName: 'Master Administrator',
@@ -1010,7 +1010,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAppUser = {
         id: userId,
         username,
-        email: newMemberData.email || `${username.toLowerCase()}@smartgym.internal`,
+        email: newMemberData.email || `${username.toLowerCase()}@smartgym.com`,
         password: tempPassword,
         tempPassword,
         role: 'Member',
@@ -1114,7 +1114,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newEmployee: Employee = {
       ...empData,
       id: employeeId,
-      email: empData.email || `${username.toLowerCase()}@smartgym.internal`,
+      email: empData.email || `${username.toLowerCase()}@smartgym.com`,
     };
 
     setEmployees((prev) => [newEmployee, ...prev]);
@@ -1279,7 +1279,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const masterUser: AppUser = {
         id: userId || 'USR-MASTERADMIN',
         username: 'MASTERADMIN',
-        email: 'masteradmin@smartgym.internal',
+        email: 'masteradmin@smartgym.com',
         role: 'Super Admin',
         linkedId: 'EMP-MASTERADMIN',
         linkedName: 'Master Administrator',

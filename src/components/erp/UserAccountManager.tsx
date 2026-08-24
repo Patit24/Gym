@@ -162,7 +162,7 @@ export const UserAccountManager: React.FC = () => {
       const newUserRecord: AppUser = {
         id: generatedId,
         username: newUsername.trim().toUpperCase(),
-        email: newEmail.trim() || `${newUsername.trim().toLowerCase()}@smartgym.internal`,
+        email: newEmail.trim() || `${newUsername.trim().toLowerCase()}@smartgym.com`,
         role: newRole,
         linkedId: generatedId,
         linkedName: newFullName.trim(),

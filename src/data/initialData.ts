@@ -142,7 +142,7 @@ export const INITIAL_APP_USERS: AppUser[] = [
   {
     id: 'USR-MASTERADMIN',
     username: 'MASTERADMIN',
-    email: 'masteradmin@smartgym.internal',
+    email: 'masteradmin@smartgym.com',
     role: 'Super Admin',
     linkedId: 'EMP-MASTERADMIN',
     linkedName: 'Master Administrator',
