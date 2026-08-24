@@ -8,6 +8,7 @@ import { DietTracker } from '../mobile/DietTracker';
 import { ProgressStudio } from '../mobile/ProgressStudio';
 import { AIChatCoach } from '../mobile/AIChatCoach';
 import { SubscriptionCard } from '../mobile/SubscriptionCard';
+import { MemberProfileEditor } from '../mobile/MemberProfileEditor';
 import {
   Home,
   Dumbbell,
@@ -26,10 +27,11 @@ import {
   Flame,
   Award,
   LogOut,
-  Clock
+  Clock,
+  User
 } from 'lucide-react';
 
-type MemberScreen = 'home' | 'workout' | 'diet' | 'progress' | 'more' | 'ai' | 'qr' | 'subscription';
+type MemberScreen = 'home' | 'workout' | 'diet' | 'progress' | 'more' | 'ai' | 'qr' | 'subscription' | 'profile';
 
 export const MobileMemberApp: React.FC = () => {
   const { activeMember, workout, diet, signOutApp, notifications } = useGym();
@@ -48,7 +50,7 @@ export const MobileMemberApp: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const isSubPage = ['ai', 'qr', 'subscription'].includes(currentScreen);
+  const isSubPage = ['ai', 'qr', 'subscription', 'profile'].includes(currentScreen);
 
   const bottomNavTabs: MobileNavTab[] = [
     { id: 'home', label: 'Home', icon: Home },
@@ -75,7 +77,8 @@ export const MobileMemberApp: React.FC = () => {
         backTitle={
           currentScreen === 'ai' ? 'AI Coach Studio' :
           currentScreen === 'qr' ? 'Gate QR Pass' :
-          currentScreen === 'subscription' ? 'Membership Plan' : 'Back'
+          currentScreen === 'subscription' ? 'Membership Plan' :
+          currentScreen === 'profile' ? 'My Health Profile' : 'Back'
         }
       />
 
@@ -185,7 +188,7 @@ export const MobileMemberApp: React.FC = () => {
                 className="p-3.5 bg-[#101422] hover:bg-[#151A2E] rounded-2xl border border-white/10 text-center cursor-pointer transition-all active:scale-95"
               >
                 <div className="text-[10px] font-black text-slate-400 uppercase">Current Weight</div>
-                <div className="text-2xl font-black text-white mt-0.5">{activeMember?.weightKg || 74} kg</div>
+                <div className="text-2xl font-black text-white mt-0.5">{activeMember?.weightKg || 70} kg</div>
                 <span className="text-[9px] text-[#4F7CFF] font-bold block mt-0.5">Progress Studio →</span>
               </div>
             </div>
@@ -270,6 +273,20 @@ export const MobileMemberApp: React.FC = () => {
             {/* Quick Links */}
             <div className="bg-[#101422] rounded-3xl border border-white/10 overflow-hidden shadow-xl divide-y divide-white/5">
               <button
+                onClick={() => navigateTo('profile')}
+                className="w-full p-4 flex items-center justify-between text-left hover:bg-[#151A2E] active:bg-[#1B2238] transition-all"
+              >
+                <div className="flex items-center gap-3">
+                  <User className="w-5 h-5 text-[#27D980]" />
+                  <div>
+                    <span className="text-xs font-bold text-white block">Edit Profile & Body Stats</span>
+                    <span className="text-[10px] text-slate-400">Update waist, biceps, emergency contact & medical notes</span>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-500" />
+              </button>
+
+              <button
                 onClick={() => navigateTo('qr')}
                 className="w-full p-4 flex items-center justify-between text-left hover:bg-[#151A2E] active:bg-[#1B2238] transition-all"
               >
@@ -339,6 +356,15 @@ export const MobileMemberApp: React.FC = () => {
         {currentScreen === 'subscription' && (
           <div className="space-y-4 animate-in fade-in duration-200">
             <SubscriptionCard />
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════
+            SUBPAGE 4: MEMBER PROFILE & BODY STATS EDITOR
+        ═══════════════════════════════════════════════════════════ */}
+        {currentScreen === 'profile' && (
+          <div className="space-y-4 animate-in fade-in duration-200">
+            <MemberProfileEditor />
           </div>
         )}
 

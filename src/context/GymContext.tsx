@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import {
   Role,
   BranchId,
@@ -626,48 +626,97 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [activeMemberId]);
 
-  const activeMember = members.find((m) => m.id === activeMemberId) || members[0] || ({
-    id: 'MEM-2026-001',
-    membershipNo: 'SG-90210',
-    name: 'Alex Morgan',
-    photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-    faceEnrolled: true,
-    mobile: '+91 98765 43210',
-    email: 'member@smartgym.com',
-    dob: '1998-05-14',
-    gender: 'Female',
-    heightCm: 172,
-    weightKg: 64,
-    startWeightKg: 68,
-    bmi: 21.6,
-    chestCm: 92,
-    waistCm: 68,
-    armsCm: 32,
-    thighsCm: 54,
-    bloodGroup: 'O+',
-    emergencyContactName: 'Robert Morgan',
-    emergencyMobile: '+91 98765 00000',
-    address: 'Flat 402, Skyline Residency, Tech City',
-    medicalHistory: 'None',
-    goal: 'Muscle Building',
-    referralSource: 'Instagram',
-    branchId: 'branch-1',
-    planId: 'plan-1',
-    planName: 'Annual VIP All-Access Franchise',
-    startDate: '2026-01-01',
-    endDate: '2027-01-01',
-    expiryDate: '2027-01-01',
-    status: 'Active',
-    rewardPoints: 350,
-    referralCode: 'ALEX2026',
-    pendingDues: 0,
-    paidAmount: 35400,
-    totalPlanAmount: 35400,
-    lastPaymentDate: '2026-01-01',
-    nextDueDate: '2027-01-01',
-    paymentStatus: 'Paid',
-    lockerNumber: 'L-101'
-  } as Member);
+  const activeMember: Member = useMemo(() => {
+    // 1. Check if explicit activeMemberId matches a loaded member
+    const foundById = members.find((m) => m.id === activeMemberId);
+    if (foundById) return foundById;
+
+    // 2. If authenticated user is a Member, resolve their member document
+    if (appUserAccount && appUserAccount.role === 'Member') {
+      const foundByUser = members.find(
+        (m) =>
+          m.id === appUserAccount.linkedId ||
+          m.userId === appUserAccount.id ||
+          (m.username && m.username.toLowerCase() === appUserAccount.username.toLowerCase()) ||
+          (m.email && m.email.toLowerCase() === (appUserAccount.email || '').toLowerCase())
+      );
+      if (foundByUser) return foundByUser;
+
+      return {
+        id: appUserAccount.linkedId || appUserAccount.id,
+        membershipNo: `SG-${appUserAccount.username}`,
+        name: appUserAccount.linkedName || appUserAccount.username,
+        photoUrl: '',
+        faceEnrolled: false,
+        mobile: '',
+        email: appUserAccount.email || '',
+        dob: '',
+        gender: 'Male',
+        heightCm: 0,
+        weightKg: 0,
+        startWeightKg: 0,
+        bmi: 0,
+        chestCm: 0,
+        waistCm: 0,
+        armsCm: 0,
+        thighsCm: 0,
+        bloodGroup: '',
+        emergencyContactName: '',
+        emergencyMobile: '',
+        address: '',
+        medicalHistory: '',
+        goal: 'Muscle Building',
+        referralSource: 'Direct',
+        branchId: appUserAccount.branchId || 'branch-1',
+        planId: 'plan-1',
+        planName: 'Standard Plan',
+        startDate: appUserAccount.createdAt ? appUserAccount.createdAt.split('T')[0] : new Date().toISOString().split('T')[0],
+        endDate: '',
+        status: 'Active',
+        pendingDues: 0,
+        paidAmount: 0,
+        totalPlanAmount: 0,
+      } as Member;
+    }
+
+    if (members.length > 0) return members[0];
+
+    return {
+      id: 'MEM-001',
+      membershipNo: 'SG-001',
+      name: 'Member',
+      photoUrl: '',
+      faceEnrolled: false,
+      mobile: '',
+      email: '',
+      dob: '',
+      gender: 'Male',
+      heightCm: 0,
+      weightKg: 0,
+      startWeightKg: 0,
+      bmi: 0,
+      chestCm: 0,
+      waistCm: 0,
+      armsCm: 0,
+      thighsCm: 0,
+      bloodGroup: '',
+      emergencyContactName: '',
+      emergencyMobile: '',
+      address: '',
+      medicalHistory: '',
+      goal: 'Muscle Building',
+      referralSource: 'Direct',
+      branchId: 'branch-1',
+      planId: '',
+      planName: 'Standard Plan',
+      startDate: new Date().toISOString().split('T')[0],
+      endDate: '',
+      status: 'Active',
+      pendingDues: 0,
+      paidAmount: 0,
+      totalPlanAmount: 0,
+    } as Member;
+  }, [members, activeMemberId, appUserAccount]);
 
   const setActiveMemberId = (id: string) => {
     setActiveMemberIdState(id);
