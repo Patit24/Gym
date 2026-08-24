@@ -104,5 +104,23 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow write: if isStaff();
     }
+
+    // Operating Expenses & P&L
+    match /expenses/{expenseId} {
+      allow read: if isStaff();
+      allow write: if isStaff();
+    }
+
+    match /expense_types/{typeId} {
+      allow read: if isStaff();
+      allow write: if isStaff();
+    }
+
+    // Security & Audit Logs
+    match /audit_logs/{logId} {
+      allow read: if isStaff();
+      allow create: if isAuthenticated();
+      allow update, delete: if false; // Immutable audit trail
+    }
   }
 }
