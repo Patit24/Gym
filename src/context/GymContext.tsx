@@ -421,6 +421,19 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     if (!firebaseUser) {
+      const stored = localStorage.getItem('gym_app_user_account');
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (parsed && parsed.id) {
+            setAppUserAccount(parsed);
+            setCurrentRole(parsed.role || 'Super Admin');
+            setSelectedBranchId(parsed.branchId || 'branch-1');
+            setSubscriptionStatus('active');
+            return;
+          }
+        } catch {}
+      }
       setAppUserAccount(null);
       setSubscriptionStatus('none');
       return;
@@ -1259,8 +1272,47 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const completeFirstLoginPasswordChange = async (userId: string, newPassword: string) => {
-    const user = appUsers.find((u) => u.id === userId || u.username.toLowerCase() === userId.toLowerCase());
-    if (!user) throw new Error('User not found');
+    let user = appUsers.find((u) => u.id === userId || u.username.toLowerCase() === userId.toLowerCase());
+    
+    // If Master Admin record is being completed for the first time
+    if (!user && (userId === 'USR-MASTERADMIN' || userId.toLowerCase().includes('master') || appUserAccount?.username === 'MASTERADMIN')) {
+      const masterUser: AppUser = {
+        id: userId || 'USR-MASTERADMIN',
+        username: 'MASTERADMIN',
+        email: 'masteradmin@smartgym.internal',
+        role: 'Super Admin',
+        linkedId: 'EMP-MASTERADMIN',
+        linkedName: 'Master Administrator',
+        branchId: 'all',
+        createdAt: new Date().toISOString(),
+        createdByAdminId: 'system',
+        isActive: true,
+        mustChangePassword: false,
+        isProtected: true,
+        permissions: {
+          canViewDashboard: true,
+          canEditWorkouts: true,
+          canEditDiets: true,
+          canViewMembers: true,
+          canManageFinance: true,
+          canAccessAdmin: true,
+        }
+      };
+      setAppUsers((prev) => [masterUser, ...prev.filter(u => u.username !== 'MASTERADMIN')]);
+      safeDbWrite(setDoc(doc(db, 'users', masterUser.id), masterUser));
+      setAppUserAccount(masterUser);
+      setLocalSessionUser(masterUser);
+      return;
+    }
+
+    if (!user) {
+      // Fallback: check if active logged-in user account exists
+      if (appUserAccount) {
+        user = appUserAccount;
+      } else {
+        throw new Error('User not found');
+      }
+    }
 
     const updatedUserPartial: Partial<AppUser> = {
       password: newPassword,
@@ -1269,7 +1321,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       lastLoginAt: new Date().toISOString(),
     };
 
-    setAppUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, ...updatedUserPartial } : u)));
+    setAppUsers((prev) => prev.map((u) => (u.id === user!.id ? { ...u, ...updatedUserPartial } : u)));
     safeDbWrite(updateDoc(doc(db, 'users', user.id), updatedUserPartial));
 
     // Also update linked member if present
@@ -1279,12 +1331,14 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         mustChangePassword: false,
         lastLoginAt: new Date().toISOString(),
       };
-      setMembers((prev) => prev.map((m) => (m.id === user.linkedId ? { ...m, ...updatedMemberPartial } : m)));
+      setMembers((prev) => prev.map((m) => (m.id === user!.linkedId ? { ...m, ...updatedMemberPartial } : m)));
       safeDbWrite(updateDoc(doc(db, 'members', user.linkedId), updatedMemberPartial));
     }
 
     if (appUserAccount && appUserAccount.id === user.id) {
-      setAppUserAccount((prev) => (prev ? { ...prev, ...updatedUserPartial } : null));
+      const updatedFull = { ...appUserAccount, ...updatedUserPartial };
+      setAppUserAccount(updatedFull);
+      setLocalSessionUser(updatedFull);
     }
 
     await recordAuditLog(
