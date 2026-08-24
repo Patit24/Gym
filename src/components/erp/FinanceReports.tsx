@@ -78,10 +78,14 @@ export const FinanceReports: React.FC = () => {
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('ALL');
 
   // Calculations
-  const branchTransactions = transactions.filter((t) => t.branchId === selectedBranchId);
-  const totalRevenue = branchTransactions.reduce((acc, t) => acc + t.amount, 0) || currentBranch.monthlyRevenue;
+  const branchTransactions = selectedBranchId === 'all'
+    ? transactions
+    : transactions.filter((t) => t.branchId === selectedBranchId);
+  const totalRevenue = branchTransactions.reduce((acc, t) => acc + t.amount, 0);
   
-  const branchExpenses = expenses.filter((e) => e.branchId === selectedBranchId);
+  const branchExpenses = selectedBranchId === 'all'
+    ? expenses
+    : expenses.filter((e) => e.branchId === selectedBranchId);
   const totalExpenses = branchExpenses.reduce((acc, e) => acc + e.amount, 0);
   const netProfit = totalRevenue - totalExpenses;
   const isProfitable = netProfit >= 0;

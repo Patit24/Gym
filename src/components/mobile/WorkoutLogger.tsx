@@ -25,10 +25,10 @@ export const WorkoutLogger: React.FC = () => {
 
   const weeklyPlans = (workout?.weeklyPlans && workout.weeklyPlans.length > 0) 
     ? workout.weeklyPlans 
-    : INITIAL_WORKOUT.weeklyPlans;
+    : [];
 
   const currentWeekPlan = weeklyPlans.find((w) => w.weekNumber === selectedWeekNum) || weeklyPlans[0];
-  const currentSplit = currentWeekPlan?.splits?.[selectedDayIdx] || currentWeekPlan?.splits?.[0] || INITIAL_WORKOUT.weeklyPlans[0].splits[0];
+  const currentSplit = currentWeekPlan?.splits?.[selectedDayIdx] || currentWeekPlan?.splits?.[0];
 
   useEffect(() => {
     let interval: any = null;
@@ -73,6 +73,134 @@ export const WorkoutLogger: React.FC = () => {
   const progressPercent = currentSplit ? Math.round((completedCount / currentSplit.exercises.length) * 100) || 0 : 0;
 
   const isTrainerOrAdmin = currentRole === 'Trainer' || currentRole === 'Super Admin' || currentRole === 'Owner';
+
+  if (!currentWeekPlan || !currentSplit) {
+    return (
+      <div className="space-y-4 text-xs animate-in fade-in">
+        {isTrainerOrAdmin && (
+          <div className="bg-[#0F1420] p-2.5 rounded-2xl border border-white/10 flex items-center justify-between">
+            <span className="text-gym-subtext font-extrabold flex items-center gap-1">
+              <User className="w-3.5 h-3.5 text-cyan-400" />
+              Target Member:
+            </span>
+            <select
+              value={activeMember?.id || ''}
+              onChange={(e) => setActiveMemberId(e.target.value)}
+              className="bg-[#070A10] text-cyan-400 font-extrabold px-2.5 py-1 rounded-xl border border-cyan-500/30 focus:outline-none cursor-pointer text-xs"
+            >
+              {members.map((m) => (
+                <option key={m.id} value={m.id}>{m.name} ({m.membershipNo})</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div className="p-8 rounded-3xl bg-[#0F1420] border border-white/10 flex flex-col items-center justify-center gap-3 text-center">
+          <div className="w-12 h-12 rounded-2xl bg-[#4F7CFF]/15 text-[#4F7CFF] border border-[#4F7CFF]/30 flex items-center justify-center">
+            <Dumbbell className="w-6 h-6" />
+          </div>
+          <h3 className="text-sm font-extrabold text-white">No Workout Routine Assigned Yet</h3>
+          <p className="text-xs text-gym-subtext max-w-xs">
+            Your assigned gym trainer will customize your training split, sets, reps, and exercises.
+          </p>
+          {isTrainerOrAdmin && (
+            <button
+              onClick={() => setShowAddWeekModal(true)}
+              className="mt-2 px-4 py-2 rounded-xl bg-[#4F7CFF] hover:bg-[#3D68E6] text-white font-extrabold text-xs flex items-center gap-2 shadow-lg shadow-[#4F7CFF]/20 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Assign Workout Routine</span>
+            </button>
+          )}
+        </div>
+
+        {/* Add / Assign Weekly Workout Modal */}
+        {showAddWeekModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/90 backdrop-blur-md">
+            <div className="bg-[#0F1420] border border-cyan-500/40 rounded-3xl max-w-xs w-full p-4 shadow-2xl space-y-3 text-left">
+              <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                <h4 className="font-extrabold text-white text-xs">Set Weekly Workout via App</h4>
+                <button onClick={() => setShowAddWeekModal(false)} className="text-gym-subtext"><X className="w-4 h-4" /></button>
+              </div>
+
+              <form onSubmit={handleSaveWeeklyWorkout} className="space-y-2">
+                <div>
+                  <label className="block text-[10px] text-gym-subtext mb-0.5">Select Gym Member</label>
+                  <select
+                    value={targetMemberId}
+                    onChange={(e) => setTargetMemberId(e.target.value)}
+                    className="w-full bg-[#070A10] border border-white/10 rounded-xl px-2.5 py-1.5 text-white"
+                  >
+                    {members.map((m) => (
+                      <option key={m.id} value={m.id}>{m.name} ({m.membershipNo})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] text-gym-subtext mb-0.5">Select Week Number</label>
+                  <select
+                    value={newWeekNum}
+                    onChange={(e) => setNewWeekNum(Number(e.target.value))}
+                    className="w-full bg-[#070A10] border border-white/10 rounded-xl px-2.5 py-1.5 text-white"
+                  >
+                    <option value={1}>Week 1</option>
+                    <option value={2}>Week 2</option>
+                    <option value={3}>Week 3</option>
+                    <option value={4}>Week 4</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] text-gym-subtext mb-0.5">Week Title</label>
+                  <input
+                    type="text"
+                    required
+                    value={newWeekTitle}
+                    onChange={(e) => setNewWeekTitle(e.target.value)}
+                    className="w-full bg-[#070A10] border border-white/10 rounded-xl px-2.5 py-1.5 text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] text-gym-subtext mb-0.5">Exercise Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={newExName}
+                    onChange={(e) => setNewExName(e.target.value)}
+                    className="w-full bg-[#070A10] border border-white/10 rounded-xl px-2.5 py-1.5 text-white"
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-[9px] text-gym-subtext">Sets</label>
+                    <input type="number" value={newExSets} onChange={(e) => setNewExSets(Number(e.target.value))} className="w-full bg-[#070A10] border border-white/10 rounded-lg px-2 py-1 text-white" />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] text-gym-subtext">Reps</label>
+                    <input type="number" value={newExReps} onChange={(e) => setNewExReps(Number(e.target.value))} className="w-full bg-[#070A10] border border-white/10 rounded-lg px-2 py-1 text-white" />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] text-gym-subtext">Weight (kg)</label>
+                    <input type="number" value={newExWeight} onChange={(e) => setNewExWeight(Number(e.target.value))} className="w-full bg-[#070A10] border border-white/10 rounded-lg px-2 py-1 text-white" />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-2 rounded-xl bg-gradient-to-r from-cyan-400 to-emerald-400 text-gym-dark font-black text-xs shadow-md mt-1"
+                >
+                  Assign Week {newWeekNum} Workout
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3.5 animate-in fade-in duration-300 text-xs">

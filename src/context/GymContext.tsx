@@ -126,6 +126,10 @@ interface GymContextType {
   }>;
   resetMemberPassword: (memberId: string) => Promise<{ newTempPassword: string; whatsappDirectUrl?: string }>;
   updateAccountStatus: (memberId: string, isActive: boolean) => Promise<void>;
+  updateUserStatus: (userId: string, isActive: boolean) => Promise<void>;
+  forceUserPasswordChange: (userId: string) => Promise<void>;
+  updateUserRoleAndBranch: (userId: string, role: Role, branchId: string) => Promise<void>;
+  deleteUserAccount: (userId: string) => Promise<void>;
   completeFirstLoginPasswordChange: (userId: string, newPassword: string) => Promise<void>;
   resendMemberCredentials: (memberId: string) => Promise<{ success: boolean; whatsappDirectUrl?: string }>;
   addBranch: (newBranchData: Omit<Branch, 'id' | 'activeMembers' | 'currentCheckIns' | 'monthlyRevenue'>) => Promise<Branch>;
@@ -415,20 +419,8 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
-  // 3. User account resolution & automatic role assignment
   useEffect(() => {
     if (!firebaseUser) {
-      const saved = localStorage.getItem('gym_app_user_account');
-      if (saved) {
-        try {
-          const parsed: AppUser = JSON.parse(saved);
-          setAppUserAccount(parsed);
-          setCurrentRole(parsed.role);
-          setSelectedBranchId(parsed.branchId || 'branch-1');
-          setSubscriptionStatus('active');
-          return;
-        } catch {}
-      }
       setAppUserAccount(null);
       setSubscriptionStatus('none');
       return;
@@ -437,7 +429,39 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const rawEmail = (firebaseUser.email || '').toLowerCase();
     const emailPrefix = rawEmail.includes('@') ? rawEmail.split('@')[0] : rawEmail;
 
-    // Try to match AppUser by email, username, id, or linkedId
+    // 1. Master Admin resolution
+    if (rawEmail === 'masteradmin@smartgym.internal' || emailPrefix === 'masteradmin') {
+      const existingMaster = appUsers.find(u => u.username.toUpperCase() === 'MASTERADMIN' || (u.email && u.email.toLowerCase() === 'masteradmin@smartgym.internal'));
+      const masterAccount: AppUser = {
+        id: firebaseUser.uid,
+        username: 'MASTERADMIN',
+        email: 'masteradmin@smartgym.internal',
+        role: 'Super Admin',
+        linkedId: 'EMP-MASTERADMIN',
+        linkedName: 'Master Administrator',
+        branchId: 'all',
+        createdAt: existingMaster?.createdAt || new Date().toISOString(),
+        createdByAdminId: 'system',
+        isActive: true,
+        mustChangePassword: existingMaster ? (existingMaster.mustChangePassword ?? false) : false,
+        isProtected: true,
+        permissions: {
+          canViewDashboard: true,
+          canEditWorkouts: true,
+          canEditDiets: true,
+          canViewMembers: true,
+          canManageFinance: true,
+          canAccessAdmin: true,
+        }
+      };
+      setAppUserAccount(masterAccount);
+      setCurrentRole('Super Admin');
+      setSelectedBranchId(branches[0]?.id || 'all');
+      setSubscriptionStatus('active');
+      return;
+    }
+
+    // 2. Look up user account from Firestore `users` collection
     const foundUser = appUsers.find(
       u =>
         (u.email && u.email.toLowerCase() === rawEmail) ||
@@ -450,7 +474,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (foundUser) {
       setAppUserAccount(foundUser);
       setCurrentRole(foundUser.role);
-      setSelectedBranchId(foundUser.branchId || 'branch-1');
+      setSelectedBranchId(foundUser.branchId || branches[0]?.id || 'all');
 
       if (foundUser.role === 'Member') {
         const memberRec = members.find(
@@ -472,7 +496,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    // Also check if this Firebase User corresponds directly to a member in members collection
+    // 3. Check if this Firebase User corresponds directly to a member in members collection
     const matchingMember = members.find(
       m =>
         (m.email && m.email.toLowerCase() === rawEmail) ||
@@ -490,10 +514,10 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         role: 'Member',
         linkedId: matchingMember.id,
         linkedName: matchingMember.name,
-        branchId: matchingMember.branchId || 'branch-1',
+        branchId: matchingMember.branchId || branches[0]?.id || 'all',
         createdAt: matchingMember.startDate || new Date().toISOString(),
         createdByAdminId: 'system',
-        isActive: matchingMember.status !== 'Cancelled',
+        isActive: matchingMember.status !== 'Cancelled' && matchingMember.status !== 'Suspended',
         permissions: {
           canViewDashboard: true,
           canEditWorkouts: false,
@@ -511,117 +535,62 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    if (rawEmail === 'admin@smartgym.com') {
-      const adminAccount: AppUser = {
+    // 4. Check matching employee
+    const matchingEmployee = employees.find(e => e.email?.toLowerCase() === rawEmail || (e as any).mobile === emailPrefix);
+    if (matchingEmployee) {
+      const empAccount: AppUser = {
         id: firebaseUser.uid,
-        username: 'admin@smartgym.com',
-        email: 'admin@smartgym.com',
-        role: 'Super Admin',
-        linkedId: 'EMP-ADMIN',
-        linkedName: 'System Admin',
-        branchId: 'branch-1',
-        createdAt: new Date().toISOString(),
+        username: emailPrefix.toUpperCase(),
+        email: matchingEmployee.email || rawEmail,
+        role: matchingEmployee.role,
+        linkedId: matchingEmployee.id,
+        linkedName: matchingEmployee.name,
+        branchId: matchingEmployee.branchId || branches[0]?.id || 'all',
+        createdAt: matchingEmployee.joiningDate || new Date().toISOString(),
         createdByAdminId: 'system',
         isActive: true,
         permissions: {
           canViewDashboard: true,
-          canEditWorkouts: true,
-          canEditDiets: true,
-          canViewMembers: true,
-          canManageFinance: true,
-          canAccessAdmin: true,
+          canEditWorkouts: matchingEmployee.role === 'Trainer',
+          canEditDiets: matchingEmployee.role === 'Dietitian',
+          canViewMembers: matchingEmployee.role !== 'Employee',
+          canManageFinance: matchingEmployee.role === 'Super Admin' || matchingEmployee.role === 'Owner',
+          canAccessAdmin: matchingEmployee.role === 'Super Admin' || matchingEmployee.role === 'Owner' || matchingEmployee.role === 'Branch Manager',
         }
       };
-      setAppUserAccount(adminAccount);
-      setCurrentRole('Super Admin');
-      setSelectedBranchId('branch-1');
+      setAppUserAccount(empAccount);
+      setCurrentRole(empAccount.role);
+      setSelectedBranchId(empAccount.branchId);
       setSubscriptionStatus('active');
-    } else if (rawEmail === 'member@smartgym.com') {
-      const memberAccount: AppUser = {
-        id: firebaseUser.uid,
-        username: 'member@smartgym.com',
-        email: 'member@smartgym.com',
-        role: 'Member',
-        linkedId: 'MEM-2026-001',
-        linkedName: 'Alex Morgan',
-        branchId: 'branch-1',
-        createdAt: new Date().toISOString(),
-        createdByAdminId: 'system',
-        isActive: true,
-        permissions: {
-          canViewDashboard: true,
-          canEditWorkouts: false,
-          canEditDiets: false,
-          canViewMembers: false,
-          canManageFinance: false,
-          canAccessAdmin: false,
-        }
-      };
-      setAppUserAccount(memberAccount);
-      setCurrentRole('Member');
-      setActiveMemberIdState('MEM-2026-001');
-      setSelectedBranchId('branch-1');
-      setSubscriptionStatus('active');
-    } else if (rawEmail === 'trainer@smartgym.com') {
-      const trainerAccount: AppUser = {
-        id: firebaseUser.uid,
-        username: 'trainer@smartgym.com',
-        email: 'trainer@smartgym.com',
-        role: 'Trainer',
-        linkedId: 'EMP-001',
-        linkedName: 'Vikram Rajput',
-        branchId: 'branch-1',
-        createdAt: new Date().toISOString(),
-        createdByAdminId: 'system',
-        isActive: true,
-        permissions: {
-          canViewDashboard: true,
-          canEditWorkouts: true,
-          canEditDiets: true,
-          canViewMembers: true,
-          canManageFinance: false,
-          canAccessAdmin: false,
-        }
-      };
-      setAppUserAccount(trainerAccount);
-      setCurrentRole('Trainer');
-      setSelectedBranchId('branch-1');
-      setSubscriptionStatus('active');
-    } else {
-      const matchingMember = members.find(m => m.email?.toLowerCase() === rawEmail);
-      const matchingEmployee = employees.find(e => e.email?.toLowerCase() === rawEmail);
-      const dynamicUser: AppUser = {
-        id: firebaseUser.uid,
-        username: rawEmail || firebaseUser.uid,
-        email: rawEmail,
-        password: '••••••••',
-        role: matchingMember ? 'Member' : (matchingEmployee ? matchingEmployee.role : 'Member'),
-        linkedId: matchingMember ? matchingMember.id : (matchingEmployee ? matchingEmployee.id : firebaseUser.uid),
-        linkedName: matchingMember ? matchingMember.name : (matchingEmployee ? matchingEmployee.name : (firebaseUser.displayName || 'User')),
-        branchId: matchingMember?.branchId || matchingEmployee?.branchId || 'branch-1',
-        createdAt: new Date().toISOString(),
-        createdByAdminId: 'self',
-        isActive: true,
-        permissions: {
-          canViewDashboard: true,
-          canEditWorkouts: matchingEmployee ? (matchingEmployee.role === 'Trainer' || matchingEmployee.role === 'Super Admin') : false,
-          canEditDiets: matchingEmployee ? (matchingEmployee.role === 'Trainer' || matchingEmployee.role === 'Dietitian' || matchingEmployee.role === 'Super Admin') : false,
-          canViewMembers: matchingEmployee ? true : false,
-          canManageFinance: matchingEmployee ? (matchingEmployee.role === 'Super Admin' || matchingEmployee.role === 'Owner' || matchingEmployee.role === 'Accountant') : false,
-          canAccessAdmin: matchingEmployee ? (matchingEmployee.role !== 'Employee') : false,
-        }
-      };
-      setAppUserAccount(dynamicUser);
-      setCurrentRole(dynamicUser.role);
-      if (matchingMember) {
-        setActiveMemberIdState(matchingMember.id);
-        const isExpired = matchingMember.status === 'Expired' || new Date(matchingMember.expiryDate || matchingMember.endDate) < new Date();
-        setSubscriptionStatus(isExpired ? 'expired' : 'active');
-      } else {
-        setSubscriptionStatus('active');
-      }
+      return;
     }
-  }, [firebaseUser, appUsers, members]);
+
+    // 5. Default safe role
+    const dynamicUser: AppUser = {
+      id: firebaseUser.uid,
+      username: rawEmail || firebaseUser.uid,
+      email: rawEmail,
+      role: 'Member',
+      linkedId: firebaseUser.uid,
+      linkedName: firebaseUser.displayName || 'Member',
+      branchId: branches[0]?.id || 'all',
+      createdAt: new Date().toISOString(),
+      createdByAdminId: 'system',
+      isActive: true,
+      permissions: {
+        canViewDashboard: true,
+        canEditWorkouts: false,
+        canEditDiets: false,
+        canViewMembers: false,
+        canManageFinance: false,
+        canAccessAdmin: false,
+      }
+    };
+    setAppUserAccount(dynamicUser);
+    setCurrentRole('Member');
+    setSelectedBranchId(branches[0]?.id || 'all');
+    setSubscriptionStatus('active');
+  }, [firebaseUser, appUsers, members, employees, branches]);
 
   // Workout & Diet active member sync
   useEffect(() => {
@@ -1857,6 +1826,111 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true };
   };
 
+  // === MASTER ADMIN ACCOUNT MANAGEMENT ===
+  const updateUserStatus = async (userId: string, isActive: boolean) => {
+    const target = appUsers.find(u => u.id === userId || u.username === userId);
+    if (target?.username === 'MASTERADMIN' || target?.isProtected) {
+      throw new Error('Master Admin account is protected and cannot be deactivated or suspended.');
+    }
+
+    setAppUsers(prev => prev.map(u => (u.id === userId || u.username === userId) ? { ...u, isActive } : u));
+    safeDbWrite(updateDoc(doc(db, 'users', userId), { isActive }));
+
+    const auditRecord: AuditLog = {
+      id: `audit-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      timestamp: new Date().toISOString(),
+      eventType: isActive ? 'ACCOUNT_ACTIVATED' : 'ACCOUNT_SUSPENDED',
+      actorId: appUserAccount?.id || 'system',
+      actorName: appUserAccount?.linkedName || 'Master Admin',
+      actorRole: appUserAccount?.role || 'Super Admin',
+      targetId: userId,
+      targetType: 'UserAccount',
+      details: `User account ${target?.username || userId} status updated to ${isActive ? 'Active' : 'Suspended'}.`,
+      status: 'SUCCESS'
+    };
+    setAuditLogs(prev => [auditRecord, ...prev]);
+    safeDbWrite(setDoc(doc(db, 'audit_logs', auditRecord.id), auditRecord));
+  };
+
+  const forceUserPasswordChange = async (userId: string) => {
+    setAppUsers(prev => prev.map(u => (u.id === userId || u.username === userId) ? { ...u, mustChangePassword: true } : u));
+    safeDbWrite(updateDoc(doc(db, 'users', userId), { mustChangePassword: true }));
+
+    const auditRecord: AuditLog = {
+      id: `audit-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      timestamp: new Date().toISOString(),
+      eventType: 'FORCE_PASSWORD_CHANGE',
+      actorId: appUserAccount?.id || 'system',
+      actorName: appUserAccount?.linkedName || 'Master Admin',
+      actorRole: appUserAccount?.role || 'Super Admin',
+      targetId: userId,
+      targetType: 'UserAccount',
+      details: `Password reset forced for account ${userId}. User will be prompted on next login.`,
+      status: 'SUCCESS'
+    };
+    setAuditLogs(prev => [auditRecord, ...prev]);
+    safeDbWrite(setDoc(doc(db, 'audit_logs', auditRecord.id), auditRecord));
+  };
+
+  const updateUserRoleAndBranch = async (userId: string, role: Role, branchId: string) => {
+    const target = appUsers.find(u => u.id === userId || u.username === userId);
+    if ((target?.username === 'MASTERADMIN' || target?.isProtected) && role !== 'Super Admin') {
+      throw new Error('Master Admin role is protected and cannot be changed.');
+    }
+
+    const permissions = {
+      canViewDashboard: true,
+      canEditWorkouts: role === 'Super Admin' || role === 'Owner' || role === 'Trainer',
+      canEditDiets: role === 'Super Admin' || role === 'Owner' || role === 'Dietitian',
+      canViewMembers: role !== 'Member',
+      canManageFinance: role === 'Super Admin' || role === 'Owner',
+      canAccessAdmin: role === 'Super Admin' || role === 'Owner' || role === 'Branch Manager',
+    };
+
+    setAppUsers(prev => prev.map(u => (u.id === userId || u.username === userId) ? { ...u, role, branchId, permissions } : u));
+    safeDbWrite(updateDoc(doc(db, 'users', userId), { role, branchId, permissions }));
+
+    const auditRecord: AuditLog = {
+      id: `audit-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      timestamp: new Date().toISOString(),
+      eventType: 'ROLE_PERMISSION_CHANGE',
+      actorId: appUserAccount?.id || 'system',
+      actorName: appUserAccount?.linkedName || 'Master Admin',
+      actorRole: appUserAccount?.role || 'Super Admin',
+      targetId: userId,
+      targetType: 'UserAccount',
+      details: `Account role updated to ${role}, assigned branch: ${branchId}.`,
+      status: 'SUCCESS'
+    };
+    setAuditLogs(prev => [auditRecord, ...prev]);
+    safeDbWrite(setDoc(doc(db, 'audit_logs', auditRecord.id), auditRecord));
+  };
+
+  const deleteUserAccount = async (userId: string) => {
+    const target = appUsers.find(u => u.id === userId || u.username === userId);
+    if (target?.username === 'MASTERADMIN' || target?.isProtected) {
+      throw new Error('Master Admin account is protected and cannot be deleted.');
+    }
+
+    setAppUsers(prev => prev.filter(u => u.id !== userId && u.username !== userId));
+    safeDbWrite(deleteDoc(doc(db, 'users', userId)));
+
+    const auditRecord: AuditLog = {
+      id: `audit-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      timestamp: new Date().toISOString(),
+      eventType: 'ACCOUNT_DELETION',
+      actorId: appUserAccount?.id || 'system',
+      actorName: appUserAccount?.linkedName || 'Master Admin',
+      actorRole: appUserAccount?.role || 'Super Admin',
+      targetId: userId,
+      targetType: 'UserAccount',
+      details: `User account ${target?.username || userId} permanently removed by Master Admin.`,
+      status: 'SUCCESS'
+    };
+    setAuditLogs(prev => [auditRecord, ...prev]);
+    safeDbWrite(setDoc(doc(db, 'audit_logs', auditRecord.id), auditRecord));
+  };
+
   const addAppUser = async (user: AppUser) => {
     setAppUsers(prev => [user, ...prev]);
     safeDbWrite(setDoc(doc(db, 'users', user.id), user));
@@ -1916,6 +1990,10 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         provisionTrainerWithAccount,
         resetMemberPassword,
         updateAccountStatus,
+        updateUserStatus,
+        forceUserPasswordChange,
+        updateUserRoleAndBranch,
+        deleteUserAccount,
         completeFirstLoginPasswordChange,
         resendMemberCredentials,
         addBranch,

@@ -42,11 +42,12 @@ const InventoryLockers = lazy(() => import('./components/erp/InventoryLockers').
 const FinanceReports = lazy(() => import('./components/erp/FinanceReports').then(m => ({ default: m.FinanceReports })));
 const ComplaintsDesk = lazy(() => import('./components/erp/ComplaintsDesk').then(m => ({ default: m.ComplaintsDesk })));
 const AICoachStudio = lazy(() => import('./components/erp/AICoachStudio').then(m => ({ default: m.AICoachStudio })));
+const UserAccountManager = lazy(() => import('./components/erp/UserAccountManager').then(m => ({ default: m.UserAccountManager })));
 const AdvancedPlannerStudio = lazy(() => import('./components/planner/AdvancedPlannerStudio').then(m => ({ default: m.AdvancedPlannerStudio })));
 const SmartDoorSimulator = lazy(() => import('./components/hardware/SmartDoorSimulator').then(m => ({ default: m.SmartDoorSimulator })));
 
 import {
-  Layers, Users, Dumbbell, ShoppingBag, Target, FileText, Lock, DollarSign, AlertCircle, Brain, BookOpen, Activity
+  Layers, Users, Dumbbell, ShoppingBag, Target, FileText, Lock, DollarSign, AlertCircle, Brain, BookOpen, Activity, ShieldCheck
 } from 'lucide-react';
 
 export const TabLoadingFallback: React.FC = () => (
@@ -71,6 +72,7 @@ const ERpLayout: React.FC = () => {
   const erpTabs = [
     { id: 'dashboard', label: 'Dashboard', icon: Layers, roles: ['Super Admin', 'Owner', 'Branch Manager', 'Receptionist', 'Trainer', 'Accountant'] },
     { id: 'members', label: 'Members', icon: Users, roles: ['Super Admin', 'Owner', 'Branch Manager', 'Receptionist', 'Trainer', 'Dietitian'] },
+    { id: 'users', label: 'User & Accounts', icon: ShieldCheck, roles: ['Super Admin', 'Owner'] },
     { id: 'planner', label: 'Trainer & Diet Planner', icon: BookOpen, roles: ['Super Admin', 'Owner', 'Branch Manager', 'Trainer', 'Dietitian', 'Receptionist'] },
     { id: 'plans', label: 'Packages / Plans', icon: Dumbbell, roles: ['Super Admin', 'Owner', 'Branch Manager'] },
     { id: 'finance', label: 'Finance & P&L', icon: DollarSign, roles: ['Super Admin', 'Owner', 'Accountant'] },
@@ -128,6 +130,7 @@ const ERpLayout: React.FC = () => {
           )}
 
           {erpTab === 'members' && <MembersManager onOpenNewMemberModal={() => setIsMemberModalOpen(true)} />}
+          {erpTab === 'users' && <UserAccountManager />}
           {erpTab === 'plans' && <PlansManager />}
           {erpTab === 'pos' && <POSStore />}
           {erpTab === 'crm' && <LeadCRM />}

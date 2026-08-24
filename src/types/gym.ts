@@ -23,6 +23,7 @@ export interface AppUser {
   createdByAdminId: string;
   isActive: boolean;
   mustChangePassword?: boolean;
+  isProtected?: boolean;
   tempPassword?: string;
   whatsappStatus?: 'NOT_SENT' | 'SENDING' | 'SENT' | 'DELIVERED' | 'FAILED';
   whatsappSentAt?: string;
@@ -120,11 +121,19 @@ export interface AuditLog {
     | 'WHATSAPP_FAILED'
     | 'ACCOUNT_DISABLED'
     | 'ACCOUNT_ENABLED'
+    | 'ACCOUNT_ACTIVATED'
+    | 'ACCOUNT_SUSPENDED'
+    | 'FORCE_PASSWORD_CHANGE'
+    | 'ROLE_PERMISSION_CHANGE'
+    | 'ACCOUNT_DELETION'
     | 'FIRST_LOGIN_COMPLETED'
     | 'PASSWORD_CHANGED';
-  memberId: string;
-  memberName: string;
+  memberId?: string;
+  memberName?: string;
+  targetId?: string;
+  targetType?: string;
   actorId: string;
+  actorName?: string;
   actorRole: Role;
   details: string;
   timestamp: string;

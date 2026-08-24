@@ -33,7 +33,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNewMemberM
   const { branches, selectedBranchId, members, attendance, transactions, expenses, currentRole } = useGym();
 
   const currentBranch = branches.find((b) => b.id === selectedBranchId) || branches[0];
-  const branchMembers = members.filter((m) => m.branchId === selectedBranchId);
+  const branchMembers = selectedBranchId === 'all' 
+    ? members 
+    : members.filter((m) => m.branchId === selectedBranchId);
 
   // 1. Membership Metrics
   const totalMembersCount = branchMembers.length;
@@ -45,13 +47,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNewMemberM
     const joinDate = new Date(m.startDate);
     const now = new Date();
     return joinDate.getMonth() === now.getMonth() && joinDate.getFullYear() === now.getFullYear();
-  }).length || 2;
+  }).length;
 
   // 2. Real Financial Metrics from Database
-  const branchTransactions = transactions.filter((t) => t.branchId === selectedBranchId);
-  const totalRevenueCollected = branchTransactions.reduce((acc, t) => acc + t.amount, 0) || currentBranch.monthlyRevenue;
+  const branchTransactions = selectedBranchId === 'all'
+    ? transactions
+    : transactions.filter((t) => t.branchId === selectedBranchId);
+  const totalRevenueCollected = branchTransactions.reduce((acc, t) => acc + t.amount, 0);
   
-  const branchExpenses = expenses.filter((e) => e.branchId === selectedBranchId);
+  const branchExpenses = selectedBranchId === 'all'
+    ? expenses
+    : expenses.filter((e) => e.branchId === selectedBranchId);
   const totalExpenses = branchExpenses.reduce((acc, e) => acc + e.amount, 0);
   
   const netProfit = totalRevenueCollected - totalExpenses;

@@ -15,7 +15,7 @@ export const OwnerDashboard: React.FC = () => {
   const [brManager, setBrManager] = useState('');
   const [isSubmittingBranch, setIsSubmittingBranch] = useState(false);
 
-  const totalRevenueAllBranches = branches.reduce((acc, b) => acc + b.monthlyRevenue, 0);
+  const totalRevenueAllBranches = transactions.reduce((acc, t) => acc + t.amount, 0);
   const totalActiveMembers = members.filter((m) => m.status === 'Active').length;
 
   const handleAddBranchSubmit = async (e: React.FormEvent) => {

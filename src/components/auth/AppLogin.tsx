@@ -105,7 +105,10 @@ export const AppLogin: React.FC = () => {
       return;
     }
 
-    // 1. Look up user by username (e.g. MEM00125), email, or linked ID
+    // 1. Check if user is Master Admin
+    const isMasterAdminInput = cleanInput.toUpperCase() === 'MASTERADMIN' || cleanInput.toLowerCase() === 'masteradmin@smartgym.internal';
+
+    // 2. Look up user by username (e.g. MEM00125, TRN00001), email, or linked ID
     let matchedUser = appUsers.find(
       (u) =>
         u.username.toLowerCase() === cleanInput.toLowerCase() ||
@@ -116,17 +119,8 @@ export const AppLogin: React.FC = () => {
       (u) =>
         u.username.toLowerCase() === cleanInput.toLowerCase() ||
         (u.email && u.email.toLowerCase() === cleanInput.toLowerCase()) ||
-        u.id.toLowerCase() === cleanInput.toLowerCase() ||
-        u.linkedId.toLowerCase() === cleanInput.toLowerCase()
+        u.id.toLowerCase() === cleanInput.toLowerCase()
     );
-
-    if (!matchedUser && (cleanInput.toLowerCase() === 'admin@smartgym.com' || cleanInput.toLowerCase() === 'admin' || cleanInput.toUpperCase() === 'ADMIN01')) {
-      matchedUser = INITIAL_APP_USERS[0];
-    } else if (!matchedUser && (cleanInput.toLowerCase() === 'trainer@smartgym.com' || cleanInput.toLowerCase() === 'trainer')) {
-      matchedUser = INITIAL_APP_USERS[2];
-    } else if (!matchedUser && (cleanInput.toLowerCase() === 'member@smartgym.com' || cleanInput.toLowerCase() === 'member')) {
-      matchedUser = INITIAL_APP_USERS[3];
-    }
 
     const matchedMember = members.find(
       (m) =>
@@ -150,7 +144,9 @@ export const AppLogin: React.FC = () => {
 
     // Determine the Firebase Auth compatible email
     let authEmail = '';
-    if (cleanInput.includes('@')) {
+    if (isMasterAdminInput) {
+      authEmail = 'masteradmin@smartgym.internal';
+    } else if (cleanInput.includes('@')) {
       authEmail = cleanInput.toLowerCase();
     } else if (matchedUser?.email && matchedUser.email.includes('@')) {
       authEmail = matchedUser.email.toLowerCase();
@@ -161,49 +157,22 @@ export const AppLogin: React.FC = () => {
       authEmail = `${uname}@smartgym.internal`;
     }
 
-    // Check if the user entered the matching database/temporary password
-    const isMatchingLocalPassword =
-      (matchedUser && (matchedUser.password === cleanPass || matchedUser.tempPassword === cleanPass)) ||
-      (matchedMember && (matchedMember.tempPassword === cleanPass));
-
-    let resolvedUser: AppUser | null = matchedUser || null;
-    if (!resolvedUser && matchedMember) {
-      resolvedUser = {
-        id: matchedMember.userId || matchedMember.id,
-        username: matchedMember.username || cleanInput,
-        email: matchedMember.email || `${cleanInput.toLowerCase()}@smartgym.internal`,
-        role: 'Member',
-        linkedId: matchedMember.id,
-        linkedName: matchedMember.name,
-        branchId: matchedMember.branchId || 'branch-1',
-        createdAt: matchedMember.startDate || new Date().toISOString(),
-        createdByAdminId: 'system',
-        isActive: matchedMember.status !== 'Cancelled',
-        permissions: {
-          canViewDashboard: true,
-          canEditWorkouts: false,
-          canEditDiets: false,
-          canViewMembers: false,
-          canManageFinance: false,
-          canAccessAdmin: false,
-        }
-      };
-    }
-
     try {
       localStorage.setItem('gym_auth_context', 'app');
       
       // Step A: Attempt standard sign-in with Firebase Auth
       await signInWithEmailAndPassword(auth, authEmail, cleanPass);
-      if (resolvedUser) {
-        setLocalSessionUser(resolvedUser);
-      }
     } catch (fbErr: any) {
-      // Step B: If Firebase Auth doesn't have the user yet (because they were provisioned in Firestore),
-      // and their credentials match the generated account:
-      if (isMatchingLocalPassword && resolvedUser) {
+      // Step B: If Firebase Auth doesn't have the user yet (because they were provisioned in Firestore or initial Master Admin setup),
+      // and credentials match:
+      const isMasterAdminInit = isMasterAdminInput && cleanPass === 'ChangeMe@2026#Admin';
+      const isMatchingLocalPassword =
+        isMasterAdminInit ||
+        (matchedUser && (matchedUser.password === cleanPass || matchedUser.tempPassword === cleanPass)) ||
+        (matchedMember && (matchedMember.tempPassword === cleanPass));
+
+      if (isMatchingLocalPassword) {
         try {
-          // Auto-create this user in Firebase Auth with identical credentials so they are authorized in Firebase Auth!
           await createUserWithEmailAndPassword(auth, authEmail, cleanPass);
         } catch (createErr: any) {
           if (createErr.code === 'auth/email-already-in-use') {
@@ -212,13 +181,11 @@ export const AppLogin: React.FC = () => {
             } catch {}
           }
         }
-        setLocalSessionUser(resolvedUser);
       } else {
-        // Report friendly human-readable error messages instead of raw Firebase strings
         if (fbErr.code === 'auth/wrong-password' || fbErr.code === 'auth/invalid-credential') {
           setError('Incorrect password. Please verify your temporary or permanent password.');
         } else if (fbErr.code === 'auth/user-not-found') {
-          setError('User not found. Please check your Member ID or Username (e.g. MEM00125).');
+          setError('User not found. Please check your Member ID, Username, or Email.');
         } else if (fbErr.code === 'auth/too-many-requests') {
           setError('Access temporarily disabled due to many failed attempts. Please try again later.');
         } else {
@@ -230,8 +197,10 @@ export const AppLogin: React.FC = () => {
     }
 
     // Step C: If user must change password on first login
-    const targetUserId = matchedUser?.id || matchedMember?.userId || matchedMember?.id || '';
-    const mustChange = matchedUser?.mustChangePassword || matchedMember?.mustChangePassword;
+    const targetUserId = matchedUser?.id || (isMasterAdminInput ? (auth.currentUser?.uid || 'USR-MASTERADMIN') : matchedMember?.userId || matchedMember?.id || '');
+    const mustChange = isMasterAdminInput 
+      ? (matchedUser ? (matchedUser.mustChangePassword ?? true) : true)
+      : (matchedUser?.mustChangePassword || matchedMember?.mustChangePassword);
 
     if (mustChange) {
       setPendingUserId(targetUserId);
@@ -241,7 +210,7 @@ export const AppLogin: React.FC = () => {
     }
 
     // Step D: Route immediately based on user role
-    const finalRole = resolvedUser?.role || (matchedUser ? matchedUser.role : 'Member');
+    const finalRole = isMasterAdminInput ? 'Super Admin' : (matchedUser ? matchedUser.role : (matchedMember ? 'Member' : 'Member'));
     if (finalRole === 'Member') {
       navigate('/app/user/dashboard', { replace: true });
     } else if (finalRole === 'Trainer' || finalRole === 'Dietitian') {
@@ -283,12 +252,19 @@ export const AppLogin: React.FC = () => {
       }
 
       // 2. Update password in Firestore database
-      const targetId = pendingUserId || appUserAccount?.id || '';
+      const targetId = pendingUserId || appUserAccount?.id || auth.currentUser?.uid || '';
       await completeFirstLoginPasswordChange(targetId, cleanNewPass);
 
-      setSuccessMsg('✓ Password updated successfully! Accessing Member Dashboard...');
+      setSuccessMsg('✓ Password updated successfully! Accessing your portal...');
+      const role = appUserAccount?.role || (pendingUserId.includes('MASTER') ? 'Super Admin' : 'Member');
       setTimeout(() => {
-        navigate('/app/user/dashboard', { replace: true });
+        if (role === 'Member') {
+          navigate('/app/user/dashboard', { replace: true });
+        } else if (role === 'Trainer' || role === 'Dietitian') {
+          navigate('/app/trainer/dashboard', { replace: true });
+        } else {
+          navigate('/app/admin/dashboard', { replace: true });
+        }
       }, 800);
     } catch (err: any) {
       setError(err?.message || 'Failed to update password. Please try again.');
@@ -373,13 +349,6 @@ export const AppLogin: React.FC = () => {
       setError(err.message || 'Unable to send reset email. Verify email address.');
       setIsLoading(false);
     }
-  };
-
-  const fillQuickDemo = (demoId: string, demoPass: string) => {
-    setIdentifier(demoId);
-    setPassword(demoPass);
-    setError('');
-    setSuccessMsg('');
   };
 
   if (isAuthLoading || (firebaseUser && !appUserAccount && authMode !== 'first-login-change-password')) {
@@ -580,36 +549,6 @@ export const AppLogin: React.FC = () => {
               <span>{isLoading ? 'Verifying Credentials...' : 'Log In to Smart Gym'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
-
-            {/* Quick Demo Accounts Helper */}
-            <div className="pt-3 border-t border-white/10 space-y-2">
-              <div className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider text-center">
-                Instant Demo Credentials (1-Tap Test)
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => fillQuickDemo('admin@smartgym.com', 'admin123')}
-                  className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-[10px] font-bold text-slate-300 hover:text-white border border-white/10 text-center transition-all"
-                >
-                  👑 Admin
-                </button>
-                <button
-                  type="button"
-                  onClick={() => fillQuickDemo('trainer@smartgym.com', 'trainer123')}
-                  className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-[10px] font-bold text-slate-300 hover:text-white border border-white/10 text-center transition-all"
-                >
-                  🏋️ Trainer
-                </button>
-                <button
-                  type="button"
-                  onClick={() => fillQuickDemo('member@smartgym.com', 'member123')}
-                  className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-[10px] font-bold text-[#27D980] hover:text-white border border-[#27D980]/30 text-center transition-all"
-                >
-                  👤 Member
-                </button>
-              </div>
-            </div>
           </form>
         )}
 

@@ -42,30 +42,6 @@ export const WebsiteLogin: React.FC = () => {
     setSuccessMsg('');
     setIsLoading(true);
 
-    const cleanEmail = email.trim().toLowerCase();
-
-    // If Admin/Staff or Member account is entered on website login, route them to App!
-    if (cleanEmail.includes('admin') || cleanEmail.includes('owner') || cleanEmail === 'admin@smartgym.com') {
-      localStorage.setItem('gym_auth_context', 'app');
-      localStorage.removeItem('gym_website_customer_id');
-      navigate('/app/admin/dashboard', { replace: true });
-      return;
-    }
-
-    if (cleanEmail.includes('trainer') || cleanEmail === 'trainer@smartgym.com') {
-      localStorage.setItem('gym_auth_context', 'app');
-      localStorage.removeItem('gym_website_customer_id');
-      navigate('/app/trainer/dashboard', { replace: true });
-      return;
-    }
-
-    if (cleanEmail === 'member@smartgym.com') {
-      localStorage.setItem('gym_auth_context', 'app');
-      localStorage.removeItem('gym_website_customer_id');
-      navigate('/app/user/dashboard', { replace: true });
-      return;
-    }
-
     try {
       await signInWebsiteCustomer(email.trim(), password);
       navigate('/website/account', { replace: true });
@@ -101,12 +77,6 @@ export const WebsiteLogin: React.FC = () => {
       setError(err.message || 'Registration failed. Email may already be registered.');
       setIsLoading(false);
     }
-  };
-
-  const fillDemoCustomer = () => {
-    setEmail('customer@smartgym.com');
-    setPassword('Customer@2026');
-    setError('');
   };
 
   return (
@@ -210,17 +180,6 @@ export const WebsiteLogin: React.FC = () => {
               <span>{isLoading ? 'Authenticating Customer...' : 'Log In to Website Account'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
-
-            {/* Quick Demo Fill */}
-            <div className="pt-2 border-t border-white/10 text-center">
-              <button
-                type="button"
-                onClick={fillDemoCustomer}
-                className="text-[11px] text-[#27D980] hover:underline font-bold"
-              >
-                ⚡ Autofill Demo Customer (customer@smartgym.com)
-              </button>
-            </div>
           </form>
         )}
 

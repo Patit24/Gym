@@ -27,7 +27,7 @@ export const DietTracker: React.FC = () => {
 
   const monthlyPlans = (diet?.monthlyPlans && diet.monthlyPlans.length > 0)
     ? diet.monthlyPlans
-    : INITIAL_DIET.monthlyPlans;
+    : [];
 
   const currentMonthPlan = monthlyPlans.find((m) => m.monthNumber === selectedMonthNum) || monthlyPlans[0];
 
@@ -77,6 +77,118 @@ export const DietTracker: React.FC = () => {
   };
 
   const isStaffOrAdmin = currentRole === 'Trainer' || currentRole === 'Dietitian' || currentRole === 'Super Admin' || currentRole === 'Owner';
+
+  if (!currentMonthPlan) {
+    return (
+      <div className="space-y-4 text-xs animate-in fade-in">
+        {isStaffOrAdmin && (
+          <div className="bg-[#0F1420] p-2.5 rounded-2xl border border-white/10 flex items-center justify-between">
+            <span className="text-gym-subtext font-extrabold flex items-center gap-1">
+              <User className="w-3.5 h-3.5 text-cyan-400" />
+              Target Member:
+            </span>
+            <select
+              value={activeMember?.id || ''}
+              onChange={(e) => setActiveMemberId(e.target.value)}
+              className="bg-[#070A10] text-cyan-400 font-extrabold px-2.5 py-1 rounded-xl border border-cyan-500/30 focus:outline-none cursor-pointer text-xs"
+            >
+              {members.map((m) => (
+                <option key={m.id} value={m.id}>{m.name} ({m.membershipNo})</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div className="p-8 rounded-3xl bg-[#0F1420] border border-white/10 flex flex-col items-center justify-center gap-3 text-center">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 text-[#27D980] border border-emerald-500/30 flex items-center justify-center">
+            <Utensils className="w-6 h-6" />
+          </div>
+          <h3 className="text-sm font-extrabold text-white">No Nutrition Plan Assigned Yet</h3>
+          <p className="text-xs text-gym-subtext max-w-xs">
+            Your gym nutritionist or trainer will formulate your daily calorie goals, macro targets, and meal plans.
+          </p>
+          {isStaffOrAdmin && (
+            <button
+              onClick={() => setShowAddMonthModal(true)}
+              className="mt-2 px-4 py-2 rounded-xl bg-[#27D980] hover:bg-emerald-400 text-black font-extrabold text-xs flex items-center gap-2 shadow-lg shadow-[#27D980]/20 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Assign Nutrition Plan</span>
+            </button>
+          )}
+        </div>
+
+        {/* Add Monthly Diet Modal */}
+        {showAddMonthModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/90 backdrop-blur-md">
+            <div className="bg-[#0F1420] border border-emerald-500/40 rounded-3xl max-w-xs w-full p-4 shadow-2xl space-y-3 text-left">
+              <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                <h4 className="font-extrabold text-white text-xs">Set Monthly Nutrition Plan</h4>
+                <button onClick={() => setShowAddMonthModal(false)} className="text-gym-subtext"><X className="w-4 h-4" /></button>
+              </div>
+
+              <form onSubmit={handleSaveMonthlyDiet} className="space-y-2">
+                <div>
+                  <label className="block text-[10px] text-gym-subtext mb-0.5">Select Gym Member</label>
+                  <select
+                    value={targetMemberId}
+                    onChange={(e) => setTargetMemberId(e.target.value)}
+                    className="w-full bg-[#070A10] border border-white/10 rounded-xl px-2.5 py-1.5 text-white"
+                  >
+                    {members.map((m) => (
+                      <option key={m.id} value={m.id}>{m.name} ({m.membershipNo})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] text-gym-subtext mb-0.5">Select Month Number</label>
+                  <select
+                    value={newMonthNum}
+                    onChange={(e) => setNewMonthNum(Number(e.target.value))}
+                    className="w-full bg-[#070A10] border border-white/10 rounded-xl px-2.5 py-1.5 text-white"
+                  >
+                    <option value={1}>Month 1</option>
+                    <option value={2}>Month 2</option>
+                    <option value={3}>Month 3</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] text-gym-subtext mb-0.5">Month Title / Goal</label>
+                  <input
+                    type="text"
+                    required
+                    value={newMonthTitle}
+                    onChange={(e) => setNewMonthTitle(e.target.value)}
+                    className="w-full bg-[#070A10] border border-white/10 rounded-xl px-2.5 py-1.5 text-white"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[9px] text-gym-subtext">Calories (kcal)</label>
+                    <input type="number" value={newTargetCals} onChange={(e) => setNewTargetCals(Number(e.target.value))} className="w-full bg-[#070A10] border border-white/10 rounded-lg px-2 py-1 text-white" />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] text-gym-subtext">Protein (g)</label>
+                    <input type="number" value={newTargetProtein} onChange={(e) => setNewTargetProtein(Number(e.target.value))} className="w-full bg-[#070A10] border border-white/10 rounded-lg px-2 py-1 text-white" />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-2 rounded-xl bg-gradient-to-r from-emerald-400 to-cyan-400 text-gym-dark font-black text-xs shadow-md mt-1"
+                >
+                  Assign Month {newMonthNum} Nutrition
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3.5 animate-in fade-in duration-300 text-xs">
