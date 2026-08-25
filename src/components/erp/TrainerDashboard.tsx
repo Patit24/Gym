@@ -367,6 +367,20 @@ export const TrainerDashboard: React.FC = () => {
               </div>
             </div>
 
+            {/* Direct Member Quick Actions */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  handleOpenMemberApp(deepDiveMember.id);
+                  setDeepDiveMember(null);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[#4F7CFF] to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-blue-500/20 cursor-pointer"
+              >
+                <Dumbbell className="w-3.5 h-3.5" />
+                <span>Open Member Mobile View & App</span>
+              </button>
+            </div>
+
             {/* Add Trainer Coaching Note */}
             <div className="p-4 rounded-2xl bg-[#0B0E17] border border-white/10 space-y-3">
               <h4 className="text-xs font-black text-white flex items-center gap-1.5">

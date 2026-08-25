@@ -659,8 +659,8 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             (m.username && m.username.toLowerCase() === foundUser.username.toLowerCase()) ||
             (m.email && m.email.toLowerCase() === rawEmail)
         );
+        setActiveMemberIdState(memberRec?.id || foundUser.linkedId);
         if (memberRec) {
-          setActiveMemberIdState(memberRec.id);
           const isExpired = memberRec.status === 'Expired' || new Date(memberRec.expiryDate || memberRec.endDate) < new Date();
           setSubscriptionStatus(isExpired ? 'expired' : 'active');
         } else {
@@ -729,26 +729,26 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           canViewDashboard: true,
           canEditWorkouts: matchingEmployee.role === 'Trainer',
           canEditDiets: matchingEmployee.role === 'Dietitian',
-          canViewMembers: matchingEmployee.role !== 'Employee',
-          canManageFinance: matchingEmployee.role === 'Super Admin' || matchingEmployee.role === 'Owner',
-          canAccessAdmin: matchingEmployee.role === 'Super Admin' || matchingEmployee.role === 'Owner' || matchingEmployee.role === 'Branch Manager',
+          canViewMembers: true,
+          canManageFinance: matchingEmployee.role === 'Accountant' || matchingEmployee.role === 'Manager',
+          canAccessAdmin: matchingEmployee.role === 'Manager',
         }
       };
       setAppUserAccount(empAccount);
-      setCurrentRole(empAccount.role);
-      setSelectedBranchId(empAccount.branchId);
+      setCurrentRole(matchingEmployee.role);
+      setSelectedBranchId(matchingEmployee.branchId || branches[0]?.id || 'all');
       setSubscriptionStatus('active');
       return;
     }
 
-    // 5. Default safe role
+    // 5. Default fallback
     const dynamicUser: AppUser = {
       id: firebaseUser.uid,
-      username: rawEmail || firebaseUser.uid,
-      email: rawEmail,
+      username: emailPrefix.toUpperCase(),
+      email: firebaseUser.email || `${emailPrefix}@smartgym.com`,
       role: 'Member',
       linkedId: firebaseUser.uid,
-      linkedName: firebaseUser.displayName || 'Member',
+      linkedName: firebaseUser.displayName || emailPrefix,
       branchId: branches[0]?.id || 'all',
       createdAt: new Date().toISOString(),
       createdByAdminId: 'system',
@@ -764,6 +764,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setAppUserAccount(dynamicUser);
     setCurrentRole('Member');
+    setActiveMemberIdState(dynamicUser.linkedId);
     setSelectedBranchId(branches[0]?.id || 'all');
     setSubscriptionStatus('active');
   }, [firebaseUser, appUsers, members, employees, branches]);
@@ -774,11 +775,25 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const unsubWorkout = onSnapshot(doc(db, 'workouts', activeMemberId), (docSnap) => {
       if (docSnap.exists()) {
         setWorkout(docSnap.data() as WorkoutPlan);
+      } else {
+        setWorkout({
+          id: `wpt-${activeMemberId}`,
+          memberId: activeMemberId,
+          weeklyPlans: [],
+          updatedAt: new Date().toISOString().split('T')[0],
+        });
       }
     });
     const unsubDiet = onSnapshot(doc(db, 'diets', activeMemberId), (docSnap) => {
       if (docSnap.exists()) {
         setDiet(docSnap.data() as DietPlan);
+      } else {
+        setDiet({
+          id: `dpt-${activeMemberId}`,
+          memberId: activeMemberId,
+          waterCurrentLiters: 0,
+          monthlyPlans: [],
+        });
       }
     });
     return () => {
@@ -1754,7 +1769,8 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       splits,
     };
 
-    const existingWeeks = workout.weeklyPlans.filter((w) => w.weekNumber !== weekNumber);
+    const currentMemberWeeks = (workout && workout.memberId === targetMemberId) ? (workout.weeklyPlans || []) : [];
+    const existingWeeks = currentMemberWeeks.filter((w) => w.weekNumber !== weekNumber);
     const updatedWorkout: WorkoutPlan = {
       id: `wpt-${targetMemberId}`,
       memberId: targetMemberId,
@@ -1762,21 +1778,26 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedAt: new Date().toISOString().split('T')[0],
     };
 
-    setWorkout(updatedWorkout);
-    safeDbWrite(setDoc(doc(db, 'workouts', targetMemberId), updatedWorkout));
+    if (activeMemberId === targetMemberId) {
+      setWorkout(updatedWorkout);
+    }
+    await safeDbWrite(setDoc(doc(db, 'workouts', targetMemberId), updatedWorkout));
   };
 
   const addMonthlyDiet = async (targetMemberId: string, monthPlan: MonthlyDietPlan) => {
-    const existingMonths = diet.monthlyPlans.filter((m) => m.monthNumber !== monthPlan.monthNumber);
+    const currentMemberMonths = (diet && diet.memberId === targetMemberId) ? (diet.monthlyPlans || []) : [];
+    const existingMonths = currentMemberMonths.filter((m) => m.monthNumber !== monthPlan.monthNumber);
     const updatedDiet: DietPlan = {
       id: `dpt-${targetMemberId}`,
       memberId: targetMemberId,
-      waterCurrentLiters: diet.waterCurrentLiters || 2.5,
+      waterCurrentLiters: (diet && diet.memberId === targetMemberId ? diet.waterCurrentLiters : 2.5) || 2.5,
       monthlyPlans: [...existingMonths, monthPlan].sort((a, b) => a.monthNumber - b.monthNumber),
     };
 
-    setDiet(updatedDiet);
-    safeDbWrite(setDoc(doc(db, 'diets', targetMemberId), updatedDiet));
+    if (activeMemberId === targetMemberId) {
+      setDiet(updatedDiet);
+    }
+    await safeDbWrite(setDoc(doc(db, 'diets', targetMemberId), updatedDiet));
   };
 
   const buySupplements = async (
