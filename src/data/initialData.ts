@@ -9,6 +9,9 @@ import {
   Lead,
   Employee,
   SupplementProduct,
+  EquipmentItem,
+  MaintenanceLog,
+  StockPurchase,
   LockerItem,
   ComplaintTicket,
   SystemNotification,
@@ -106,6 +109,12 @@ export const INITIAL_LEADS: Lead[] = [];
 export const INITIAL_EMPLOYEES: Employee[] = [];
 
 export const INITIAL_SUPPLEMENTS: SupplementProduct[] = [];
+
+export const INITIAL_EQUIPMENT: EquipmentItem[] = [];
+
+export const INITIAL_MAINTENANCE_LOGS: MaintenanceLog[] = [];
+
+export const INITIAL_STOCK_PURCHASES: StockPurchase[] = [];
 
 export const INITIAL_LOCKERS: LockerItem[] = [];
 

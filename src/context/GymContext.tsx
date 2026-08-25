@@ -15,6 +15,9 @@ import {
   Lead,
   Employee,
   SupplementProduct,
+  EquipmentItem,
+  MaintenanceLog,
+  StockPurchase,
   LockerItem,
   ComplaintTicket,
   SystemNotification,
@@ -44,6 +47,9 @@ import {
   INITIAL_LEADS,
   INITIAL_EMPLOYEES,
   INITIAL_SUPPLEMENTS,
+  INITIAL_EQUIPMENT,
+  INITIAL_MAINTENANCE_LOGS,
+  INITIAL_STOCK_PURCHASES,
   INITIAL_LOCKERS,
   INITIAL_COMPLAINTS,
   INITIAL_NOTIFICATIONS,
@@ -94,6 +100,9 @@ interface GymContextType {
   leads: Lead[];
   employees: Employee[];
   supplements: SupplementProduct[];
+  equipment: EquipmentItem[];
+  maintenanceLogs: MaintenanceLog[];
+  stockPurchases: StockPurchase[];
   lockers: LockerItem[];
   complaints: ComplaintTicket[];
   notifications: SystemNotification[];
@@ -148,6 +157,14 @@ interface GymContextType {
   addMonthlyDiet: (targetMemberId: string, monthPlan: MonthlyDietPlan) => Promise<void>;
 
   buySupplements: (cartItems: { product: SupplementProduct; qty: number }[], paymentMethod: 'Cash' | 'UPI' | 'Card' | 'NetBanking') => Promise<Transaction>;
+  addSupplement: (product: Omit<SupplementProduct, 'id'>) => Promise<SupplementProduct>;
+  updateSupplement: (id: string, updated: Partial<SupplementProduct>) => Promise<void>;
+  addEquipment: (item: Omit<EquipmentItem, 'id'>) => Promise<EquipmentItem>;
+  updateEquipment: (id: string, updated: Partial<EquipmentItem>) => Promise<void>;
+  deleteEquipment: (id: string) => Promise<void>;
+  addMaintenanceLog: (log: Omit<MaintenanceLog, 'id'>) => Promise<MaintenanceLog>;
+  addStockPurchase: (purchase: Omit<StockPurchase, 'id'>) => Promise<StockPurchase>;
+  addProgressMetric: (metric: Omit<ProgressMetric, 'id'>) => Promise<ProgressMetric>;
   addLead: (lead: Omit<Lead, 'id'>) => Promise<void>;
   updateLeadStage: (id: string, stage: Lead['stage']) => Promise<void>;
   createComplaint: (complaint: Omit<ComplaintTicket, 'id' | 'createdAt' | 'status'>) => Promise<void>;
@@ -226,6 +243,9 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [leads, setLeads] = useState<Lead[]>(INITIAL_LEADS);
   const [employees, setEmployees] = useState<Employee[]>(INITIAL_EMPLOYEES);
   const [supplements, setSupplements] = useState<SupplementProduct[]>(INITIAL_SUPPLEMENTS);
+  const [equipment, setEquipment] = useState<EquipmentItem[]>(INITIAL_EQUIPMENT);
+  const [maintenanceLogs, setMaintenanceLogs] = useState<MaintenanceLog[]>(INITIAL_MAINTENANCE_LOGS);
+  const [stockPurchases, setStockPurchases] = useState<StockPurchase[]>(INITIAL_STOCK_PURCHASES);
   const [lockers, setLockers] = useState<LockerItem[]>(INITIAL_LOCKERS);
   const [complaints, setComplaints] = useState<ComplaintTicket[]>(INITIAL_COMPLAINTS);
   const [notifications, setNotifications] = useState<SystemNotification[]>(INITIAL_NOTIFICATIONS);
@@ -305,6 +325,30 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const list: SupplementProduct[] = [];
         snap.forEach(doc => list.push(doc.data() as SupplementProduct));
         setSupplements(list);
+      }
+    });
+
+    const unsubEquipment = onSnapshot(collection(db, 'equipment'), (snap) => {
+      if (!snap.empty) {
+        const list: EquipmentItem[] = [];
+        snap.forEach(doc => list.push(doc.data() as EquipmentItem));
+        setEquipment(list);
+      }
+    });
+
+    const unsubMaintenanceLogs = onSnapshot(collection(db, 'maintenance_logs'), (snap) => {
+      if (!snap.empty) {
+        const list: MaintenanceLog[] = [];
+        snap.forEach(doc => list.push(doc.data() as MaintenanceLog));
+        setMaintenanceLogs(list.sort((a, b) => b.serviceDate.localeCompare(a.serviceDate)));
+      }
+    });
+
+    const unsubStockPurchases = onSnapshot(collection(db, 'stock_purchases'), (snap) => {
+      if (!snap.empty) {
+        const list: StockPurchase[] = [];
+        snap.forEach(doc => list.push(doc.data() as StockPurchase));
+        setStockPurchases(list.sort((a, b) => b.purchaseDate.localeCompare(a.purchaseDate)));
       }
     });
 
@@ -408,6 +452,9 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubEmployees();
       unsubAttendance();
       unsubSupplements();
+      unsubEquipment();
+      unsubMaintenanceLogs();
+      unsubStockPurchases();
       unsubLockers();
       unsubComplaints();
       unsubNotifications();
@@ -1137,7 +1184,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const username = generateUniqueStaffUsername('TRN', employees.length + 1, existingUsernames);
     const tempPassword = generateSecureTemporaryPassword();
     const userId = `USR-TRN-${Date.now()}`;
-    const normalizedPhone = normalizePhoneNumber(empData.mobile);
+    const normalizedPhone = normalizePhoneNumber(empData.mobile || '');
 
     let initialWhatsAppStatus: 'NOT_SENT' | 'SENT' | 'FAILED' = 'NOT_SENT';
     let whatsappDirectUrl = '';
@@ -1651,6 +1698,107 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return newTxn;
   };
 
+  const addSupplement = async (product: Omit<SupplementProduct, 'id'>): Promise<SupplementProduct> => {
+    const newId = `SUP-${Date.now()}`;
+    const newProduct: SupplementProduct = {
+      ...product,
+      id: newId
+    };
+    setSupplements(prev => [newProduct, ...prev]);
+    safeDbWrite(setDoc(doc(db, 'supplements', newId), newProduct));
+    return newProduct;
+  };
+
+  const updateSupplement = async (id: string, updated: Partial<SupplementProduct>) => {
+    setSupplements(prev => prev.map(p => p.id === id ? { ...p, ...updated } : p));
+    safeDbWrite(updateDoc(doc(db, 'supplements', id), updated));
+  };
+
+  const addEquipment = async (item: Omit<EquipmentItem, 'id'>): Promise<EquipmentItem> => {
+    const newId = `EQ-${Date.now()}`;
+    const newEquipment: EquipmentItem = {
+      ...item,
+      id: newId
+    };
+    setEquipment(prev => [newEquipment, ...prev]);
+    safeDbWrite(setDoc(doc(db, 'equipment', newId), newEquipment));
+    return newEquipment;
+  };
+
+  const updateEquipment = async (id: string, updated: Partial<EquipmentItem>) => {
+    setEquipment(prev => prev.map(eq => eq.id === id ? { ...eq, ...updated } : eq));
+    safeDbWrite(updateDoc(doc(db, 'equipment', id), updated));
+  };
+
+  const deleteEquipment = async (id: string) => {
+    setEquipment(prev => prev.filter(eq => eq.id !== id));
+    safeDbWrite(deleteDoc(doc(db, 'equipment', id)));
+  };
+
+  const addMaintenanceLog = async (log: Omit<MaintenanceLog, 'id'>): Promise<MaintenanceLog> => {
+    const newId = `MN-${Date.now()}`;
+    const newLog: MaintenanceLog = {
+      ...log,
+      id: newId
+    };
+    setMaintenanceLogs(prev => [newLog, ...prev]);
+    safeDbWrite(setDoc(doc(db, 'maintenance_logs', newId), newLog));
+
+    if (log.status === 'Completed') {
+      const followUp = log.nextFollowUpDate || new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0];
+      updateEquipment(log.equipmentId, {
+        status: 'Operational',
+        lastServiceDate: log.serviceDate,
+        nextServiceDate: followUp
+      });
+    }
+    return newLog;
+  };
+
+  const addStockPurchase = async (purchase: Omit<StockPurchase, 'id'>): Promise<StockPurchase> => {
+    const newId = `PO-${Date.now()}`;
+    const newPurchase: StockPurchase = {
+      ...purchase,
+      id: newId
+    };
+    setStockPurchases(prev => [newPurchase, ...prev]);
+    safeDbWrite(setDoc(doc(db, 'stock_purchases', newId), newPurchase));
+
+    // Automatically increase product stock in inventory
+    const targetProduct = supplements.find(p => p.id === purchase.productId);
+    if (targetProduct) {
+      const updatedStock = (targetProduct.stockQty || 0) + purchase.quantity;
+      updateSupplement(purchase.productId, {
+        stockQty: updatedStock,
+        costPrice: purchase.unitCost
+      });
+    }
+
+    return newPurchase;
+  };
+
+  const addProgressMetric = async (metric: Omit<ProgressMetric, 'id'>): Promise<ProgressMetric> => {
+    const newId = `PRG-${Date.now()}`;
+    const newMetric: ProgressMetric = {
+      ...metric,
+      id: newId
+    };
+    setProgress(prev => [newMetric, ...prev]);
+    safeDbWrite(setDoc(doc(db, 'progress', newId), newMetric));
+
+    if (metric.memberId) {
+      updateMember(metric.memberId, {
+        weightKg: metric.weightKg,
+        bmi: metric.bmi,
+        chestCm: metric.chestCm,
+        waistCm: metric.waistCm,
+        armsCm: metric.armsCm,
+        thighsCm: metric.thighsCm,
+      });
+    }
+    return newMetric;
+  };
+
   const addLead = async (leadData: Omit<Lead, 'id'>) => {
     const newLead: Lead = {
       ...leadData,
@@ -2083,6 +2231,9 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         leads,
         employees,
         supplements,
+        equipment,
+        maintenanceLogs,
+        stockPurchases,
         lockers,
         complaints,
         notifications,
@@ -2113,6 +2264,14 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addWeeklyWorkout,
         addMonthlyDiet,
         buySupplements,
+        addSupplement,
+        updateSupplement,
+        addEquipment,
+        updateEquipment,
+        deleteEquipment,
+        addMaintenanceLog,
+        addStockPurchase,
+        addProgressMetric,
         addLead,
         updateLeadStage,
         createComplaint,
