@@ -28,15 +28,32 @@ import {
   Award,
   LogOut,
   Clock,
-  User
+  User,
+  Trophy,
+  Share2,
+  Gift,
+  Copy,
+  Check,
+  Crown
 } from 'lucide-react';
 
-type MemberScreen = 'home' | 'workout' | 'diet' | 'progress' | 'more' | 'ai' | 'qr' | 'subscription' | 'profile';
+type MemberScreen = 'home' | 'workout' | 'diet' | 'progress' | 'more' | 'ai' | 'qr' | 'subscription' | 'profile' | 'challenges' | 'referrals';
 
 export const MobileMemberApp: React.FC = () => {
-  const { activeMember, workout, diet, signOutApp, notifications, attendance } = useGym();
+  const { 
+    activeMember, 
+    workout, 
+    diet, 
+    signOutApp, 
+    notifications, 
+    attendance,
+    gymChallenges,
+    joinChallenge,
+    referrals
+  } = useGym();
   const [currentScreen, setCurrentScreen] = useState<MemberScreen>('home');
   const [showQRModal, setShowQRModal] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
 
   const unreadNotifs = notifications.filter((n) => !n.read);
 
@@ -56,6 +73,10 @@ export const MobileMemberApp: React.FC = () => {
   const todayCalories = hasDiet ? Math.round(targetCalories * 0.85) : 0;
   const proteinPercent = targetProtein > 0 ? Math.min(100, Math.round((todayCalories / targetCalories) * 100)) : 0;
 
+  // Member Referrals
+  const myReferrals = referrals.filter(r => r.referrerMemberId === activeMember?.id);
+  const referralCode = `GYM-${activeMember?.membershipNo?.replace(/\D/g, '') || 'VIP2026'}`;
+
   // Dynamic Attendance / Check-ins
   const currentMonthPrefix = new Date().toISOString().slice(0, 7);
   const monthlyCheckIns = attendance.filter(
@@ -71,7 +92,13 @@ export const MobileMemberApp: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const isSubPage = ['ai', 'qr', 'subscription', 'profile'].includes(currentScreen);
+  const copyReferralLink = () => {
+    navigator.clipboard.writeText(`Join Smart Gym with my referral code ${referralCode} and get 1 month free extension!`);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 3000);
+  };
+
+  const isSubPage = ['ai', 'qr', 'subscription', 'profile', 'challenges', 'referrals'].includes(currentScreen);
 
   const bottomNavTabs: MobileNavTab[] = [
     { id: 'home', label: 'Home', icon: Home },
@@ -99,7 +126,9 @@ export const MobileMemberApp: React.FC = () => {
           currentScreen === 'ai' ? 'AI Coach Studio' :
           currentScreen === 'qr' ? 'Gate QR Pass' :
           currentScreen === 'subscription' ? 'Membership Plan' :
-          currentScreen === 'profile' ? 'My Health Profile' : 'Back'
+          currentScreen === 'profile' ? 'My Health Profile' :
+          currentScreen === 'challenges' ? 'Gym Challenges' :
+          currentScreen === 'referrals' ? 'Refer & Earn' : 'Back'
         }
       />
 
@@ -136,32 +165,56 @@ export const MobileMemberApp: React.FC = () => {
               </span>
             </div>
 
+            {/* Quick Shortcuts: Challenges & Referrals */}
+            <div className="grid grid-cols-2 gap-2.5">
+              <div
+                onClick={() => navigateTo('challenges')}
+                className="p-3.5 rounded-3xl bg-gradient-to-br from-amber-950/30 to-[#12101E] border border-amber-500/30 shadow-xl cursor-pointer active:scale-95 transition-all space-y-1"
+              >
+                <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
+                  <Trophy className="w-4 h-4" />
+                </div>
+                <h4 className="text-xs font-black text-white mt-1">Gym Challenges</h4>
+                <p className="text-[10px] text-amber-300 font-bold">{gymChallenges.length} Active Contests</p>
+              </div>
+
+              <div
+                onClick={() => navigateTo('referrals')}
+                className="p-3.5 rounded-3xl bg-gradient-to-br from-purple-950/30 to-[#140F20] border border-purple-500/30 shadow-xl cursor-pointer active:scale-95 transition-all space-y-1"
+              >
+                <div className="w-8 h-8 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center border border-purple-500/30">
+                  <Gift className="w-4 h-4" />
+                </div>
+                <h4 className="text-xs font-black text-white mt-1">Refer & Earn</h4>
+                <p className="text-[10px] text-purple-300 font-bold">Earn Free Extensions</p>
+              </div>
+            </div>
+
             {/* Today's Workout Widget */}
             <div className="p-4 bg-[#101422] rounded-3xl border border-white/10 shadow-xl space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <Dumbbell className="w-4 h-4 text-[#4F7CFF]" />
-                  <span>Today's Workout</span>
-                </span>
-                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-[#4F7CFF]/15 text-[#4F7CFF] border border-[#4F7CFF]/30">
-                  {hasWorkout ? (currentSplit?.day || currentDayName) : `${currentDayName} • Rest`}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between pt-1">
-                <div>
-                  <h3 className="text-sm font-black text-white">
-                    {hasWorkout ? currentSplit?.title : 'No Workout Prescribed Yet'}
-                  </h3>
-                  <p className="text-[10px] text-slate-400 mt-0.5">
-                    {hasWorkout ? `${currentSplit?.exercises?.length} Exercises Prescribed` : 'Assigned trainer will update routine'}
-                  </p>
+                <div className="flex items-center gap-2">
+                  <Dumbbell className="w-4 h-4 text-cyan-400" />
+                  <h3 className="text-xs font-black text-white">Today's Workout Split</h3>
                 </div>
                 <button
                   onClick={() => navigateTo('workout')}
-                  className="px-3.5 py-2 rounded-xl bg-[#4F7CFF] hover:bg-[#3D69EB] active:scale-95 text-white font-black text-[11px] shadow-md"
+                  className="text-[10px] font-bold text-cyan-400 hover:text-cyan-300 cursor-pointer"
                 >
-                  {hasWorkout ? 'Start Workout →' : 'View Routine →'}
+                  View Plan →
+                </button>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-[#0B0E17] border border-white/5 flex items-center justify-between text-xs">
+                <div>
+                  <strong className="text-white text-xs">{currentSplit?.title || 'Active Split Routine'}</strong>
+                  <div className="text-[10px] text-slate-400">{currentSplit?.exercises?.length || 0} Exercises scheduled for {currentDayName}</div>
+                </div>
+                <button
+                  onClick={() => navigateTo('workout')}
+                  className="px-3 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-black text-[10px] cursor-pointer"
+                >
+                  Start
                 </button>
               </div>
             </div>
@@ -309,7 +362,7 @@ export const MobileMemberApp: React.FC = () => {
             <div className="bg-[#101422] rounded-3xl border border-white/10 overflow-hidden shadow-xl divide-y divide-white/5">
               <button
                 onClick={() => navigateTo('profile')}
-                className="w-full p-4 flex items-center justify-between text-left hover:bg-[#151A2E] active:bg-[#1B2238] transition-all"
+                className="w-full p-4 flex items-center justify-between text-left hover:bg-[#151A2E] active:bg-[#1B2238] transition-all cursor-pointer"
               >
                 <div className="flex items-center gap-3">
                   <User className="w-5 h-5 text-[#27D980]" />
@@ -322,8 +375,36 @@ export const MobileMemberApp: React.FC = () => {
               </button>
 
               <button
+                onClick={() => navigateTo('challenges')}
+                className="w-full p-4 flex items-center justify-between text-left hover:bg-[#151A2E] active:bg-[#1B2238] transition-all cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <Trophy className="w-5 h-5 text-amber-400" />
+                  <div>
+                    <span className="text-xs font-bold text-white block">Community Challenges</span>
+                    <span className="text-[10px] text-slate-400">Join 30-day transformation & leaderboard contests</span>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-500" />
+              </button>
+
+              <button
+                onClick={() => navigateTo('referrals')}
+                className="w-full p-4 flex items-center justify-between text-left hover:bg-[#151A2E] active:bg-[#1B2238] transition-all cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <Gift className="w-5 h-5 text-purple-400" />
+                  <div>
+                    <span className="text-xs font-bold text-white block">Referral Rewards Program</span>
+                    <span className="text-[10px] text-slate-400">Share your invite code to get fee discounts</span>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-500" />
+              </button>
+
+              <button
                 onClick={() => navigateTo('qr')}
-                className="w-full p-4 flex items-center justify-between text-left hover:bg-[#151A2E] active:bg-[#1B2238] transition-all"
+                className="w-full p-4 flex items-center justify-between text-left hover:bg-[#151A2E] active:bg-[#1B2238] transition-all cursor-pointer"
               >
                 <div className="flex items-center gap-3">
                   <QrCode className="w-5 h-5 text-[#27D980]" />
@@ -334,7 +415,7 @@ export const MobileMemberApp: React.FC = () => {
 
               <button
                 onClick={() => navigateTo('ai')}
-                className="w-full p-4 flex items-center justify-between text-left hover:bg-[#151A2E] active:bg-[#1B2238] transition-all"
+                className="w-full p-4 flex items-center justify-between text-left hover:bg-[#151A2E] active:bg-[#1B2238] transition-all cursor-pointer"
               >
                 <div className="flex items-center gap-3">
                   <Brain className="w-5 h-5 text-purple-400" />
@@ -345,11 +426,11 @@ export const MobileMemberApp: React.FC = () => {
 
               <button
                 onClick={() => navigateTo('subscription')}
-                className="w-full p-4 flex items-center justify-between text-left hover:bg-[#151A2E] active:bg-[#1B2238] transition-all"
+                className="w-full p-4 flex items-center justify-between text-left hover:bg-[#151A2E] active:bg-[#1B2238] transition-all cursor-pointer"
               >
                 <div className="flex items-center gap-3">
                   <CreditCard className="w-5 h-5 text-[#4F7CFF]" />
-                  <span className="text-xs font-bold text-white">Renew / Upgrade Plan</span>
+                  <span className="text-xs font-bold text-white">Renew / Freeze Plan</span>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-500" />
               </button>
@@ -358,7 +439,7 @@ export const MobileMemberApp: React.FC = () => {
             {/* Sign Out */}
             <button
               onClick={signOutApp}
-              className="w-full py-3 rounded-2xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-400 font-black text-xs flex items-center justify-center gap-2 transition-all active:scale-95"
+              className="w-full py-3 rounded-2xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-400 font-black text-xs flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
             >
               <LogOut className="w-4 h-4" />
               <span>Sign Out of Member Account</span>
@@ -400,6 +481,158 @@ export const MobileMemberApp: React.FC = () => {
         {currentScreen === 'profile' && (
           <div className="space-y-4 animate-in fade-in duration-200">
             <MemberProfileEditor />
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════
+            SUBPAGE 5: GYM COMMUNITY CHALLENGES
+        ═══════════════════════════════════════════════════════════ */}
+        {currentScreen === 'challenges' && (
+          <div className="space-y-4 animate-in fade-in duration-200 text-xs">
+            <div className="p-4 rounded-3xl bg-gradient-to-r from-amber-950/40 to-[#141022] border border-amber-500/30 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-black text-amber-400 uppercase tracking-wider">COMMUNITY ARENA</span>
+                <h3 className="text-sm font-black text-white mt-0.5">Gym Transformation Challenges</h3>
+              </div>
+              <Trophy className="w-8 h-8 text-amber-400" />
+            </div>
+
+            {gymChallenges.length === 0 ? (
+              <div className="p-8 rounded-3xl bg-[#101422] border border-white/10 text-center text-slate-400 space-y-2">
+                <Trophy className="w-8 h-8 text-slate-500 mx-auto" />
+                <p className="font-bold">No active challenges right now.</p>
+                <p className="text-[10px] text-slate-500">Check back soon for monthly gym member competitions!</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {gymChallenges.map((ch) => {
+                  const isJoined = ch.participants?.includes(activeMember?.id || '');
+
+                  return (
+                    <div key={ch.id} className="p-4 rounded-3xl bg-[#101422] border border-amber-500/30 space-y-3 shadow-xl">
+                      <div className="flex items-center justify-between">
+                        <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold text-[10px] border border-amber-500/30">
+                          {ch.category}
+                        </span>
+                        <span className="text-[10px] text-slate-400">Ends: {ch.endDate}</span>
+                      </div>
+
+                      <div>
+                        <h4 className="text-sm font-black text-white">{ch.title}</h4>
+                        <p className="text-xs text-slate-300 mt-1">{ch.description}</p>
+                      </div>
+
+                      <div className="p-2.5 rounded-2xl bg-[#0B0E17] border border-white/5 flex items-center justify-between text-xs">
+                        <span className="text-slate-400 text-[11px]">Grand Prize:</span>
+                        <strong className="text-amber-400 font-black">{ch.prize}</strong>
+                      </div>
+
+                      {ch.leaderboard && ch.leaderboard.length > 0 && (
+                        <div className="space-y-1.5 pt-1">
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                            <Crown className="w-3.5 h-3.5 text-amber-400" />
+                            Top Leaderboard
+                          </span>
+                          {ch.leaderboard.slice(0, 3).map((lb) => (
+                            <div key={lb.rank} className="p-2 rounded-xl bg-[#0B0E17] flex items-center justify-between text-xs">
+                              <span className="text-white font-bold">#{lb.rank} {lb.memberName}</span>
+                              <span className="text-emerald-400 font-black">{lb.score} pts</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {!isJoined ? (
+                        <button
+                          onClick={() => activeMember && joinChallenge(ch.id, activeMember.id, activeMember.name)}
+                          className="w-full py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-orange-500 text-black font-black text-xs shadow-lg cursor-pointer"
+                        >
+                          Join Challenge ({ch.participants?.length || 0} Members)
+                        </button>
+                      ) : (
+                        <div className="p-2.5 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-black text-center text-xs">
+                          ✓ You are participating in this challenge!
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════
+            SUBPAGE 6: REFERRAL & REWARDS PROGRAM
+        ═══════════════════════════════════════════════════════════ */}
+        {currentScreen === 'referrals' && (
+          <div className="space-y-4 animate-in fade-in duration-200 text-xs">
+            <div className="p-4 rounded-3xl bg-gradient-to-r from-purple-950/40 to-[#141022] border border-purple-500/30 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-black text-purple-400 uppercase tracking-wider">EXCLUSIVE PERK</span>
+                <h3 className="text-sm font-black text-white mt-0.5">Member Referral Program</h3>
+              </div>
+              <Gift className="w-8 h-8 text-purple-400" />
+            </div>
+
+            {/* Invite Code Box */}
+            <div className="p-5 rounded-3xl bg-[#101422] border border-purple-500/30 space-y-3 text-center shadow-xl">
+              <span className="text-[10px] text-slate-400 uppercase font-bold">Your Unique Invite Code</span>
+              <div className="text-2xl font-black text-purple-300 font-mono tracking-widest bg-[#0B0E17] py-3 rounded-2xl border border-purple-500/20">
+                {referralCode}
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={copyReferralLink}
+                  className="flex-1 py-2.5 rounded-2xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                >
+                  {copiedCode ? <Check className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4" />}
+                  <span>{copiedCode ? 'Copied Invite!' : 'Copy Invite Link'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* How It Works */}
+            <div className="p-4 rounded-3xl bg-[#101422] border border-white/10 space-y-2.5">
+              <h4 className="text-xs font-black text-white">How Referral Rewards Work</h4>
+              <div className="space-y-2 text-slate-300">
+                <div className="flex items-start gap-2">
+                  <span className="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 font-bold flex items-center justify-center shrink-0 text-[10px]">1</span>
+                  <span>Share your code with friends or workout buddies.</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 font-bold flex items-center justify-center shrink-0 text-[10px]">2</span>
+                  <span>When they join a membership, they get an exclusive discount.</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 font-bold flex items-center justify-center shrink-0 text-[10px]">3</span>
+                  <span>You receive <strong>1 Month Free Extension</strong> added to your Privilege Pass!</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Referrals History */}
+            <div className="p-4 rounded-3xl bg-[#101422] border border-white/10 space-y-2">
+              <h4 className="text-xs font-black text-white">Your Successful Referrals ({myReferrals.length})</h4>
+              {myReferrals.length === 0 ? (
+                <p className="text-slate-500 text-center py-2 text-[11px]">No friends referred yet. Share your code above!</p>
+              ) : (
+                <div className="space-y-2">
+                  {myReferrals.map((r) => (
+                    <div key={r.id} className="p-2.5 rounded-xl bg-[#0B0E17] flex items-center justify-between">
+                      <div>
+                        <strong className="text-white">{r.referredFriendName}</strong>
+                        <div className="text-[10px] text-slate-400">{r.date}</div>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold text-[10px]">
+                        {r.rewardClaimed ? 'Reward Claimed' : 'Pending Verification'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 

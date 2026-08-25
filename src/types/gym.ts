@@ -98,12 +98,21 @@ export interface Member {
   startDate: string;
   endDate: string;
   expiryDate?: string;
-  status: 'Active' | 'Expiring Soon' | 'Expired' | 'Cancelled' | 'Renewal Due' | 'Suspended' | 'Pending Payment';
+  status: 'Active' | 'Expiring Soon' | 'Expired' | 'Cancelled' | 'Renewal Due' | 'Suspended' | 'Pending Payment' | 'Frozen';
   assignedTrainerId?: string;
   assignedDietitianId?: string;
   rewardPoints: number;
   referralCode: string;
   pendingDues: number;
+  balanceDue?: number;
+  targetWeightKg?: number;
+  attendanceStreak?: number;
+  chestInches?: number;
+  waistInches?: number;
+  hipsInches?: number;
+  armsInches?: number;
+  thighsInches?: number;
+  calvesInches?: number;
   paidAmount?: number;
   totalPlanAmount?: number;
   lastPaymentDate?: string;
@@ -277,6 +286,121 @@ export interface ProgressMetric {
   trainerRemarks?: string;
   photoBeforeUrl?: string;
   photoAfterUrl?: string;
+  photoFrontUrl?: string;
+  photoSideUrl?: string;
+  photoBackUrl?: string;
+  photoAngle?: 'Front' | 'Side' | 'Back' | string;
+  photoPrivacy?: 'Private' | 'Trainer Only' | 'Authorized Staff';
+}
+
+export interface WorkoutSetLog {
+  setNumber: number;
+  reps: number;
+  weightKg: number;
+  rpe?: number;
+  completed: boolean;
+}
+
+export interface ExerciseExecution {
+  exerciseId: string;
+  exerciseName: string;
+  category?: string;
+  sets: WorkoutSetLog[];
+  notes?: string;
+}
+
+export interface WorkoutSessionLog {
+  id: string;
+  memberId: string;
+  date: string;
+  day: string;
+  splitTitle: string;
+  exercises: ExerciseExecution[];
+  durationMinutes?: number;
+  totalVolumeKg?: number;
+  completedAt: string;
+}
+
+export interface PersonalRecord {
+  id: string;
+  memberId: string;
+  exerciseName: string;
+  maxWeightKg: number;
+  reps: number;
+  achievedDate: string;
+  previousMaxWeightKg?: number;
+}
+
+export interface TrainerNote {
+  id: string;
+  memberId: string;
+  memberName?: string;
+  trainerId: string;
+  trainerName: string;
+  date: string;
+  note?: string;
+  content?: string;
+  category: 'Observation' | 'Form Correction' | 'Nutrition' | 'General' | 'Workout Form' | 'Motivation';
+  createdAt: string;
+}
+
+export interface DailyWellnessCheckin {
+  id: string;
+  memberId: string;
+  date: string;
+  mood: 'Energized' | 'Good' | 'Neutral' | 'Tired' | 'Exhausted';
+  energyLevel: number; // 1-5
+  sleepHours: number;
+  stressLevel: 'Low' | 'Moderate' | 'High';
+  muscleSoreness: 'None' | 'Mild' | 'Moderate' | 'Severe';
+  notes?: string;
+  recordedAt: string;
+}
+
+export interface MembershipFreezeRecord {
+  id: string;
+  memberId: string;
+  memberName?: string;
+  startDate: string;
+  endDate: string;
+  reason: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  status?: 'Active Freeze' | 'Completed' | 'Cancelled' | string;
+  daysCount?: number;
+  extensionDays?: number;
+}
+
+export interface GymChallenge {
+  id: string;
+  name?: string;
+  title?: string;
+  description: string;
+  type?: 'Attendance' | 'Weight Loss' | 'Workout Consistency';
+  category?: string;
+  startDate?: string;
+  endDate?: string;
+  targetGoal?: string;
+  branchId?: BranchId;
+  reward?: string;
+  prize?: string;
+  participants?: any[];
+  leaderboard?: { rank: number; memberName: string; score: number }[];
+  isActive?: boolean;
+}
+
+export interface ReferralRecord {
+  id: string;
+  referrerMemberId: string;
+  referrerName?: string;
+  referredName?: string;
+  referredFriendName?: string;
+  referredMobile?: string;
+  referredMemberId?: string;
+  status?: 'Pending' | 'Converted' | 'Rewarded';
+  rewardPoints?: number;
+  rewardClaimed?: boolean;
+  date: string;
 }
 
 export interface Lead {

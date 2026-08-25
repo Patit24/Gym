@@ -11,12 +11,18 @@ import {
   Target,
   Sparkles,
   CheckCircle2,
-  X
+  X,
+  UserPlus,
+  Award
 } from 'lucide-react';
 
 export const LeadCRM: React.FC = () => {
-  const { leads, addLead, updateLeadStage, selectedBranchId } = useGym();
+  const { leads, addLead, updateLeadStage, selectedBranchId, convertLeadToMember, plans, employees } = useGym();
   const [showAddLeadModal, setShowAddLeadModal] = useState(false);
+  const [convertTargetLead, setConvertTargetLead] = useState<Lead | null>(null);
+  const [selectedPlanId, setSelectedPlanId] = useState(plans[0]?.id || 'PLAN-001');
+  const [selectedTrainerId, setSelectedTrainerId] = useState(employees.find(e => e.role === 'Trainer')?.id || 'EMP-001');
+  const [convertSuccess, setConvertSuccess] = useState<string | null>(null);
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -53,6 +59,16 @@ export const LeadCRM: React.FC = () => {
     setShowAddLeadModal(false);
   };
 
+  const handleConvertSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!convertTargetLead) return;
+
+    await convertLeadToMember(convertTargetLead.id, selectedPlanId, selectedTrainerId);
+    setConvertSuccess(`🎉 ${convertTargetLead.name} successfully converted to official Member!`);
+    setConvertTargetLead(null);
+    setTimeout(() => setConvertSuccess(null), 4000);
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       
@@ -63,17 +79,24 @@ export const LeadCRM: React.FC = () => {
             <Target className="w-6 h-6 text-[#4F7CFF]" />
             Sales Lead & Conversion CRM ({branchLeads.length} Total Leads)
           </h2>
-          <p className="text-xs text-gym-subtext">Kanban conversion pipeline, follow-up calendar, and lead attribution</p>
+          <p className="text-xs text-gym-subtext">Kanban conversion pipeline, 1-click member onboarding, and sales attribution</p>
         </div>
 
         <button
           onClick={() => setShowAddLeadModal(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#4F7CFF] hover:bg-blue-600 text-white font-semibold text-xs shadow-lg shadow-[#4F7CFF]/20 transition-all"
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#4F7CFF] hover:bg-blue-600 text-white font-semibold text-xs shadow-lg shadow-[#4F7CFF]/20 transition-all cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>New Lead</span>
         </button>
       </div>
+
+      {/* Convert Success Alert */}
+      {convertSuccess && (
+        <div className="p-3.5 rounded-2xl bg-emerald-500/20 border border-emerald-400 text-emerald-300 font-black text-xs text-center shadow-2xl animate-in fade-in">
+          {convertSuccess}
+        </div>
+      )}
 
       {/* Add Lead Modal */}
       {showAddLeadModal && (
@@ -158,6 +181,68 @@ export const LeadCRM: React.FC = () => {
         </div>
       )}
 
+      {/* Convert to Member Modal */}
+      {convertTargetLead && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+          <div className="bg-[#101422] border border-emerald-500/40 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <h3 className="font-black text-white text-sm flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-emerald-400" />
+                Convert Lead to Official Member
+              </h3>
+              <button onClick={() => setConvertTargetLead(null)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConvertSubmit} className="space-y-3 text-xs">
+              <div className="p-3 rounded-2xl bg-[#0B0E17] border border-white/10 space-y-1">
+                <span className="text-[10px] text-slate-400 uppercase font-bold">Client Name & Contact</span>
+                <div className="text-white font-black">{convertTargetLead.name} ({convertTargetLead.phone})</div>
+                <div className="text-[11px] text-emerald-400 font-bold">Goal: {convertTargetLead.interestGoal}</div>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-bold mb-1">Assign Membership Plan</label>
+                <select
+                  value={selectedPlanId}
+                  onChange={(e) => setSelectedPlanId(e.target.value)}
+                  className="w-full bg-[#0B0E17] border border-white/10 rounded-xl px-3 py-2 text-white font-bold"
+                >
+                  {plans.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name} (₹{p.totalPrice.toLocaleString('en-IN')})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-bold mb-1">Assign Personal Trainer</label>
+                <select
+                  value={selectedTrainerId}
+                  onChange={(e) => setSelectedTrainerId(e.target.value)}
+                  className="w-full bg-[#0B0E17] border border-white/10 rounded-xl px-3 py-2 text-white font-bold"
+                >
+                  {employees.filter(e => e.role === 'Trainer').map((t) => (
+                    <option key={t.id} value={t.id}>{t.name} ({t.shift})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-300">
+                ✓ Converts lead to Active Member, generates Membership ID, and initiates onboarding in real-time.
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3 rounded-2xl bg-gradient-to-r from-[#27D980] to-emerald-500 hover:from-emerald-400 hover:to-emerald-500 text-black font-black text-xs shadow-xl active:scale-95 transition-all cursor-pointer"
+              >
+                Confirm Member Onboarding
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Kanban Pipeline Board */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4 overflow-x-auto pb-4">
         {stages.map((stage) => {
@@ -199,12 +284,23 @@ export const LeadCRM: React.FC = () => {
                       </span>
                     </div>
 
+                    {/* Convert to Member Button */}
+                    {stage !== 'Joined' && stage !== 'Lost' && (
+                      <button
+                        onClick={() => setConvertTargetLead(l)}
+                        className="w-full py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 font-bold text-[10px] flex items-center justify-center gap-1 transition-all cursor-pointer"
+                      >
+                        <UserPlus className="w-3 h-3" />
+                        <span>Convert to Member</span>
+                      </button>
+                    )}
+
                     {/* Stage Switcher buttons */}
-                    <div className="pt-2 flex items-center justify-between gap-1 text-[10px]">
+                    <div className="pt-1 flex items-center justify-between gap-1 text-[10px]">
                       {stage !== 'Walk-in' && (
                         <button
                           onClick={() => updateLeadStage(l.id, stages[stages.indexOf(stage) - 1])}
-                          className="px-2 py-1 rounded bg-[#1E2330] text-slate-400 hover:text-white"
+                          className="px-2 py-1 rounded bg-[#1E2330] text-slate-400 hover:text-white cursor-pointer"
                         >
                           ← Prev
                         </button>
@@ -212,7 +308,7 @@ export const LeadCRM: React.FC = () => {
                       {stage !== 'Lost' && (
                         <button
                           onClick={() => updateLeadStage(l.id, stages[stages.indexOf(stage) + 1])}
-                          className="px-2 py-1 rounded bg-[#4F7CFF]/20 text-[#4F7CFF] hover:bg-[#4F7CFF] hover:text-white ml-auto font-bold"
+                          className="px-2 py-1 rounded bg-[#4F7CFF]/20 text-[#4F7CFF] hover:bg-[#4F7CFF] hover:text-white ml-auto font-bold cursor-pointer"
                         >
                           Next →
                         </button>
@@ -230,3 +326,4 @@ export const LeadCRM: React.FC = () => {
     </div>
   );
 };
+

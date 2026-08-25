@@ -26,7 +26,15 @@ import {
   ExpenseType,
   AppUser,
   WebsiteCustomer,
-  AuditLog
+  AuditLog,
+  WorkoutSessionLog,
+  WorkoutSetLog,
+  PersonalRecord,
+  TrainerNote,
+  DailyWellnessCheckin,
+  MembershipFreezeRecord,
+  GymChallenge,
+  ReferralRecord
 } from '../types/gym';
 import {
   generateUniqueUsername,
@@ -111,6 +119,15 @@ interface GymContextType {
   expenseTypes: ExpenseType[];
   appUsers: AppUser[];
   auditLogs: AuditLog[];
+  workoutLogs: WorkoutSessionLog[];
+  personalRecords: PersonalRecord[];
+  trainerNotes: TrainerNote[];
+  wellnessCheckins: DailyWellnessCheckin[];
+  freezeRecords: MembershipFreezeRecord[];
+  membershipFreezes: MembershipFreezeRecord[];
+  challenges: GymChallenge[];
+  gymChallenges: GymChallenge[];
+  referrals: ReferralRecord[];
 
   // Dynamic Actions & Provisioning
   provisionMemberWithAccount: (
@@ -155,6 +172,16 @@ interface GymContextType {
   
   addWeeklyWorkout: (targetMemberId: string, weekNumber: number, weekTitle: string, splits: DailyWorkoutSplit[]) => Promise<void>;
   addMonthlyDiet: (targetMemberId: string, monthPlan: MonthlyDietPlan) => Promise<void>;
+
+  logWorkoutSession: (session: Omit<WorkoutSessionLog, 'id'>) => Promise<WorkoutSessionLog>;
+  addTrainerNote: (note: Omit<TrainerNote, 'id' | 'createdAt'>) => Promise<TrainerNote>;
+  addWellnessCheckin: (checkin: Omit<DailyWellnessCheckin, 'id' | 'recordedAt'>) => Promise<DailyWellnessCheckin>;
+  freezeMembership: (freeze: Partial<MembershipFreezeRecord> & { memberId: string; startDate: string; endDate: string; reason: string }) => Promise<MembershipFreezeRecord>;
+  addChallenge: (challenge: Omit<GymChallenge, 'id'>) => Promise<GymChallenge>;
+  joinChallenge: (challengeId: string, memberId: string, memberName?: string) => Promise<void>;
+  addReferral: (ref: Omit<ReferralRecord, 'id'>) => Promise<ReferralRecord>;
+  rewardReferral: (referralId: string) => Promise<void>;
+  convertLeadToMember: (leadId: string, planId?: string, trainerId?: string) => Promise<Member>;
 
   buySupplements: (cartItems: { product: SupplementProduct; qty: number }[], paymentMethod: 'Cash' | 'UPI' | 'Card' | 'NetBanking') => Promise<Transaction>;
   addSupplement: (product: Omit<SupplementProduct, 'id'>) => Promise<SupplementProduct>;
@@ -254,6 +281,39 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [expenseTypes, setExpenseTypes] = useState<ExpenseType[]>(INITIAL_EXPENSE_TYPES);
   const [appUsers, setAppUsers] = useState<AppUser[]>(INITIAL_APP_USERS);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [workoutLogs, setWorkoutLogs] = useState<WorkoutSessionLog[]>([]);
+  const [trainerNotes, setTrainerNotes] = useState<TrainerNote[]>([]);
+  const [wellnessCheckins, setWellnessCheckins] = useState<DailyWellnessCheckin[]>([]);
+  const [freezeRecords, setFreezeRecords] = useState<MembershipFreezeRecord[]>([]);
+  const [challenges, setChallenges] = useState<GymChallenge[]>([]);
+  const [referrals, setReferrals] = useState<ReferralRecord[]>([]);
+
+  const personalRecords = useMemo<PersonalRecord[]>(() => {
+    const prMap: { [exerciseName: string]: PersonalRecord } = {};
+    const sortedLogs = [...workoutLogs].sort((a, b) => a.date.localeCompare(b.date));
+    sortedLogs.forEach((session) => {
+      session.exercises?.forEach((ex) => {
+        const exName = ex.exerciseName?.trim();
+        if (!exName) return;
+        const completedSets = ex.sets?.filter((s) => s.completed && s.weightKg > 0) || [];
+        completedSets.forEach((s) => {
+          const existing = prMap[exName];
+          if (!existing || s.weightKg > existing.maxWeightKg) {
+            prMap[exName] = {
+              id: `PR-${session.memberId}-${exName.replace(/\s+/g, '-')}`,
+              memberId: session.memberId,
+              exerciseName: exName,
+              maxWeightKg: s.weightKg,
+              reps: s.reps,
+              achievedDate: session.date,
+              previousMaxWeightKg: existing ? existing.maxWeightKg : undefined,
+            };
+          }
+        });
+      });
+    });
+    return Object.values(prMap);
+  }, [workoutLogs]);
 
   // Website Customer State & Persistence
   const [authContext, setAuthContext] = useState<'app' | 'website' | null>(() => {
@@ -445,6 +505,54 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     });
 
+    const unsubWorkoutLogs = onSnapshot(collection(db, 'workout_logs'), (snap) => {
+      if (!snap.empty) {
+        const list: WorkoutSessionLog[] = [];
+        snap.forEach(doc => list.push(doc.data() as WorkoutSessionLog));
+        setWorkoutLogs(list.sort((a, b) => b.date.localeCompare(a.date)));
+      }
+    });
+
+    const unsubTrainerNotes = onSnapshot(collection(db, 'trainer_notes'), (snap) => {
+      if (!snap.empty) {
+        const list: TrainerNote[] = [];
+        snap.forEach(doc => list.push(doc.data() as TrainerNote));
+        setTrainerNotes(list.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+      }
+    });
+
+    const unsubWellnessCheckins = onSnapshot(collection(db, 'wellness_checkins'), (snap) => {
+      if (!snap.empty) {
+        const list: DailyWellnessCheckin[] = [];
+        snap.forEach(doc => list.push(doc.data() as DailyWellnessCheckin));
+        setWellnessCheckins(list.sort((a, b) => b.date.localeCompare(a.date)));
+      }
+    });
+
+    const unsubFreezeRecords = onSnapshot(collection(db, 'membership_freezes'), (snap) => {
+      if (!snap.empty) {
+        const list: MembershipFreezeRecord[] = [];
+        snap.forEach(doc => list.push(doc.data() as MembershipFreezeRecord));
+        setFreezeRecords(list.sort((a, b) => b.startDate.localeCompare(a.startDate)));
+      }
+    });
+
+    const unsubChallenges = onSnapshot(collection(db, 'gym_challenges'), (snap) => {
+      if (!snap.empty) {
+        const list: GymChallenge[] = [];
+        snap.forEach(doc => list.push(doc.data() as GymChallenge));
+        setChallenges(list);
+      }
+    });
+
+    const unsubReferrals = onSnapshot(collection(db, 'member_referrals'), (snap) => {
+      if (!snap.empty) {
+        const list: ReferralRecord[] = [];
+        snap.forEach(doc => list.push(doc.data() as ReferralRecord));
+        setReferrals(list.sort((a, b) => b.date.localeCompare(a.date)));
+      }
+    });
+
     return () => {
       unsubBranches();
       unsubPlans();
@@ -465,6 +573,12 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubLeads();
       unsubAppUsers();
       unsubAuditLogs();
+      unsubWorkoutLogs();
+      unsubTrainerNotes();
+      unsubWellnessCheckins();
+      unsubFreezeRecords();
+      unsubChallenges();
+      unsubReferrals();
     };
   }, []);
 
@@ -1799,6 +1913,183 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return newMetric;
   };
 
+  const logWorkoutSession = async (session: Omit<WorkoutSessionLog, 'id'>): Promise<WorkoutSessionLog> => {
+    const newId = `WLOG-${Date.now()}`;
+    const newSession: WorkoutSessionLog = {
+      ...session,
+      id: newId,
+    };
+    setWorkoutLogs(prev => [newSession, ...prev]);
+    safeDbWrite(setDoc(doc(db, 'workout_logs', newId), newSession));
+    return newSession;
+  };
+
+  const addTrainerNote = async (note: Omit<TrainerNote, 'id' | 'createdAt'>): Promise<TrainerNote> => {
+    const newId = `TNOTE-${Date.now()}`;
+    const newNote: TrainerNote = {
+      ...note,
+      id: newId,
+      createdAt: new Date().toISOString(),
+    };
+    setTrainerNotes(prev => [newNote, ...prev]);
+    safeDbWrite(setDoc(doc(db, 'trainer_notes', newId), newNote));
+    return newNote;
+  };
+
+  const addWellnessCheckin = async (checkin: Omit<DailyWellnessCheckin, 'id' | 'recordedAt'>): Promise<DailyWellnessCheckin> => {
+    const newId = `WELL-${Date.now()}`;
+    const newCheckin: DailyWellnessCheckin = {
+      ...checkin,
+      id: newId,
+      recordedAt: new Date().toISOString(),
+    };
+    setWellnessCheckins(prev => [newCheckin, ...prev]);
+    safeDbWrite(setDoc(doc(db, 'wellness_checkins', newId), newCheckin));
+    return newCheckin;
+  };
+
+  const freezeMembership = async (
+    freeze: Partial<MembershipFreezeRecord> & { memberId: string; startDate: string; endDate: string; reason: string }
+  ): Promise<MembershipFreezeRecord> => {
+    const member = members.find(m => m.id === freeze.memberId);
+    const start = new Date(freeze.startDate).getTime();
+    const end = new Date(freeze.endDate).getTime();
+    const calcDays = Math.max(1, Math.round((end - start) / 86400000));
+    const extensionDays = freeze.extensionDays ?? calcDays;
+
+    const newId = `FRZ-${Date.now()}`;
+    const newFreeze: MembershipFreezeRecord = {
+      id: newId,
+      memberId: freeze.memberId,
+      memberName: freeze.memberName || member?.name || 'Member',
+      startDate: freeze.startDate,
+      endDate: freeze.endDate,
+      reason: freeze.reason,
+      approvedBy: freeze.approvedBy || 'Admin Self-Service',
+      approvedAt: new Date().toISOString(),
+      status: freeze.status || 'Active Freeze',
+      daysCount: calcDays,
+      extensionDays,
+    };
+    setFreezeRecords(prev => [newFreeze, ...prev]);
+    safeDbWrite(setDoc(doc(db, 'membership_freezes', newId), newFreeze));
+
+    // Extend member subscription endDate by freeze days and mark Frozen
+    if (member && extensionDays > 0) {
+      const currentEnd = new Date(member.endDate || member.expiryDate || new Date().toISOString());
+      const extendedEnd = new Date(currentEnd.getTime() + extensionDays * 86400000).toISOString().split('T')[0];
+      updateMember(member.id, {
+        endDate: extendedEnd,
+        expiryDate: extendedEnd,
+        status: 'Frozen',
+      });
+    }
+
+    return newFreeze;
+  };
+
+  const addChallenge = async (challenge: Omit<GymChallenge, 'id'>): Promise<GymChallenge> => {
+    const newId = `CHAL-${Date.now()}`;
+    const newChallenge: GymChallenge = {
+      ...challenge,
+      id: newId,
+    };
+    setChallenges(prev => [newChallenge, ...prev]);
+    safeDbWrite(setDoc(doc(db, 'gym_challenges', newId), newChallenge));
+    return newChallenge;
+  };
+
+  const joinChallenge = async (challengeId: string, memberId: string, memberName?: string) => {
+    const challenge = challenges.find(c => c.id === challengeId);
+    const member = members.find(m => m.id === memberId);
+    if (!challenge) return;
+    if (challenge.participants && challenge.participants.some(p => p.memberId === memberId || p === memberId)) return;
+
+    const newParticipant = {
+      memberId,
+      memberName: memberName || member?.name || 'Member',
+      currentScore: 0,
+      joinedAt: new Date().toISOString().split('T')[0],
+    };
+
+    const updatedParticipants = [...(challenge.participants || []), newParticipant];
+    setChallenges(prev => prev.map(c => c.id === challengeId ? { ...c, participants: updatedParticipants } : c));
+    safeDbWrite(updateDoc(doc(db, 'gym_challenges', challengeId), { participants: updatedParticipants }));
+  };
+
+  const addReferral = async (ref: Omit<ReferralRecord, 'id'>): Promise<ReferralRecord> => {
+    const newId = `REF-${Date.now()}`;
+    const newRef: ReferralRecord = {
+      ...ref,
+      id: newId,
+    };
+    setReferrals(prev => [newRef, ...prev]);
+    safeDbWrite(setDoc(doc(db, 'member_referrals', newId), newRef));
+    return newRef;
+  };
+
+  const rewardReferral = async (referralId: string) => {
+    const ref = referrals.find(r => r.id === referralId);
+    if (!ref) return;
+    setReferrals(prev => prev.map(r => r.id === referralId ? { ...r, status: 'Rewarded', rewardClaimed: true } : r));
+    safeDbWrite(updateDoc(doc(db, 'member_referrals', referralId), { status: 'Rewarded', rewardClaimed: true }));
+
+    // Add reward points to referrer member
+    const referrer = members.find(m => m.id === ref.referrerMemberId);
+    if (referrer) {
+      updateMember(referrer.id, {
+        rewardPoints: (referrer.rewardPoints || 0) + (ref.rewardPoints || 100),
+      });
+    }
+  };
+
+  const convertLeadToMember = async (leadId: string, planId?: string, trainerId?: string): Promise<Member> => {
+    const lead = leads.find(l => l.id === leadId);
+    if (!lead) throw new Error('Lead not found');
+
+    const selectedPlan = plans.find(p => p.id === planId) || plans[0];
+    const startDate = new Date().toISOString().split('T')[0];
+    const endDate = new Date(Date.now() + (selectedPlan.durationMonths || 1) * 30 * 86400000).toISOString().split('T')[0];
+
+    const newMemberResult = await provisionMemberWithAccount({
+      name: lead.name,
+      mobile: lead.phone || lead.mobile || '+91 98765 00000',
+      email: lead.email || `${lead.name.toLowerCase().replace(/\s+/g, '')}@gmail.com`,
+      photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=400',
+      faceEnrolled: false,
+      dob: '1998-05-15',
+      gender: 'Male',
+      heightCm: 175,
+      weightKg: 75,
+      startWeightKg: 75,
+      bmi: 24.5,
+      chestCm: 100,
+      waistCm: 84,
+      armsCm: 35,
+      thighsCm: 56,
+      bloodGroup: 'O+',
+      emergencyContactName: 'Family Contact',
+      emergencyMobile: '+91 98765 00001',
+      address: 'Smart Gym Franchise Area',
+      medicalHistory: 'None',
+      goal: (lead.interestGoal as any) || (lead.goal as any) || 'Muscle Building',
+      referralSource: lead.source || 'Walk-in',
+      branchId: lead.branchId || selectedBranchId || 'branch-1',
+      planId: selectedPlan.id,
+      planName: selectedPlan.name,
+      assignedTrainerId: trainerId,
+      startDate,
+      endDate,
+      expiryDate: endDate,
+      pendingDues: 0,
+      paidAmount: selectedPlan.totalPrice,
+      totalPlanAmount: selectedPlan.totalPrice,
+    }, { createLogin: true, sendWhatsApp: true });
+
+    updateLeadStage(leadId, 'Joined');
+    return newMemberResult.member;
+  };
+
   const addLead = async (leadData: Omit<Lead, 'id'>) => {
     const newLead: Lead = {
       ...leadData,
@@ -2242,6 +2533,24 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         expenseTypes,
         appUsers,
         auditLogs,
+        workoutLogs,
+        personalRecords,
+        trainerNotes,
+        wellnessCheckins,
+        freezeRecords,
+        membershipFreezes: freezeRecords,
+        challenges,
+        gymChallenges: challenges,
+        referrals,
+        logWorkoutSession,
+        addTrainerNote,
+        addWellnessCheckin,
+        freezeMembership,
+        addChallenge,
+        joinChallenge,
+        addReferral,
+        rewardReferral,
+        convertLeadToMember,
         provisionMemberWithAccount,
         provisionTrainerWithAccount,
         resetMemberPassword,

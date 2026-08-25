@@ -367,60 +367,105 @@ export const DietTracker: React.FC = () => {
       )}
 
       {/* Hydration Tracker */}
-      <div className="p-3 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-between text-xs">
-        <div className="flex items-center gap-2">
-          <Droplets className="w-5 h-5 text-cyan-400" />
-          <div>
-            <div className="font-bold text-white text-[11px]">Hydration Goal</div>
-            <div className="text-cyan-300 text-[10px]">{diet.waterCurrentLiters}L of 4.0L Goal</div>
+      <div className="p-4 rounded-3xl bg-gradient-to-r from-cyan-950/40 via-[#0E1A33] to-[#0A1224] border border-cyan-500/30 space-y-3 text-xs shadow-xl">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-2xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+              <Droplets className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="font-black text-white text-xs">Daily Hydration</div>
+              <div className="text-cyan-300 font-bold text-[10px]">
+                {diet.waterCurrentLiters.toFixed(2)}L of {currentMonthPlan?.waterTargetLiters || 4.0}L Target
+              </div>
+            </div>
+          </div>
+          <div className="text-right">
+            <span className="font-mono font-black text-cyan-400 text-xs">
+              {Math.min(100, Math.round((diet.waterCurrentLiters / (currentMonthPlan?.waterTargetLiters || 4.0)) * 100))}%
+            </span>
           </div>
         </div>
-        <button
-          onClick={() => addWaterIntake(0.25)}
-          className="px-2.5 py-1 rounded-xl bg-cyan-500 hover:bg-cyan-600 text-gym-dark font-black text-[10px] flex items-center gap-1 shadow-md"
-        >
-          <Plus className="w-3 h-3" />
-          <span>+250 ml</span>
-        </button>
+
+        {/* Hydration Progress Bar */}
+        <div className="w-full bg-[#070A10] h-2 rounded-full overflow-hidden p-[1px]">
+          <div
+            className="bg-gradient-to-r from-cyan-400 to-blue-500 h-full rounded-full transition-all duration-300"
+            style={{ width: `${Math.min(100, (diet.waterCurrentLiters / (currentMonthPlan?.waterTargetLiters || 4.0)) * 100)}%` }}
+          />
+        </div>
+
+        {/* Quick Log Buttons */}
+        <div className="flex items-center gap-2 pt-1">
+          {[
+            { label: '+250ml', val: 0.25 },
+            { label: '+500ml', val: 0.5 },
+            { label: '+750ml', val: 0.75 },
+            { label: '+1.0L', val: 1.0 },
+          ].map((btn) => (
+            <button
+              key={btn.label}
+              onClick={() => addWaterIntake(btn.val)}
+              className="flex-1 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 active:scale-95 text-cyan-300 hover:text-white border border-cyan-500/20 font-black text-[10px] transition-all cursor-pointer"
+            >
+              {btn.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Meals Category Timeline */}
       {currentMonthPlan && (['breakfast', 'lunch', 'snack', 'dinner'] as const).map((cat) => (
-        <div key={cat} className="space-y-1.5">
-          <h4 className="text-[11px] font-extrabold text-white capitalize border-b border-white/10 pb-0.5">
-            {cat}
-          </h4>
+        <div key={cat} className="space-y-2">
+          <div className="flex items-center justify-between border-b border-white/10 pb-1">
+            <h4 className="text-[11px] font-black text-white capitalize flex items-center gap-1.5">
+              <span>{cat}</span>
+              <span className="text-[9px] text-slate-400 font-normal">
+                ({currentMonthPlan.meals[cat].filter(m => m.completed).length}/{currentMonthPlan.meals[cat].length} logged)
+              </span>
+            </h4>
+            <span className="text-[9px] text-gym-subtext font-bold uppercase">
+              {currentMonthPlan.meals[cat].reduce((sum, m) => sum + m.calories, 0)} kcal
+            </span>
+          </div>
 
           {currentMonthPlan.meals[cat].length === 0 ? (
-            <div className="text-[10px] text-gym-subtext p-2 italic">No meal items scheduled yet.</div>
+            <div className="text-[10px] text-gym-subtext p-3 bg-[#0F1420]/40 rounded-2xl border border-white/5 italic text-center">
+              No meal items scheduled yet.
+            </div>
           ) : (
             currentMonthPlan.meals[cat].map((meal) => (
               <div
                 key={meal.id}
-                className={`p-3 rounded-2xl border flex items-center justify-between text-xs transition-all ${
-                  meal.completed ? 'bg-[#0F1420]/60 border-emerald-500/30' : 'bg-[#0F1420] border-white/10'
+                className={`p-3.5 rounded-2xl border flex items-center justify-between text-xs transition-all ${
+                  meal.completed ? 'bg-[#0F1420]/60 border-emerald-500/30 shadow-md shadow-emerald-500/5' : 'bg-[#0F1420] border-white/10'
                 }`}
               >
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-3">
                   <button
                     onClick={() => toggleMealCompleted(selectedMonthNum, cat, meal.id)}
-                    className={`w-5 h-5 rounded-lg flex items-center justify-center transition-all ${
-                      meal.completed ? 'bg-emerald-400 text-gym-dark font-bold' : 'border border-white/20'
+                    className={`w-6 h-6 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+                      meal.completed ? 'bg-emerald-400 text-gym-dark font-extrabold shadow-md' : 'border border-white/20 hover:border-cyan-400'
                     }`}
                   >
-                    <Check className="w-3 h-3" />
+                    <Check className="w-3.5 h-3.5" />
                   </button>
                   <div>
-                    <h5 className={`font-extrabold text-[11px] ${meal.completed ? 'line-through text-slate-400' : 'text-white'}`}>
+                    <h5 className={`font-black text-xs ${meal.completed ? 'line-through text-slate-400' : 'text-white'}`}>
                       {meal.name}
                     </h5>
-                    <span className="text-[9px] text-gym-subtext">{meal.portion}</span>
+                    <div className="flex items-center gap-2 text-[10px] text-gym-subtext mt-0.5">
+                      <span>{meal.portion}</span>
+                      <span>• <strong className="text-cyan-400">P: {meal.proteinG}g</strong></span>
+                      {meal.carbsG ? <span>• C: {meal.carbsG}g</span> : null}
+                      {meal.fatG ? <span>• F: {meal.fatG}g</span> : null}
+                    </div>
                   </div>
                 </div>
 
-                <div className="text-right">
-                  <span className="font-extrabold text-emerald-400 text-[11px]">{meal.calories} kcal</span>
-                  <div className="text-[9px] text-gym-subtext">P: {meal.proteinG}g</div>
+                <div className="text-right shrink-0">
+                  <span className="font-black text-emerald-400 text-xs">{meal.calories} kcal</span>
+                  <div className="text-[9px] font-bold text-slate-400">{meal.completed ? 'Eaten' : 'Pending'}</div>
                 </div>
               </div>
             ))
