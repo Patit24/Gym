@@ -28,6 +28,11 @@ export const AppUserRoute: React.FC = () => {
     );
   }
 
+  // Strict Role Check: If user is Trainer or Dietitian, redirect to Trainer Dashboard
+  if (appUserAccount.role === 'Trainer' || appUserAccount.role === 'Dietitian') {
+    return <Navigate to="/app/trainer/dashboard" replace />;
+  }
+
   // If user is actually an Admin trying to visit user routes, let them proceed or redirect to admin dashboard
   // For standard members, verify subscription
   if (appUserAccount.role === 'Member' && subscriptionStatus === 'expired') {

@@ -647,20 +647,27 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    // 2. Look up user account from Firestore `users` collection
-    const foundUser = appUsers.find(
+    // 2. Look up user account from Firestore `users` collection OR INITIAL_APP_USERS
+    const foundUser = (appUsers || []).find(
       u =>
         (u.email && u.email.toLowerCase() === rawEmail) ||
         u.username.toLowerCase() === rawEmail ||
         u.username.toLowerCase() === emailPrefix ||
         u.id === firebaseUser.uid ||
-        u.linkedId === firebaseUser.uid
+        (u.linkedId && (u.linkedId === firebaseUser.uid || u.linkedId.toLowerCase() === emailPrefix))
+    ) || INITIAL_APP_USERS.find(
+      u =>
+        (u.email && u.email.toLowerCase() === rawEmail) ||
+        u.username.toLowerCase() === rawEmail ||
+        u.username.toLowerCase() === emailPrefix ||
+        u.id === firebaseUser.uid
     );
 
     if (foundUser) {
       setAppUserAccount(foundUser);
       setCurrentRole(foundUser.role);
       setSelectedBranchId(foundUser.branchId || branches[0]?.id || 'all');
+      localStorage.setItem('gym_app_user_account', JSON.stringify(foundUser));
 
       if (foundUser.role === 'Member') {
         const memberRec = members.find(
@@ -682,12 +689,55 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    // 3. Check if this Firebase User corresponds directly to a member in members collection
+    // 3. Check matching employee (Trainers, Dietitians, Staff) from employees collection
+    const matchingEmployee = employees.find(
+      e =>
+        (e.email && e.email.toLowerCase() === rawEmail) ||
+        ((e as any).username && (e as any).username.toLowerCase() === emailPrefix) ||
+        (e.id && e.id.toLowerCase() === emailPrefix) ||
+        (e.id && e.id.toLowerCase() === rawEmail) ||
+        (e.phone && e.phone.replace(/\D/g, '') === emailPrefix.replace(/\D/g, '')) ||
+        (e.name && e.name.toLowerCase().replace(/\s+/g, '') === emailPrefix) ||
+        e.id === firebaseUser.uid
+    );
+
+    if (matchingEmployee) {
+      const isTrainerOrDietitian = matchingEmployee.role === 'Trainer' || matchingEmployee.role === 'Dietitian';
+      const empAccount: AppUser = {
+        id: firebaseUser.uid,
+        username: (matchingEmployee as any).username || emailPrefix.toUpperCase(),
+        email: matchingEmployee.email || rawEmail,
+        role: matchingEmployee.role,
+        linkedId: matchingEmployee.id,
+        linkedName: matchingEmployee.name,
+        branchId: matchingEmployee.branchId || branches[0]?.id || 'all',
+        createdAt: matchingEmployee.joiningDate || new Date().toISOString(),
+        createdByAdminId: 'system',
+        isActive: (matchingEmployee as any).status !== 'Inactive',
+        permissions: {
+          canViewDashboard: true,
+          canEditWorkouts: matchingEmployee.role === 'Trainer' || isTrainerOrDietitian,
+          canEditDiets: matchingEmployee.role === 'Dietitian' || isTrainerOrDietitian,
+          canViewMembers: true,
+          canManageFinance: matchingEmployee.role === 'Accountant' || matchingEmployee.role === 'Manager',
+          canAccessAdmin: matchingEmployee.role === 'Manager' || matchingEmployee.role === 'Super Admin' || matchingEmployee.role === 'Owner',
+        }
+      };
+      setAppUserAccount(empAccount);
+      setCurrentRole(matchingEmployee.role);
+      setSelectedBranchId(matchingEmployee.branchId || branches[0]?.id || 'all');
+      setSubscriptionStatus('active');
+      localStorage.setItem('gym_app_user_account', JSON.stringify(empAccount));
+      return;
+    }
+
+    // 4. Check if this Firebase User corresponds directly to a member in members collection
     const matchingMember = members.find(
       m =>
         (m.email && m.email.toLowerCase() === rawEmail) ||
         (m.username && m.username.toLowerCase() === emailPrefix) ||
         (m.membershipNo && m.membershipNo.toLowerCase() === emailPrefix) ||
+        (m.mobile && m.mobile.replace(/\D/g, '') === emailPrefix.replace(/\D/g, '')) ||
         m.id === firebaseUser.uid ||
         m.userId === firebaseUser.uid
     );
@@ -716,38 +766,9 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setAppUserAccount(memberAccount);
       setCurrentRole('Member');
       setActiveMemberIdState(matchingMember.id);
+      localStorage.setItem('gym_app_user_account', JSON.stringify(memberAccount));
       const isExpired = matchingMember.status === 'Expired' || new Date(matchingMember.expiryDate || matchingMember.endDate) < new Date();
       setSubscriptionStatus(isExpired ? 'expired' : 'active');
-      return;
-    }
-
-    // 4. Check matching employee
-    const matchingEmployee = employees.find(e => e.email?.toLowerCase() === rawEmail || (e as any).mobile === emailPrefix);
-    if (matchingEmployee) {
-      const empAccount: AppUser = {
-        id: firebaseUser.uid,
-        username: emailPrefix.toUpperCase(),
-        email: matchingEmployee.email || rawEmail,
-        role: matchingEmployee.role,
-        linkedId: matchingEmployee.id,
-        linkedName: matchingEmployee.name,
-        branchId: matchingEmployee.branchId || branches[0]?.id || 'all',
-        createdAt: matchingEmployee.joiningDate || new Date().toISOString(),
-        createdByAdminId: 'system',
-        isActive: true,
-        permissions: {
-          canViewDashboard: true,
-          canEditWorkouts: matchingEmployee.role === 'Trainer',
-          canEditDiets: matchingEmployee.role === 'Dietitian',
-          canViewMembers: true,
-          canManageFinance: matchingEmployee.role === 'Accountant' || matchingEmployee.role === 'Manager',
-          canAccessAdmin: matchingEmployee.role === 'Manager',
-        }
-      };
-      setAppUserAccount(empAccount);
-      setCurrentRole(matchingEmployee.role);
-      setSelectedBranchId(matchingEmployee.branchId || branches[0]?.id || 'all');
-      setSubscriptionStatus('active');
       return;
     }
 

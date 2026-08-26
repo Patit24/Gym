@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useGym } from '../../context/GymContext';
-import { Member, GoalType, BranchId, AuditLog } from '../../types/gym';
+import { Member, GoalType, BranchId, AuditLog, Employee } from '../../types/gym';
 
 type Gender = 'Male' | 'Female' | 'Other';
 import { MobileAppHeader } from './MobileAppHeader';
@@ -45,10 +45,7 @@ import {
   Eye,
   EyeOff,
   RefreshCw,
-  Lock
-} from 'lucide-react';
-
-import {
+  Lock,
   Building2
 } from 'lucide-react';
 
@@ -58,6 +55,8 @@ type OwnerScreen =
   | 'finance'
   | 'attendance'
   | 'more'
+  | 'trainers'
+  | 'trainer-profile'
   | 'add-member'
   | 'member-profile'
   | 'add-trainer'
@@ -81,6 +80,7 @@ export const MobileOwnerApp: React.FC = () => {
     expenses,
     attendance,
     auditLogs,
+    appUsers,
     addExpense,
     provisionMemberWithAccount,
     provisionTrainerWithAccount,
@@ -179,7 +179,44 @@ export const MobileOwnerApp: React.FC = () => {
     capacity: 100,
     manager: 'Admin'
   };
-  const trainers = (employees || []).filter((e) => e && (e.role === 'Trainer' || e.role === 'Dietitian'));
+
+  // Trainer Roster & Profile States
+  const [selectedTrainer, setSelectedTrainer] = useState<Employee | null>(null);
+  const [searchTrainer, setSearchTrainer] = useState('');
+  const [trainerRoleFilter, setTrainerRoleFilter] = useState<'all' | 'Trainer' | 'Dietitian'>('all');
+  const [showTrainerPasswordMap, setShowTrainerPasswordMap] = useState<Record<string, boolean>>({});
+
+  // Comprehensive Trainers & Coaches list
+  const trainers = useMemo(() => {
+    const fromEmp = (employees || []).filter((e) => e && (e.role === 'Trainer' || e.role === 'Dietitian'));
+    const trainerUserLinkedIds = new Set(fromEmp.map(e => e.id));
+    
+    // Also include any appUsers with Trainer or Dietitian role who might not be in employees collection
+    const fromUsers: Employee[] = (appUsers || [])
+      .filter(u => (u.role === 'Trainer' || u.role === 'Dietitian') && !trainerUserLinkedIds.has(u.linkedId || u.id))
+      .map(u => ({
+        id: u.linkedId || u.id,
+        name: u.linkedName || u.username,
+        role: u.role as 'Trainer' | 'Dietitian',
+        email: u.email || `${u.username.toLowerCase()}@smartgym.com`,
+        phone: '+91 98765 00000',
+        mobile: '+91 98765 00000',
+        branchId: (u.branchId as BranchId) || 'branch-1',
+        specialization: u.role === 'Dietitian' ? 'Sports Nutrition & Diets' : 'Personal Training & Strength',
+        baseSalary: 35000,
+        ptCommissionRate: 20,
+        ptSessionsCompleted: 0,
+        attendanceDays: 26,
+        joiningDate: u.createdAt ? u.createdAt.split('T')[0] : new Date().toISOString().split('T')[0],
+        shift: 'Morning (06:00 - 14:00)',
+        photoUrl: 'https://images.unsplash.com/photo-1568602471122-7832951cc4c5?w=400&fit=crop&q=80',
+        username: u.username,
+        tempPassword: u.tempPassword
+      }));
+
+    return [...fromEmp, ...fromUsers];
+  }, [employees, appUsers, members]);
+
   const unreadNotifs = (notifications || []).filter((n) => n && !n.read);
 
   // Financial Calculations
@@ -446,6 +483,8 @@ export const MobileOwnerApp: React.FC = () => {
     'add-member',
     'member-profile',
     'add-trainer',
+    'trainers',
+    'trainer-profile',
     'add-expense',
     'broadcast',
     'audit-logs',
@@ -476,6 +515,8 @@ export const MobileOwnerApp: React.FC = () => {
         onSignOut={signOutApp}
         backAction={isSubPage ? goBack : undefined}
         backTitle={
+          currentScreen === 'trainers' ? 'Coaches Roster' :
+          currentScreen === 'trainer-profile' ? 'Coach Profile' :
           currentScreen === 'add-member' ? 'Add Member' :
           currentScreen === 'member-profile' ? 'Member Profile' :
           currentScreen === 'add-trainer' ? 'Add Coach' :
@@ -587,7 +628,7 @@ export const MobileOwnerApp: React.FC = () => {
               </div>
 
               <div
-                onClick={() => navigateTo('more')}
+                onClick={() => navigateTo('trainers')}
                 className="bg-[#101422] hover:bg-[#151A2E] p-3.5 rounded-2xl border border-white/10 text-center cursor-pointer transition-all active:scale-95 shadow-md"
               >
                 <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Trainers</div>
@@ -942,6 +983,20 @@ export const MobileOwnerApp: React.FC = () => {
                   <div>
                     <span className="text-xs font-bold text-white block">+ Add New Gym Branch</span>
                     <span className="text-[10px] text-slate-400">Expand franchise network & multi-branch P&L</span>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-500" />
+              </button>
+
+              <button
+                onClick={() => navigateTo('trainers')}
+                className="w-full p-4 flex items-center justify-between text-left hover:bg-[#151A2E] active:bg-[#1B2238] transition-all"
+              >
+                <div className="flex items-center gap-3">
+                  <Award className="w-5 h-5 text-purple-400" />
+                  <div>
+                    <span className="text-xs font-bold text-white block">Coaches & Trainers Roster ({trainers.length})</span>
+                    <span className="text-[10px] text-slate-400">View roster, credentials, assigned clients & passwords</span>
                   </div>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-500" />
@@ -1957,6 +2012,320 @@ export const MobileOwnerApp: React.FC = () => {
           </div>
         )}
 
+        {/* ═══════════════════════════════════════════════════════════
+            SUBPAGE 10: TRAINERS & COACHES ROSTER
+        ═══════════════════════════════════════════════════════════ */}
+        {currentScreen === 'trainers' && (
+          <div className="space-y-4 animate-in fade-in duration-200">
+            {/* Header & Quick Action */}
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-black text-white flex items-center gap-2">
+                  <Award className="w-5 h-5 text-purple-400" />
+                  <span>Coaches & Trainers Roster</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {trainers.length} Active PT coaches & nutritionists
+                </p>
+              </div>
+
+              <button
+                onClick={() => navigateTo('add-trainer')}
+                className="px-3.5 py-2 rounded-2xl bg-purple-500 hover:bg-purple-600 active:scale-95 text-white font-black text-xs flex items-center gap-1.5 shadow-lg shadow-purple-500/25 transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Coach</span>
+              </button>
+            </div>
+
+            {/* Search and Role Filter */}
+            <div className="space-y-2">
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search coach by name, ID, phone..."
+                  value={searchTrainer}
+                  onChange={(e) => setSearchTrainer(e.target.value)}
+                  className="w-full bg-[#101422] border border-white/10 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500/50"
+                />
+              </div>
+
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                {[
+                  { id: 'all', label: `All Coaches (${trainers.length})` },
+                  { id: 'Trainer', label: `Trainers (${trainers.filter(t => t.role === 'Trainer').length})` },
+                  { id: 'Dietitian', label: `Dietitians (${trainers.filter(t => t.role === 'Dietitian').length})` }
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setTrainerRoleFilter(tab.id as any)}
+                    className={`px-3 py-1.5 rounded-xl text-[11px] font-bold whitespace-nowrap transition-all ${
+                      trainerRoleFilter === tab.id
+                        ? 'bg-purple-500 text-white shadow-md'
+                        : 'bg-[#101422] text-slate-400 hover:text-white border border-white/5'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Trainers List */}
+            <div className="space-y-2.5">
+              {trainers
+                .filter((t) => {
+                  if (trainerRoleFilter !== 'all' && t.role !== trainerRoleFilter) return false;
+                  if (!searchTrainer) return true;
+                  const q = searchTrainer.toLowerCase();
+                  return (
+                    (t.name && t.name.toLowerCase().includes(q)) ||
+                    (t.id && t.id.toLowerCase().includes(q)) ||
+                    (t.specialization && t.specialization.toLowerCase().includes(q)) ||
+                    (t.phone && t.phone.toLowerCase().includes(q)) ||
+                    ((t as any).username && (t as any).username.toLowerCase().includes(q))
+                  );
+                })
+                .map((trainer) => {
+                  const assignedCount = members.filter(m => m.assignedTrainerId === trainer.id || m.assignedDietitianId === trainer.id).length;
+                  const trainerUser = (appUsers || []).find(u => u.linkedId === trainer.id || u.id === trainer.id);
+                  const displayUsername = (trainer as any).username || trainerUser?.username || trainer.email?.split('@')[0] || trainer.id;
+
+                  return (
+                    <div
+                      key={trainer.id}
+                      onClick={() => {
+                        setSelectedTrainer(trainer);
+                        navigateTo('trainer-profile');
+                      }}
+                      className="p-3.5 bg-[#101422] hover:bg-[#151A2E] active:scale-[0.99] rounded-2xl border border-white/10 flex items-center justify-between gap-3 cursor-pointer transition-all shadow-sm group"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <img
+                          src={trainer.photoUrl || 'https://images.unsplash.com/photo-1568602471122-7832951cc4c5?w=400&fit=crop&q=80'}
+                          alt={trainer.name}
+                          className="w-12 h-12 rounded-2xl object-cover border-2 border-purple-500/40 shrink-0 group-hover:scale-105 transition-transform"
+                        />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-xs font-black text-white truncate">{trainer.name}</h4>
+                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 shrink-0">
+                              {trainer.role}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-slate-400 truncate mt-0.5">
+                            {trainer.specialization || 'Strength & Conditioning'} • ID: {trainer.id}
+                          </p>
+                          <div className="flex items-center gap-2 mt-1 text-[9px] font-mono text-purple-300">
+                            <span>User: {displayUsername}</span>
+                            <span>•</span>
+                            <span className="text-emerald-400 font-bold">{trainer.shift || 'Morning'}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0 space-y-1">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#4F7CFF]/15 text-[#4F7CFF] border border-[#4F7CFF]/30 block">
+                          {assignedCount} Trainees
+                        </span>
+                        <span className="text-[9px] text-slate-400 block font-semibold">
+                          {(trainer as any).status || 'Active'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+
+              {trainers.length === 0 && (
+                <div className="p-8 rounded-3xl bg-[#101422] border border-white/10 text-center space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-purple-500/20 text-purple-400 flex items-center justify-center mx-auto">
+                    <Award className="w-6 h-6" />
+                  </div>
+                  <h4 className="text-sm font-black text-white">No Coaches Found</h4>
+                  <p className="text-xs text-slate-400 max-w-xs mx-auto">
+                    Add certified personal trainers and dietitians to manage workout splits and diet plans.
+                  </p>
+                  <button
+                    onClick={() => navigateTo('add-trainer')}
+                    className="px-4 py-2 rounded-xl bg-purple-500 text-white font-black text-xs inline-flex items-center gap-1.5 shadow-lg shadow-purple-500/25"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Onboard First Coach</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════
+            SUBPAGE 11: TRAINER PROFILE & CREDENTIAL MANAGEMENT
+        ═══════════════════════════════════════════════════════════ */}
+        {currentScreen === 'trainer-profile' && selectedTrainer && (() => {
+          const trainerUser = (appUsers || []).find(u => u.linkedId === selectedTrainer.id || u.id === selectedTrainer.id);
+          const trainerUsername = (selectedTrainer as any).username || trainerUser?.username || selectedTrainer.email?.split('@')[0] || selectedTrainer.id;
+          const trainerTempPassword = (selectedTrainer as any).tempPassword || trainerUser?.tempPassword || trainerUser?.password || 'Fit#73192';
+          const assignedMembers = members.filter(m => m.assignedTrainerId === selectedTrainer.id || m.assignedDietitianId === selectedTrainer.id);
+          const isPassVisible = showTrainerPasswordMap[selectedTrainer.id];
+          const trainerPhone = selectedTrainer.phone || selectedTrainer.mobile || '+91 98765 00000';
+          const trainerSalary = selectedTrainer.baseSalary || (selectedTrainer as any).salary || 35000;
+
+          return (
+            <div className="space-y-4 animate-in fade-in duration-200">
+              {/* Profile Card */}
+              <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 shadow-xl space-y-3">
+                <div className="flex items-center gap-3.5">
+                  <img
+                    src={selectedTrainer.photoUrl || 'https://images.unsplash.com/photo-1568602471122-7832951cc4c5?w=400&fit=crop&q=80'}
+                    alt={selectedTrainer.name}
+                    className="w-16 h-16 rounded-2xl object-cover border-2 border-purple-500 shadow-md shrink-0"
+                  />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-black text-white truncate">{selectedTrainer.name}</h3>
+                      <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 shrink-0">
+                        {selectedTrainer.role}
+                      </span>
+                    </div>
+                    <p className="text-xs text-purple-300 font-semibold truncate mt-0.5">
+                      {selectedTrainer.specialization || 'Strength & Conditioning'}
+                    </p>
+                    <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-1">
+                      <span>ID: {selectedTrainer.id}</span>
+                      <span>•</span>
+                      <span>Shift: {selectedTrainer.shift || 'Morning'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Details Grid */}
+                <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-white/5">
+                  <div className="p-2.5 bg-[#07090E] rounded-xl border border-white/5">
+                    <span className="text-[10px] text-slate-400 block font-medium">Mobile Phone:</span>
+                    <strong className="text-white font-bold">{trainerPhone}</strong>
+                  </div>
+                  <div className="p-2.5 bg-[#07090E] rounded-xl border border-white/5">
+                    <span className="text-[10px] text-slate-400 block font-medium">Monthly Salary:</span>
+                    <strong className="text-emerald-400 font-bold">₹{trainerSalary.toLocaleString('en-IN')}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Login Credentials Box */}
+              <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 shadow-xl space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                  <span className="text-xs font-black text-white flex items-center gap-1.5">
+                    <KeyRound className="w-4 h-4 text-purple-400" />
+                    <span>Coach Portal Login Credentials</span>
+                  </span>
+                  <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                    Active Login
+                  </span>
+                </div>
+
+                {/* Username Row */}
+                <div className="p-3 bg-[#07090E] rounded-2xl border border-white/10 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Username</span>
+                    <strong className="text-xs font-mono text-white font-black">{trainerUsername}</strong>
+                  </div>
+                  <button
+                    onClick={() => copyToClipboard(trainerUsername, 'CoachUsername')}
+                    className="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-slate-300 flex items-center gap-1.5"
+                  >
+                    {copiedField === 'CoachUsername' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedField === 'CoachUsername' ? 'Copied' : 'Copy'}</span>
+                  </button>
+                </div>
+
+                {/* Password Row */}
+                <div className="p-3 bg-[#07090E] rounded-2xl border border-white/10 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Password</span>
+                    <strong className="text-xs font-mono text-amber-400 font-black">
+                      {isPassVisible ? trainerTempPassword : '••••••••••••'}
+                    </strong>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => setShowTrainerPasswordMap(prev => ({ ...prev, [selectedTrainer.id]: !prev[selectedTrainer.id] }))}
+                      className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10"
+                      title={isPassVisible ? 'Hide Password' : 'Show Password'}
+                    >
+                      {isPassVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                    <button
+                      onClick={() => copyToClipboard(trainerTempPassword, 'CoachPassword')}
+                      className="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-slate-300 flex items-center gap-1"
+                    >
+                      {copiedField === 'CoachPassword' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>Copy</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* WhatsApp Action */}
+                <button
+                  onClick={() => {
+                    const phoneClean = trainerPhone.replace(/\D/g, '');
+                    const normPhone = phoneClean.length === 10 ? `91${phoneClean}` : phoneClean;
+                    const text = encodeURIComponent(
+                      `Welcome to Smart Gym, Coach ${selectedTrainer.name}!\n\nYour Trainer Portal Login:\nUsername: ${trainerUsername}\nTemporary Password: ${trainerTempPassword}\n\nLog in at: https://smartgym.app/login`
+                    );
+                    window.open(`https://wa.me/${normPhone}?text=${text}`, '_blank');
+                  }}
+                  className="w-full py-2.5 rounded-2xl bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-black font-black text-xs flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  <span>Send Credentials via WhatsApp</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* Assigned Trainees */}
+              <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 shadow-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black text-white uppercase tracking-wider">
+                    Assigned Trainees ({assignedMembers.length})
+                  </h4>
+                  <span className="text-[10px] text-purple-400 font-bold">Active Roster</span>
+                </div>
+
+                <div className="space-y-2">
+                  {assignedMembers.map(m => (
+                    <div
+                      key={m.id}
+                      onClick={() => {
+                        setSelectedMember(m);
+                        navigateTo('member-profile');
+                      }}
+                      className="p-2.5 bg-[#07090E] hover:bg-white/5 rounded-xl border border-white/5 flex items-center justify-between cursor-pointer transition-all"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <img src={m.photoUrl} alt={m.name} className="w-8 h-8 rounded-xl object-cover border border-[#4F7CFF]/40" />
+                        <div>
+                          <div className="text-xs font-black text-white">{m.name}</div>
+                          <div className="text-[9px] text-slate-400">{m.membershipNo} • {m.goal}</div>
+                        </div>
+                      </div>
+                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                        {m.status}
+                      </span>
+                    </div>
+                  ))}
+
+                  {assignedMembers.length === 0 && (
+                    <p className="text-xs text-slate-500 text-center py-2">
+                      No members assigned to this coach yet.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
       </main>
 
       {/* ── 3. PASSWORD RESET CONFIRMATION MODAL ── */}
@@ -2024,7 +2393,7 @@ export const MobileOwnerApp: React.FC = () => {
         activeTab={
           ['add-member', 'member-profile', 'member-created-success'].includes(currentScreen) ? 'members' :
           currentScreen === 'add-expense' ? 'finance' :
-          ['broadcast', 'audit-logs', 'add-trainer'].includes(currentScreen) ? 'more' :
+          ['broadcast', 'audit-logs', 'add-trainer', 'trainers', 'trainer-profile'].includes(currentScreen) ? 'more' :
           currentScreen
         }
         onSelectTab={(tabId) => navigateTo(tabId as OwnerScreen)}

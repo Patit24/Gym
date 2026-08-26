@@ -37,6 +37,7 @@ export const AppLogin: React.FC = () => {
     appUserAccount, 
     appUsers, 
     members,
+    employees,
     isAuthLoading, 
     addMember, 
     plans, 
@@ -55,13 +56,14 @@ export const AppLogin: React.FC = () => {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
-  const [pendingUserId, setPendingUserId] = useState<string>('');
-
+  const [pendingUserId, setPendingUserId] = useState('');
+  
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
-  // Auto-route based on authenticated role
+  // Auto-redirect already authenticated users
   useEffect(() => {
     if (!isAuthLoading && firebaseUser && appUserAccount) {
       if (appUserAccount.isActive === false) {
@@ -80,10 +82,10 @@ export const AppLogin: React.FC = () => {
       localStorage.setItem('gym_auth_context', 'app');
 
       // STRICT 3-ROLE ROUTING:
-      if (appUserAccount.role === 'Member') {
-        navigate('/app/user/dashboard', { replace: true });
-      } else if (appUserAccount.role === 'Trainer' || appUserAccount.role === 'Dietitian') {
+      if (appUserAccount.role === 'Trainer' || appUserAccount.role === 'Dietitian') {
         navigate('/app/trainer/dashboard', { replace: true });
+      } else if (appUserAccount.role === 'Member') {
+        navigate('/app/user/dashboard', { replace: true });
       } else {
         navigate('/app/admin/dashboard', { replace: true });
       }
@@ -115,7 +117,7 @@ export const AppLogin: React.FC = () => {
       cleanInput.toLowerCase() === 'admin@smartgym.com';
 
     // 2. Look up user by username (e.g. MEM00125, TRN00001), email, or linked ID
-    let matchedUser = appUsers.find(
+    let matchedUser = (appUsers || []).find(
       (u) =>
         u.username.toLowerCase() === cleanInput.toLowerCase() ||
         (u.email && u.email.toLowerCase() === cleanInput.toLowerCase()) ||
@@ -128,13 +130,66 @@ export const AppLogin: React.FC = () => {
         u.id.toLowerCase() === cleanInput.toLowerCase()
     );
 
-    const matchedMember = members.find(
+    const matchedEmployee = (employees || []).find(
+      (emp) =>
+        ((emp as any).username && (emp as any).username.toLowerCase() === cleanInput.toLowerCase()) ||
+        (emp.id && emp.id.toLowerCase() === cleanInput.toLowerCase()) ||
+        (emp.email && emp.email.toLowerCase() === cleanInput.toLowerCase()) ||
+        (emp.phone && emp.phone.replace(/\D/g, '') === cleanInput.replace(/\D/g, '')) ||
+        (emp.name && emp.name.toLowerCase() === cleanInput.toLowerCase())
+    );
+
+    const matchedMember = (members || []).find(
       (m) =>
         (m.username && m.username.toLowerCase() === cleanInput.toLowerCase()) ||
         (m.membershipNo && m.membershipNo.toLowerCase() === cleanInput.toLowerCase()) ||
         (m.email && m.email.toLowerCase() === cleanInput.toLowerCase()) ||
         (m.mobile && m.mobile.replace(/\D/g, '') === cleanInput.replace(/\D/g, ''))
     );
+
+    // Determine the Firebase Auth compatible email
+    let authEmail = '';
+    if (isMasterAdminInput) {
+      authEmail = 'masteradmin@smartgym.com';
+    } else if (cleanInput.includes('@')) {
+      authEmail = cleanInput.toLowerCase();
+    } else if (matchedUser?.email && matchedUser.email.includes('@')) {
+      authEmail = matchedUser.email.toLowerCase();
+    } else if (matchedEmployee?.email && matchedEmployee.email.includes('@')) {
+      authEmail = matchedEmployee.email.toLowerCase();
+    } else if (matchedMember?.email && matchedMember.email.includes('@')) {
+      authEmail = matchedMember.email.toLowerCase();
+    } else {
+      const uname = (matchedUser?.username || (matchedEmployee as any)?.username || matchedMember?.username || cleanInput).toLowerCase().replace(/[^a-z0-9]/g, '');
+      authEmail = `${uname}@smartgym.com`;
+    }
+
+    if (!matchedUser && matchedEmployee) {
+      const isTrainer = matchedEmployee.role === 'Trainer' || matchedEmployee.role === 'Dietitian';
+      matchedUser = {
+        id: matchedEmployee.id,
+        username: (matchedEmployee as any).username || cleanInput,
+        email: matchedEmployee.email || authEmail,
+        password: (matchedEmployee as any).tempPassword,
+        tempPassword: (matchedEmployee as any).tempPassword,
+        role: matchedEmployee.role as any,
+        linkedId: matchedEmployee.id,
+        linkedName: matchedEmployee.name,
+        branchId: matchedEmployee.branchId || 'branch-1',
+        createdAt: matchedEmployee.joiningDate || new Date().toISOString(),
+        createdByAdminId: 'system',
+        isActive: (matchedEmployee as any).status !== 'Inactive',
+        mustChangePassword: false,
+        permissions: {
+          canViewDashboard: true,
+          canEditWorkouts: isTrainer,
+          canEditDiets: isTrainer,
+          canViewMembers: true,
+          canManageFinance: matchedEmployee.role === 'Manager' || matchedEmployee.role === 'Accountant',
+          canAccessAdmin: matchedEmployee.role === 'Manager' || matchedEmployee.role === 'Super Admin' || matchedEmployee.role === 'Owner',
+        }
+      };
+    }
 
     // Account suspension check
     if (matchedUser && matchedUser.isActive === false) {
@@ -146,21 +201,6 @@ export const AppLogin: React.FC = () => {
       setError('This membership is currently suspended. Please contact the front desk.');
       setIsLoading(false);
       return;
-    }
-
-    // Determine the Firebase Auth compatible email
-    let authEmail = '';
-    if (isMasterAdminInput) {
-      authEmail = 'masteradmin@smartgym.com';
-    } else if (cleanInput.includes('@')) {
-      authEmail = cleanInput.toLowerCase();
-    } else if (matchedUser?.email && matchedUser.email.includes('@')) {
-      authEmail = matchedUser.email.toLowerCase();
-    } else if (matchedMember?.email && matchedMember.email.includes('@')) {
-      authEmail = matchedMember.email.toLowerCase();
-    } else {
-      const uname = (matchedUser?.username || matchedMember?.username || cleanInput).toLowerCase().replace(/[^a-z0-9]/g, '');
-      authEmail = `${uname}@smartgym.com`;
     }
 
     // MASTER ADMIN DIRECT AUTHENTICATION PATH
@@ -227,6 +267,7 @@ export const AppLogin: React.FC = () => {
     } catch (fbErr: any) {
       const isMatchingLocalPassword =
         (matchedUser && (matchedUser.password === cleanPass || matchedUser.tempPassword === cleanPass)) ||
+        (matchedEmployee && ((matchedEmployee as any).tempPassword === cleanPass)) ||
         (matchedMember && (matchedMember.tempPassword === cleanPass));
 
       if (isMatchingLocalPassword) {
@@ -241,6 +282,29 @@ export const AppLogin: React.FC = () => {
         }
         if (matchedUser) {
           setLocalSessionUser(matchedUser);
+        } else if (matchedEmployee) {
+          const empAcc: AppUser = {
+            id: matchedEmployee.id,
+            username: (matchedEmployee as any).username || cleanInput,
+            email: matchedEmployee.email || authEmail,
+            role: matchedEmployee.role,
+            linkedId: matchedEmployee.id,
+            linkedName: matchedEmployee.name,
+            branchId: matchedEmployee.branchId || 'branch-1',
+            createdAt: matchedEmployee.joiningDate || new Date().toISOString(),
+            createdByAdminId: 'system',
+            isActive: true,
+            mustChangePassword: false,
+            permissions: {
+              canViewDashboard: true,
+              canEditWorkouts: matchedEmployee.role === 'Trainer',
+              canEditDiets: matchedEmployee.role === 'Dietitian',
+              canViewMembers: true,
+              canManageFinance: matchedEmployee.role === 'Manager',
+              canAccessAdmin: matchedEmployee.role === 'Manager',
+            }
+          };
+          setLocalSessionUser(empAcc);
         } else if (matchedMember) {
           const mAcc: AppUser = {
             id: matchedMember.userId || matchedMember.id,
@@ -269,7 +333,7 @@ export const AppLogin: React.FC = () => {
         if (fbErr.code === 'auth/wrong-password' || fbErr.code === 'auth/invalid-credential') {
           setError('Incorrect password. Please verify your temporary or personal password.');
         } else if (fbErr.code === 'auth/user-not-found') {
-          setError('User not found. Please check your Username (e.g. MASTERADMIN or MEM00001) or Email.');
+          setError('User not found. Please check your Username (e.g. MASTERADMIN, trainer username, or member ID) or Email.');
         } else if (fbErr.code === 'auth/too-many-requests') {
           setError('Access temporarily disabled due to many failed attempts. Please try again later.');
         } else {
@@ -292,11 +356,11 @@ export const AppLogin: React.FC = () => {
     }
 
     // Route immediately based on user role
-    const finalRole = matchedUser ? matchedUser.role : (matchedMember ? 'Member' : 'Member');
-    if (finalRole === 'Member') {
-      navigate('/app/user/dashboard', { replace: true });
-    } else if (finalRole === 'Trainer' || finalRole === 'Dietitian') {
+    const finalRole = matchedUser ? matchedUser.role : (matchedEmployee ? matchedEmployee.role : (matchedMember ? 'Member' : 'Member'));
+    if (finalRole === 'Trainer' || finalRole === 'Dietitian') {
       navigate('/app/trainer/dashboard', { replace: true });
+    } else if (finalRole === 'Member') {
+      navigate('/app/user/dashboard', { replace: true });
     } else {
       navigate('/app/admin/dashboard', { replace: true });
     }
