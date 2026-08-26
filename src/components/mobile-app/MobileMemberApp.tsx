@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useGym } from '../../context/GymContext';
 import { MobileAppHeader } from './MobileAppHeader';
 import { MobileBottomNav, MobileNavTab } from './MobileBottomNav';
@@ -42,6 +42,8 @@ type MemberScreen = 'home' | 'workout' | 'diet' | 'progress' | 'more' | 'ai' | '
 export const MobileMemberApp: React.FC = () => {
   const { 
     activeMember, 
+    activeMemberId,
+    setActiveMemberId,
     workout, 
     diet, 
     signOutApp, 
@@ -55,17 +57,24 @@ export const MobileMemberApp: React.FC = () => {
   const [showQRModal, setShowQRModal] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
 
+  useEffect(() => {
+    if (activeMember?.id && activeMember.id !== activeMemberId) {
+      setActiveMemberId(activeMember.id);
+    }
+  }, [activeMember?.id, activeMemberId, setActiveMemberId]);
+
   const unreadNotifs = notifications.filter((n) => !n.read);
 
-  // Dynamic Day & Workout Computation
+  // Dynamic Day & Workout Computation across all assigned weekly plans
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const currentDayName = dayNames[new Date().getDay()];
-  const currentSplit = workout?.weeklyPlans?.[0]?.splits?.find(
-    (s) => s.day.toLowerCase() === currentDayName.toLowerCase()
-  ) || workout?.weeklyPlans?.[0]?.splits?.[0];
+  const allSplits = workout?.weeklyPlans?.flatMap((w) => w.splits || []) || [];
+  const currentSplit = allSplits.find(
+    (s) => s.day && s.day.toLowerCase() === currentDayName.toLowerCase()
+  ) || allSplits[0] || workout?.weeklyPlans?.[0]?.splits?.[0];
   const hasWorkout = Boolean(currentSplit && currentSplit.exercises && currentSplit.exercises.length > 0);
 
-  // Dynamic Diet & Macros Computation
+  // Dynamic Diet & Macros Computation across all assigned monthly plans
   const activeMonthlyDiet = diet?.monthlyPlans?.[0];
   const hasDiet = Boolean(activeMonthlyDiet && activeMonthlyDiet.targetCalories > 0);
   const targetCalories = activeMonthlyDiet?.targetCalories || 0;

@@ -68,7 +68,7 @@ import {
   INITIAL_APP_USERS
 } from '../data/initialData';
 import { db, auth } from '../firebase';
-import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, getDocs } from 'firebase/firestore';
+import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, getDocs, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged, User, signOut } from 'firebase/auth';
 
 interface GymContextType {
@@ -101,6 +101,7 @@ interface GymContextType {
   members: Member[];
   attendance: AttendanceRecord[];
   activeMember: Member;
+  activeMemberId: string;
   setActiveMemberId: (id: string) => void;
   workout: WorkoutPlan;
   diet: DietPlan;
@@ -262,7 +263,16 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [plans, setPlans] = useState<MembershipPlan[]>(INITIAL_PLANS);
   const [members, setMembers] = useState<Member[]>(INITIAL_MEMBERS);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>(INITIAL_ATTENDANCE);
-  const [activeMemberId, setActiveMemberIdState] = useState<string>('MEM-2026-001');
+  const [activeMemberId, setActiveMemberIdState] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('gym_app_user_account');
+      if (saved) {
+        const u = JSON.parse(saved);
+        if (u.role === 'Member' && u.linkedId) return u.linkedId;
+      }
+    } catch {}
+    return 'MEM-2026-001';
+  });
 
   const [workout, setWorkout] = useState<WorkoutPlan>(INITIAL_WORKOUT);
   const [diet, setDiet] = useState<DietPlan>(INITIAL_DIET);
@@ -910,6 +920,9 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSelectedBranchId(user.branchId || 'branch-1');
     setSubscriptionStatus('active');
     setAuthContext('app');
+    if (user.role === 'Member' && user.linkedId) {
+      setActiveMemberIdState(user.linkedId);
+    }
   };
 
   const signOutApp = async () => {
@@ -1763,18 +1776,66 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     weekTitle: string,
     splits: DailyWorkoutSplit[]
   ) => {
-    const newWeek: WeeklyWorkoutPlan = {
-      weekNumber,
-      weekTitle,
-      splits,
-    };
+    if (!targetMemberId) return;
 
-    const currentMemberWeeks = (workout && workout.memberId === targetMemberId) ? (workout.weeklyPlans || []) : [];
-    const existingWeeks = currentMemberWeeks.filter((w) => w.weekNumber !== weekNumber);
+    // 1. Fetch current existing workout for targetMemberId from Firestore or local state
+    let existingWeeklyPlans: WeeklyWorkoutPlan[] = [];
+    try {
+      const docSnap = await getDoc(doc(db, 'workouts', targetMemberId));
+      if (docSnap.exists()) {
+        const data = docSnap.data() as WorkoutPlan;
+        if (data && Array.isArray(data.weeklyPlans)) {
+          existingWeeklyPlans = data.weeklyPlans;
+        }
+      } else if (workout && workout.memberId === targetMemberId && Array.isArray(workout.weeklyPlans)) {
+        existingWeeklyPlans = workout.weeklyPlans;
+      }
+    } catch {
+      if (workout && workout.memberId === targetMemberId && Array.isArray(workout.weeklyPlans)) {
+        existingWeeklyPlans = workout.weeklyPlans;
+      }
+    }
+
+    // 2. Find if target weekNumber already exists
+    const existingWeekIndex = existingWeeklyPlans.findIndex((w) => w.weekNumber === weekNumber);
+
+    let updatedWeeklyPlans: WeeklyWorkoutPlan[];
+    if (existingWeekIndex >= 0) {
+      const targetWeek = existingWeeklyPlans[existingWeekIndex];
+      const existingSplits = targetWeek.splits || [];
+
+      // Merge new splits into existing splits (replace matching day, append new day)
+      let mergedSplits = [...existingSplits];
+      for (const newSplit of splits) {
+        const splitIdx = mergedSplits.findIndex(s => s.day.toLowerCase() === newSplit.day.toLowerCase());
+        if (splitIdx >= 0) {
+          mergedSplits[splitIdx] = newSplit;
+        } else {
+          mergedSplits.push(newSplit);
+        }
+      }
+
+      const updatedWeek: WeeklyWorkoutPlan = {
+        ...targetWeek,
+        weekTitle: weekTitle || targetWeek.weekTitle,
+        splits: mergedSplits,
+      };
+
+      updatedWeeklyPlans = [...existingWeeklyPlans];
+      updatedWeeklyPlans[existingWeekIndex] = updatedWeek;
+    } else {
+      const newWeek: WeeklyWorkoutPlan = {
+        weekNumber,
+        weekTitle: weekTitle || `Week ${weekNumber}: Custom Program`,
+        splits,
+      };
+      updatedWeeklyPlans = [...existingWeeklyPlans, newWeek];
+    }
+
     const updatedWorkout: WorkoutPlan = {
       id: `wpt-${targetMemberId}`,
       memberId: targetMemberId,
-      weeklyPlans: [...existingWeeks, newWeek].sort((a, b) => a.weekNumber - b.weekNumber),
+      weeklyPlans: updatedWeeklyPlans.sort((a, b) => a.weekNumber - b.weekNumber),
       updatedAt: new Date().toISOString().split('T')[0],
     };
 
@@ -1785,13 +1846,47 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const addMonthlyDiet = async (targetMemberId: string, monthPlan: MonthlyDietPlan) => {
-    const currentMemberMonths = (diet && diet.memberId === targetMemberId) ? (diet.monthlyPlans || []) : [];
-    const existingMonths = currentMemberMonths.filter((m) => m.monthNumber !== monthPlan.monthNumber);
+    if (!targetMemberId) return;
+
+    // 1. Fetch current existing diet for targetMemberId from Firestore or local state
+    let existingMonthlyPlans: MonthlyDietPlan[] = [];
+    let currentWater = 2.5;
+    try {
+      const docSnap = await getDoc(doc(db, 'diets', targetMemberId));
+      if (docSnap.exists()) {
+        const data = docSnap.data() as DietPlan;
+        if (data && Array.isArray(data.monthlyPlans)) {
+          existingMonthlyPlans = data.monthlyPlans;
+        }
+        if (data && typeof data.waterCurrentLiters === 'number') {
+          currentWater = data.waterCurrentLiters;
+        }
+      } else if (diet && diet.memberId === targetMemberId && Array.isArray(diet.monthlyPlans)) {
+        existingMonthlyPlans = diet.monthlyPlans;
+        currentWater = diet.waterCurrentLiters || 2.5;
+      }
+    } catch {
+      if (diet && diet.memberId === targetMemberId && Array.isArray(diet.monthlyPlans)) {
+        existingMonthlyPlans = diet.monthlyPlans;
+        currentWater = diet.waterCurrentLiters || 2.5;
+      }
+    }
+
+    // 2. Replace or insert monthPlan
+    const existingMonthIndex = existingMonthlyPlans.findIndex((m) => m.monthNumber === monthPlan.monthNumber);
+    let updatedMonthlyPlans: MonthlyDietPlan[];
+    if (existingMonthIndex >= 0) {
+      updatedMonthlyPlans = [...existingMonthlyPlans];
+      updatedMonthlyPlans[existingMonthIndex] = monthPlan;
+    } else {
+      updatedMonthlyPlans = [...existingMonthlyPlans, monthPlan];
+    }
+
     const updatedDiet: DietPlan = {
       id: `dpt-${targetMemberId}`,
       memberId: targetMemberId,
-      waterCurrentLiters: (diet && diet.memberId === targetMemberId ? diet.waterCurrentLiters : 2.5) || 2.5,
-      monthlyPlans: [...existingMonths, monthPlan].sort((a, b) => a.monthNumber - b.monthNumber),
+      waterCurrentLiters: currentWater,
+      monthlyPlans: updatedMonthlyPlans.sort((a, b) => a.monthNumber - b.monthNumber),
     };
 
     if (activeMemberId === targetMemberId) {
@@ -2536,6 +2631,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         members,
         attendance,
         activeMember,
+        activeMemberId,
         setActiveMemberId,
         workout,
         diet,

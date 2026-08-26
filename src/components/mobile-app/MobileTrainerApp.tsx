@@ -71,10 +71,11 @@ export const MobileTrainerApp: React.FC = () => {
     (e) => e.id === appUserAccount?.linkedId || e.role === 'Trainer'
   ) || employees[0];
 
-  // Strictly filter members assigned to this trainer or within this branch
-  const myClients = members.filter(
-    (m) => m.assignedTrainerId === currentTrainer?.id || m.branchId === currentTrainer?.branchId
+  // Strictly filter members assigned to this trainer or within this branch, with full gym fallback
+  const assignedClients = members.filter(
+    (m) => m.assignedTrainerId === currentTrainer?.id || (m.branchId && m.branchId === currentTrainer?.branchId)
   );
+  const myClients = assignedClients.length > 0 ? assignedClients : members;
 
   const [currentScreen, setCurrentScreen] = useState<TrainerScreen>('home');
   const [previousScreen, setPreviousScreen] = useState<TrainerScreen>('home');
@@ -87,6 +88,12 @@ export const MobileTrainerApp: React.FC = () => {
 
   // Shared Target Member for Workout/Diet assignment
   const [targetMemberId, setTargetMemberId] = useState<string>(myClients[0]?.id || members[0]?.id || '');
+
+  React.useEffect(() => {
+    if (!targetMemberId && (myClients[0]?.id || members[0]?.id)) {
+      setTargetMemberId(myClients[0]?.id || members[0]?.id || '');
+    }
+  }, [myClients, members, targetMemberId]);
 
   // ════════════════════════════════════════════════════════════════
   // WORKOUT BUILDER STATE
