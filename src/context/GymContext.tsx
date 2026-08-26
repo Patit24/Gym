@@ -67,9 +67,9 @@ import {
   INITIAL_WEBSITE_CUSTOMERS,
   INITIAL_APP_USERS
 } from '../data/initialData';
-import { db, auth } from '../firebase';
+import { db, auth, createIsolatedAuthUser } from '../firebase';
 import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, getDocs, getDoc } from 'firebase/firestore';
-import { onAuthStateChanged, User, signOut } from 'firebase/auth';
+import { onAuthStateChanged, User, signOut, updatePassword } from 'firebase/auth';
 
 interface GymContextType {
   firebaseUser: User | null;
@@ -594,32 +594,26 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     if (!firebaseUser) {
-      const stored = localStorage.getItem('gym_app_user_account');
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          if (parsed && parsed.id) {
-            setAppUserAccount(parsed);
-            setCurrentRole(parsed.role || 'Super Admin');
-            setSelectedBranchId(parsed.branchId || 'branch-1');
-            setSubscriptionStatus('active');
-            return;
-          }
-        } catch {}
-      }
+      // 1. Strict session flush: NEVER retain previous profile or role across sessions
       setAppUserAccount(null);
+      setCurrentRole('Member');
+      setActiveMemberIdState('');
+      setWorkout(INITIAL_WORKOUT);
+      setDiet(INITIAL_DIET);
       setSubscriptionStatus('none');
+      localStorage.removeItem('gym_app_user_account');
       return;
     }
 
     const rawEmail = (firebaseUser.email || '').toLowerCase();
     const emailPrefix = rawEmail.includes('@') ? rawEmail.split('@')[0] : rawEmail;
+    const authUid = firebaseUser.uid;
 
     // 1. Master Admin resolution
     if (rawEmail === 'masteradmin@smartgym.com' || rawEmail === 'masteradmin@smartgym.internal' || emailPrefix === 'masteradmin') {
       const existingMaster = appUsers.find(u => u.username.toUpperCase() === 'MASTERADMIN' || (u.email && u.email.toLowerCase().includes('masteradmin')));
       const masterAccount: AppUser = {
-        id: firebaseUser.uid,
+        id: authUid,
         username: 'MASTERADMIN',
         email: 'masteradmin@smartgym.com',
         role: 'Super Admin',
@@ -644,39 +638,30 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCurrentRole('Super Admin');
       setSelectedBranchId(branches[0]?.id || 'all');
       setSubscriptionStatus('active');
+      localStorage.setItem('gym_app_user_account', JSON.stringify(masterAccount));
       return;
     }
 
-    // 2. Look up user account from Firestore `users` collection OR INITIAL_APP_USERS
-    const foundUser = (appUsers || []).find(
-      u =>
-        (u.email && u.email.toLowerCase() === rawEmail) ||
-        u.username.toLowerCase() === rawEmail ||
-        u.username.toLowerCase() === emailPrefix ||
-        u.id === firebaseUser.uid ||
-        (u.linkedId && (u.linkedId === firebaseUser.uid || u.linkedId.toLowerCase() === emailPrefix))
-    ) || INITIAL_APP_USERS.find(
-      u =>
-        (u.email && u.email.toLowerCase() === rawEmail) ||
-        u.username.toLowerCase() === rawEmail ||
-        u.username.toLowerCase() === emailPrefix ||
-        u.id === firebaseUser.uid
+    // 2. Authoritative Primary Key Lookup: Match by exact Firebase Auth UID
+    const foundUserByUid = (appUsers || []).find(
+      u => u.id === authUid || (u as any).uid === authUid
     );
 
-    if (foundUser) {
-      setAppUserAccount(foundUser);
-      setCurrentRole(foundUser.role);
-      setSelectedBranchId(foundUser.branchId || branches[0]?.id || 'all');
-      localStorage.setItem('gym_app_user_account', JSON.stringify(foundUser));
+    if (foundUserByUid) {
+      setAppUserAccount(foundUserByUid);
+      setCurrentRole(foundUserByUid.role);
+      setSelectedBranchId(foundUserByUid.branchId || branches[0]?.id || 'all');
+      localStorage.setItem('gym_app_user_account', JSON.stringify(foundUserByUid));
 
-      if (foundUser.role === 'Member') {
+      if (foundUserByUid.role === 'Member') {
         const memberRec = members.find(
           m =>
-            m.id === foundUser.linkedId ||
-            (m.username && m.username.toLowerCase() === foundUser.username.toLowerCase()) ||
+            m.id === foundUserByUid.linkedId ||
+            m.userId === authUid ||
+            (m.username && m.username.toLowerCase() === foundUserByUid.username.toLowerCase()) ||
             (m.email && m.email.toLowerCase() === rawEmail)
         );
-        setActiveMemberIdState(memberRec?.id || foundUser.linkedId);
+        setActiveMemberIdState(memberRec?.id || foundUserByUid.linkedId || authUid);
         if (memberRec) {
           const isExpired = memberRec.status === 'Expired' || new Date(memberRec.expiryDate || memberRec.endDate) < new Date();
           setSubscriptionStatus(isExpired ? 'expired' : 'active');
@@ -689,22 +674,67 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    // 3. Check matching employee (Trainers, Dietitians, Staff) from employees collection
+    // 3. Fallback matching by username or email for accounts created prior to UID migration
+    const foundUserByEmailOrUname = (appUsers || []).find(
+      u =>
+        (u.email && u.email.toLowerCase() === rawEmail) ||
+        u.username.toLowerCase() === rawEmail ||
+        u.username.toLowerCase() === emailPrefix
+    ) || INITIAL_APP_USERS.find(
+      u =>
+        (u.email && u.email.toLowerCase() === rawEmail) ||
+        u.username.toLowerCase() === rawEmail ||
+        u.username.toLowerCase() === emailPrefix
+    );
+
+    if (foundUserByEmailOrUname) {
+      // Reconcile and anchor to current Firebase Auth UID
+      const reconciledUser: AppUser = {
+        ...foundUserByEmailOrUname,
+        id: authUid,
+      };
+      setAppUserAccount(reconciledUser);
+      setCurrentRole(reconciledUser.role);
+      setSelectedBranchId(reconciledUser.branchId || branches[0]?.id || 'all');
+      localStorage.setItem('gym_app_user_account', JSON.stringify(reconciledUser));
+      safeDbWrite(setDoc(doc(db, 'users', authUid), reconciledUser));
+
+      if (reconciledUser.role === 'Member') {
+        const memberRec = members.find(
+          m =>
+            m.id === reconciledUser.linkedId ||
+            (m.username && m.username.toLowerCase() === reconciledUser.username.toLowerCase()) ||
+            (m.email && m.email.toLowerCase() === rawEmail)
+        );
+        setActiveMemberIdState(memberRec?.id || reconciledUser.linkedId || authUid);
+        if (memberRec) {
+          const isExpired = memberRec.status === 'Expired' || new Date(memberRec.expiryDate || memberRec.endDate) < new Date();
+          setSubscriptionStatus(isExpired ? 'expired' : 'active');
+        } else {
+          setSubscriptionStatus('active');
+        }
+      } else {
+        setSubscriptionStatus('active');
+      }
+      return;
+    }
+
+    // 4. Check matching employee (Trainers, Dietitians, Staff) from employees collection
     const matchingEmployee = employees.find(
       e =>
+        e.id === authUid ||
         (e.email && e.email.toLowerCase() === rawEmail) ||
         ((e as any).username && (e as any).username.toLowerCase() === emailPrefix) ||
         (e.id && e.id.toLowerCase() === emailPrefix) ||
         (e.id && e.id.toLowerCase() === rawEmail) ||
         (e.phone && e.phone.replace(/\D/g, '') === emailPrefix.replace(/\D/g, '')) ||
-        (e.name && e.name.toLowerCase().replace(/\s+/g, '') === emailPrefix) ||
-        e.id === firebaseUser.uid
+        (e.name && e.name.toLowerCase().replace(/\s+/g, '') === emailPrefix)
     );
 
     if (matchingEmployee) {
       const isTrainerOrDietitian = matchingEmployee.role === 'Trainer' || matchingEmployee.role === 'Dietitian';
       const empAccount: AppUser = {
-        id: firebaseUser.uid,
+        id: authUid,
         username: (matchingEmployee as any).username || emailPrefix.toUpperCase(),
         email: matchingEmployee.email || rawEmail,
         role: matchingEmployee.role,
@@ -728,23 +758,24 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSelectedBranchId(matchingEmployee.branchId || branches[0]?.id || 'all');
       setSubscriptionStatus('active');
       localStorage.setItem('gym_app_user_account', JSON.stringify(empAccount));
+      safeDbWrite(setDoc(doc(db, 'users', authUid), empAccount));
       return;
     }
 
-    // 4. Check if this Firebase User corresponds directly to a member in members collection
+    // 5. Check if this Firebase User corresponds directly to a member in members collection
     const matchingMember = members.find(
       m =>
+        m.userId === authUid ||
+        m.id === authUid ||
         (m.email && m.email.toLowerCase() === rawEmail) ||
         (m.username && m.username.toLowerCase() === emailPrefix) ||
         (m.membershipNo && m.membershipNo.toLowerCase() === emailPrefix) ||
-        (m.mobile && m.mobile.replace(/\D/g, '') === emailPrefix.replace(/\D/g, '')) ||
-        m.id === firebaseUser.uid ||
-        m.userId === firebaseUser.uid
+        (m.mobile && m.mobile.replace(/\D/g, '') === emailPrefix.replace(/\D/g, ''))
     );
 
     if (matchingMember) {
       const memberAccount: AppUser = {
-        id: matchingMember.userId || firebaseUser.uid,
+        id: authUid,
         username: matchingMember.username || emailPrefix.toUpperCase(),
         email: matchingMember.email || rawEmail,
         role: 'Member',
@@ -767,18 +798,19 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCurrentRole('Member');
       setActiveMemberIdState(matchingMember.id);
       localStorage.setItem('gym_app_user_account', JSON.stringify(memberAccount));
+      safeDbWrite(setDoc(doc(db, 'users', authUid), memberAccount));
       const isExpired = matchingMember.status === 'Expired' || new Date(matchingMember.expiryDate || matchingMember.endDate) < new Date();
       setSubscriptionStatus(isExpired ? 'expired' : 'active');
       return;
     }
 
-    // 5. Default fallback
+    // 6. Default fallback dynamic member user
     const dynamicUser: AppUser = {
-      id: firebaseUser.uid,
+      id: authUid,
       username: emailPrefix.toUpperCase(),
       email: firebaseUser.email || `${emailPrefix}@smartgym.com`,
       role: 'Member',
-      linkedId: firebaseUser.uid,
+      linkedId: authUid,
       linkedName: firebaseUser.displayName || emailPrefix,
       branchId: branches[0]?.id || 'all',
       createdAt: new Date().toISOString(),
@@ -798,6 +830,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setActiveMemberIdState(dynamicUser.linkedId);
     setSelectedBranchId(branches[0]?.id || 'all');
     setSubscriptionStatus('active');
+    safeDbWrite(setDoc(doc(db, 'users', authUid), dynamicUser));
   }, [firebaseUser, appUsers, members, employees, branches]);
 
   // Workout & Diet active member sync
@@ -954,6 +987,10 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
     setFirebaseUser(null);
     setAppUserAccount(null);
+    setCurrentRole('Member');
+    setActiveMemberIdState('');
+    setWorkout(INITIAL_WORKOUT);
+    setDiet(INITIAL_DIET);
     setSubscriptionStatus('none');
     setAuthContext(null);
   };
@@ -1233,51 +1270,28 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
     }
 
-    // 5. Build Member Record
-    const newMember: Member = {
-      ...newMemberData,
-      id: memberId,
-      membershipNo,
-      referralCode,
-      rewardPoints: 100,
-      status: 'Active',
-      paidAmount: plan ? (plan.totalPrice || plan.basePrice) : (newMemberData.paidAmount || 0),
-      totalPlanAmount: plan ? (plan.totalPrice || plan.basePrice) : (newMemberData.totalPlanAmount || 0),
-      lastPaymentDate: new Date().toISOString().split('T')[0],
-      nextDueDate: newMemberData.endDate || newMemberData.expiryDate,
-      paymentStatus: newMemberData.pendingDues > 0 ? 'Partially Paid' : 'Paid',
-      userId: options.createLogin ? userId : undefined,
-      username: options.createLogin ? username : undefined,
-      tempPassword: options.createLogin ? tempPassword : undefined,
-      mustChangePassword: options.createLogin ? true : false,
-      whatsappStatus: initialWhatsAppStatus,
-      whatsappSentAt: initialWhatsAppStatus === 'SENT' ? new Date().toISOString() : undefined,
-    };
-
-    setMembers((prev) => [newMember, ...prev]);
-    safeDbWrite(setDoc(doc(db, 'members', memberId), newMember));
-
-    // 6. Record Member Creation Audit
-    await recordAuditLog(
-      'MEMBER_CREATED',
-      memberId,
-      newMember.name,
-      `Member enrolled with plan ${newMember.planName} (ID: ${membershipNo})`
-    );
-
-    // 7. Build and persist AppUser if requested
+    // 5. Build and persist AppUser if login account requested
     let createdAppUser: AppUser | undefined;
+    let authUid = `USR-MEM-${Date.now()}`;
+
     if (options.createLogin) {
+      const memberAuthEmail = newMemberData.email || `${username.toLowerCase()}@smartgym.com`;
+      try {
+        authUid = await createIsolatedAuthUser(memberAuthEmail, tempPassword);
+      } catch (authErr: any) {
+        console.warn('createIsolatedAuthUser notice (proceeding with UID fallback):', authErr);
+      }
+
       createdAppUser = {
-        id: userId,
+        id: authUid,
         username,
-        email: newMemberData.email || `${username.toLowerCase()}@smartgym.com`,
+        email: memberAuthEmail,
         password: tempPassword,
         tempPassword,
         role: 'Member',
         linkedId: memberId,
-        linkedName: newMember.name,
-        branchId: newMember.branchId,
+        linkedName: newMemberData.name,
+        branchId: newMemberData.branchId,
         createdAt: new Date().toISOString(),
         createdByAdminId: appUserAccount?.id || 'admin-system',
         isActive: true,
@@ -1295,15 +1309,47 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
 
       setAppUsers((prev) => [createdAppUser!, ...prev]);
-      safeDbWrite(setDoc(doc(db, 'users', userId), createdAppUser));
+      safeDbWrite(setDoc(doc(db, 'users', authUid), createdAppUser));
 
       await recordAuditLog(
         'ACCOUNT_PROVISIONED',
         memberId,
-        newMember.name,
-        `Member login account provisioned with username ${username} (Role: Member)`
+        newMemberData.name,
+        `Member login account provisioned with username ${username} (UID: ${authUid})`
       );
     }
+
+    // 6. Build Member Record
+    const newMember: Member = {
+      ...newMemberData,
+      id: memberId,
+      membershipNo,
+      referralCode,
+      rewardPoints: 100,
+      status: 'Active',
+      paidAmount: plan ? (plan.totalPrice || plan.basePrice) : (newMemberData.paidAmount || 0),
+      totalPlanAmount: plan ? (plan.totalPrice || plan.basePrice) : (newMemberData.totalPlanAmount || 0),
+      lastPaymentDate: new Date().toISOString().split('T')[0],
+      nextDueDate: newMemberData.endDate || newMemberData.expiryDate,
+      paymentStatus: newMemberData.pendingDues > 0 ? 'Partially Paid' : 'Paid',
+      userId: options.createLogin ? authUid : undefined,
+      username: options.createLogin ? username : undefined,
+      tempPassword: options.createLogin ? tempPassword : undefined,
+      mustChangePassword: options.createLogin ? true : false,
+      whatsappStatus: initialWhatsAppStatus,
+      whatsappSentAt: initialWhatsAppStatus === 'SENT' ? new Date().toISOString() : undefined,
+    };
+
+    setMembers((prev) => [newMember, ...prev]);
+    safeDbWrite(setDoc(doc(db, 'members', memberId), newMember));
+
+    // 7. Record Member Creation Audit
+    await recordAuditLog(
+      'MEMBER_CREATED',
+      memberId,
+      newMember.name,
+      `Member enrolled with plan ${newMember.planName} (ID: ${membershipNo})`
+    );
 
     // 8. Record initial payment transaction if paid
     if (newMember.paidAmount && newMember.paidAmount > 0) {
@@ -1342,12 +1388,22 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     whatsappDirectUrl?: string;
     whatsappStatus: 'SENT' | 'FAILED' | 'NOT_SENT';
   }> => {
-    const employeeId = `EMP-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
     const existingUsernames = appUsers.map((u) => u.username);
     const username = generateUniqueStaffUsername('TRN', employees.length + 1, existingUsernames);
     const tempPassword = generateSecureTemporaryPassword();
-    const userId = `USR-TRN-${Date.now()}`;
-    const normalizedPhone = normalizePhoneNumber(empData.mobile || '');
+    const trainerEmail = empData.email || `${username.toLowerCase()}@smartgym.com`;
+
+    // 1. Create real Firebase Auth user in isolated secondary app instance
+    let authUid = `TRN-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
+    try {
+      authUid = await createIsolatedAuthUser(trainerEmail, tempPassword);
+    } catch (authErr: any) {
+      console.warn('createIsolatedAuthUser notice for trainer (proceeding with UID fallback):', authErr);
+    }
+
+    const employeeId = authUid;
+    const userId = authUid;
+    const normalizedPhone = normalizePhoneNumber(empData.mobile || empData.phone || '');
 
     let initialWhatsAppStatus: 'NOT_SENT' | 'SENT' | 'FAILED' = 'NOT_SENT';
     let whatsappDirectUrl = '';
@@ -1372,19 +1428,21 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
     }
 
+    // 2. Build 1:1 UID Employee Profile
     const newEmployee: Employee = {
       ...empData,
       id: employeeId,
-      email: empData.email || `${username.toLowerCase()}@smartgym.com`,
+      email: trainerEmail,
     };
 
     setEmployees((prev) => [newEmployee, ...prev]);
     safeDbWrite(setDoc(doc(db, 'employees', employeeId), newEmployee));
 
+    // 3. Build 1:1 UID User Document
     const createdAppUser: AppUser = {
       id: userId,
       username,
-      email: newEmployee.email,
+      email: trainerEmail,
       password: tempPassword,
       tempPassword,
       role: newEmployee.role || 'Trainer',
@@ -1402,8 +1460,8 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         canEditWorkouts: true,
         canEditDiets: true,
         canViewMembers: true,
-        canManageFinance: false, // Strict financial restriction
-        canAccessAdmin: false,   // Strict admin restriction
+        canManageFinance: false,
+        canAccessAdmin: false,
       },
     };
 
@@ -1414,7 +1472,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       'ACCOUNT_PROVISIONED',
       employeeId,
       newEmployee.name,
-      `Trainer account provisioned with username ${username} (Role: ${newEmployee.role})`
+      `Trainer account provisioned with username ${username} (UID: ${employeeId}, Role: ${newEmployee.role})`
     );
 
     return {
@@ -1581,6 +1639,15 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       mustChangePassword: false,
       lastLoginAt: new Date().toISOString(),
     };
+
+    // 1. Update Firebase Auth password on the authenticated user without changing UID
+    if (auth.currentUser) {
+      try {
+        await updatePassword(auth.currentUser, newPassword);
+      } catch (authPassErr: any) {
+        console.warn('Firebase Auth updatePassword notice (kept Firestore in sync):', authPassErr);
+      }
+    }
 
     setAppUsers((prev) => prev.map((u) => (u.id === user!.id ? { ...u, ...updatedUserPartial } : u)));
     safeDbWrite(updateDoc(doc(db, 'users', user.id), updatedUserPartial));

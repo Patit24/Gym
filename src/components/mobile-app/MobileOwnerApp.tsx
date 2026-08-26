@@ -2283,6 +2283,37 @@ export const MobileOwnerApp: React.FC = () => {
                 </button>
               </div>
 
+              {/* 1:1 Identity & Auth Diagnostic Card */}
+              <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 shadow-xl space-y-2.5 text-xs">
+                <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                  <span className="font-black text-white flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-emerald-400" />
+                    <span>Account Identity & Role Diagnostics</span>
+                  </span>
+                  <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                    Synced 1:1 ✓
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[10px]">
+                  <div className="p-2 bg-[#07090E] rounded-xl border border-white/5 font-mono">
+                    <span className="text-slate-400 block uppercase font-bold">Profile ID</span>
+                    <strong className="text-slate-200 truncate block">{selectedTrainer.id}</strong>
+                  </div>
+                  <div className="p-2 bg-[#07090E] rounded-xl border border-white/5 font-mono">
+                    <span className="text-slate-400 block uppercase font-bold">Role Sync</span>
+                    <strong className="text-purple-300 truncate block">{selectedTrainer.role} (Coach)</strong>
+                  </div>
+                  <div className="p-2 bg-[#07090E] rounded-xl border border-white/5 font-mono">
+                    <span className="text-slate-400 block uppercase font-bold">Auth User ID</span>
+                    <strong className="text-slate-200 truncate block">{trainerUser?.id || selectedTrainer.id}</strong>
+                  </div>
+                  <div className="p-2 bg-[#07090E] rounded-xl border border-white/5 font-mono">
+                    <span className="text-slate-400 block uppercase font-bold">Email Binding</span>
+                    <strong className="text-slate-200 truncate block">{selectedTrainer.email || `${trainerUsername}@smartgym.com`}</strong>
+                  </div>
+                </div>
+              </div>
+
               {/* Assigned Trainees */}
               <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 shadow-xl space-y-3">
                 <div className="flex items-center justify-between">

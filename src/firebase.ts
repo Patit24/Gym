@@ -19,4 +19,31 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-export { app, db, auth };
+/**
+ * Creates a new user in Firebase Authentication using an isolated secondary App instance.
+ * This guarantees the current logged-in user (e.g. Admin / Owner) is NOT signed out or replaced
+ * when provisioning accounts for Trainers, Staff, or Members.
+ */
+export async function createIsolatedAuthUser(email: string, pass: string): Promise<string> {
+  const { initializeApp: initSecondaryApp, deleteApp } = await import('firebase/app');
+  const { getAuth: getSecondaryAuth, createUserWithEmailAndPassword, signOut } = await import('firebase/auth');
+  
+  const secondaryAppName = `auth-creator-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+  const secondaryApp = initSecondaryApp(firebaseConfig, secondaryAppName);
+  const secondaryAuth = getSecondaryAuth(secondaryApp);
+
+  try {
+    const userCred = await createUserWithEmailAndPassword(secondaryAuth, email, pass);
+    const newUid = userCred.user.uid;
+    await signOut(secondaryAuth);
+    await deleteApp(secondaryApp);
+    return newUid;
+  } catch (err: any) {
+    try {
+      await deleteApp(secondaryApp);
+    } catch {}
+    throw err;
+  }
+}
+
+export { app, db, auth, firebaseConfig };
