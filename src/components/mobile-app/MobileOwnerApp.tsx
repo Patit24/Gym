@@ -46,9 +46,9 @@ import {
   FileText,
   Eye,
   EyeOff,
-  RefreshCw,
   Lock,
-  Building2
+  Building2,
+  ChevronDown
 } from 'lucide-react';
 
 type OwnerScreen =
@@ -548,32 +548,35 @@ export const MobileOwnerApp: React.FC = () => {
           <div className="space-y-4 animate-in fade-in duration-300">
             
             {/* Live Branch Selector Pill */}
-            <div className="flex items-center justify-between p-3.5 rounded-[20px] glass-card-premium shadow-xl">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-2xl bg-[#00D4FF]/15 text-[#00D4FF] flex items-center justify-center border border-[#00D4FF]/30 shadow-md">
+            <div className="flex items-center justify-between p-3 rounded-[20px] glass-card-premium shadow-xl gap-2.5">
+              <div className="flex items-center gap-2.5 min-w-0 shrink-0">
+                <div className="w-8 h-8 rounded-xl bg-[#00D4FF]/15 text-[#00D4FF] flex items-center justify-center border border-[#00D4FF]/30 shadow-md shrink-0">
                   <Building2 className="w-4 h-4" />
                 </div>
-                <div>
-                  <div className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Active Branch</div>
-                  <div className="text-xs font-black text-white">{currentBranch.name} ({currentBranch.code})</div>
+                <div className="flex flex-col">
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Active Branch</span>
+                  <span className="text-[10px] font-bold text-[#00D4FF] truncate max-w-[80px]">{currentBranch.code}</span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <select
-                  value={selectedBranchId}
-                  onChange={(e) => setSelectedBranchId(e.target.value)}
-                  className="bg-black/60 text-white text-xs font-bold px-3 py-1.5 rounded-xl border border-white/12 outline-none cursor-pointer focus:border-[#00D4FF] backdrop-blur-md"
-                >
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id} className="bg-[#0A0D14] text-white">
-                      {b.name} ({b.code})
-                    </option>
-                  ))}
-                </select>
+              <div className="flex items-center gap-1.5 flex-1 min-w-0 justify-end">
+                <div className="relative flex-1 min-w-0 max-w-[210px]">
+                  <select
+                    value={selectedBranchId}
+                    onChange={(e) => setSelectedBranchId(e.target.value)}
+                    className="w-full bg-black/60 text-white text-xs font-bold pl-3 pr-7 py-2 rounded-xl border border-white/12 outline-none cursor-pointer focus:border-[#00D4FF] backdrop-blur-md appearance-none truncate"
+                  >
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id} className="bg-[#0A0D14] text-white">
+                        {b.name} ({b.code})
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
                 <button
                   onClick={() => navigateTo('add-branch')}
-                  className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/12 text-[#00D4FF] active:scale-90 transition-all cursor-pointer shadow-sm"
+                  className="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 border border-white/12 text-[#00D4FF] flex items-center justify-center active:scale-90 transition-all cursor-pointer shadow-sm shrink-0"
                   title="Add New Branch"
                 >
                   <Plus className="w-4 h-4" />
@@ -856,28 +859,31 @@ export const MobileOwnerApp: React.FC = () => {
         {currentScreen === 'finance' && (
           <div className="space-y-4 animate-in fade-in duration-200">
             {/* Live Branch Selector Pill */}
-            <div className="flex items-center justify-between p-3.5 rounded-2xl bg-[#101422] border border-white/10 shadow-lg">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center">
+            <div className="flex items-center justify-between p-3 rounded-2xl bg-[#101422] border border-white/10 shadow-lg gap-2.5">
+              <div className="flex items-center gap-2.5 min-w-0 shrink-0">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
                   <DollarSign className="w-4 h-4" />
                 </div>
-                <div>
-                  <div className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Branch Accounting</div>
-                  <div className="text-xs font-black text-white">{currentBranch.name} ({currentBranch.code})</div>
+                <div className="flex flex-col">
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Accounting</span>
+                  <span className="text-[10px] font-bold text-emerald-400 truncate max-w-[80px]">{currentBranch.code}</span>
                 </div>
               </div>
 
-              <select
-                value={selectedBranchId}
-                onChange={(e) => setSelectedBranchId(e.target.value)}
-                className="bg-[#07090E] text-white text-xs font-bold px-3 py-1.5 rounded-xl border border-white/10 outline-none cursor-pointer focus:border-[#4F7CFF]"
-              >
-                {branches.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name} ({b.code})
-                  </option>
-                ))}
-              </select>
+              <div className="relative flex-1 min-w-0 max-w-[210px]">
+                <select
+                  value={selectedBranchId}
+                  onChange={(e) => setSelectedBranchId(e.target.value)}
+                  className="w-full bg-[#07090E] text-white text-xs font-bold pl-3 pr-7 py-1.5 rounded-xl border border-white/10 outline-none cursor-pointer focus:border-[#4F7CFF] appearance-none truncate"
+                >
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id} className="bg-[#0A0D14] text-white">
+                      {b.name} ({b.code})
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
             </div>
 
             <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 shadow-xl space-y-3">
