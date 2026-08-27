@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useGym } from '../../context/GymContext';
-import { Member, GoalType } from '../../types/gym';
+import { Member, GoalType, Employee } from '../../types/gym';
 
 type Gender = 'Male' | 'Female' | 'Other';
 import { PrivilegePassCard } from '../shared/PrivilegePassCard';
@@ -45,7 +45,21 @@ export const TrainerMobileAppSimulator: React.FC = () => {
     setActiveMemberId
   } = useGym();
 
-  const currentTrainer = employees.find(e => e.id === appUserAccount?.linkedId || e.role === 'Trainer') || employees[0];
+  const currentTrainer: Employee = employees.find(
+    (e) =>
+      e.id === appUserAccount?.id ||
+      e.id === appUserAccount?.linkedId ||
+      (e.email && e.email.toLowerCase() === (appUserAccount?.email || '').toLowerCase()) ||
+      ((e as any).username && (e as any).username.toLowerCase() === (appUserAccount?.username || '').toLowerCase())
+  ) || (appUserAccount?.role === 'Trainer' || appUserAccount?.role === 'Dietitian' ? {
+    id: appUserAccount.linkedId || appUserAccount.id,
+    name: appUserAccount.linkedName || appUserAccount.username,
+    role: appUserAccount.role,
+    email: appUserAccount.email || `${appUserAccount.username.toLowerCase()}@smartgym.com`,
+    phone: '+91 98765 00000',
+    branchId: appUserAccount.branchId || 'branch-1',
+  } as Employee : employees.find(e => e.role === 'Trainer') || employees[0]);
+
   const assignedMembers = members.filter(m => m.assignedTrainerId === currentTrainer?.id || m.branchId === currentTrainer?.branchId);
 
   // Screen navigation state (ALL IN-APP, ZERO POPUPS)

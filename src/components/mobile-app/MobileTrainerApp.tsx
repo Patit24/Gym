@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useGym } from '../../context/GymContext';
-import { Member, GoalType, Exercise, DailyWorkoutSplit, MealItem, MonthlyDietPlan } from '../../types/gym';
+import { Member, GoalType, Exercise, DailyWorkoutSplit, MealItem, MonthlyDietPlan, Employee, BranchId } from '../../types/gym';
 import { MobileAppHeader } from './MobileAppHeader';
 import { MobileBottomNav, MobileNavTab } from './MobileBottomNav';
 import { PrivilegePassCard } from '../shared/PrivilegePassCard';
@@ -67,9 +67,38 @@ export const MobileTrainerApp: React.FC = () => {
     setActiveMemberId
   } = useGym();
 
-  const currentTrainer = employees.find(
-    (e) => e.id === appUserAccount?.linkedId || e.role === 'Trainer'
-  ) || employees[0];
+  const currentTrainer: Employee = useMemo(() => {
+    if (appUserAccount) {
+      const match = employees.find(
+        (e) =>
+          e.id === appUserAccount.id ||
+          e.id === appUserAccount.linkedId ||
+          (e.email && e.email.toLowerCase() === (appUserAccount.email || '').toLowerCase()) ||
+          ((e as any).username && (e as any).username.toLowerCase() === appUserAccount.username.toLowerCase())
+      );
+      if (match) return match;
+
+      return {
+        id: appUserAccount.linkedId || appUserAccount.id,
+        name: appUserAccount.linkedName || appUserAccount.username,
+        photoUrl: 'https://images.unsplash.com/photo-1568602471122-7832951cc4c5?w=400&fit=crop&q=80',
+        role: (appUserAccount.role as any) || 'Trainer',
+        email: appUserAccount.email || `${appUserAccount.username.toLowerCase()}@smartgym.com`,
+        phone: '+91 98765 00000',
+        mobile: '+91 98765 00000',
+        specialization: appUserAccount.role === 'Dietitian' ? 'Sports Nutrition & Diets' : 'Personal Training & Strength',
+        branchId: (appUserAccount.branchId as BranchId) || 'branch-1',
+        baseSalary: 35000,
+        ptCommissionRate: 20,
+        ptSessionsCompleted: 0,
+        joiningDate: appUserAccount.createdAt ? appUserAccount.createdAt.split('T')[0] : new Date().toISOString().split('T')[0],
+        shift: 'Morning (06:00 - 14:00)',
+        attendanceDays: 26,
+      } as Employee;
+    }
+
+    return employees.find(e => e.role === 'Trainer') || employees[0];
+  }, [employees, appUserAccount]);
 
   // Strictly filter members assigned to this trainer or within this branch, with full gym fallback
   const assignedClients = members.filter(

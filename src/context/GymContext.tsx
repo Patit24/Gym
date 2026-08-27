@@ -271,7 +271,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (u.role === 'Member' && u.linkedId) return u.linkedId;
       }
     } catch {}
-    return 'MEM-2026-001';
+    return '';
   });
 
   const [workout, setWorkout] = useState<WorkoutPlan>(INITIAL_WORKOUT);
@@ -291,12 +291,75 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [expenseTypes, setExpenseTypes] = useState<ExpenseType[]>(INITIAL_EXPENSE_TYPES);
   const [appUsers, setAppUsers] = useState<AppUser[]>(INITIAL_APP_USERS);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [wellnessCheckins, setWellnessCheckins] = useState<DailyWellnessCheckin[]>([]);
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutSessionLog[]>([]);
   const [trainerNotes, setTrainerNotes] = useState<TrainerNote[]>([]);
-  const [wellnessCheckins, setWellnessCheckins] = useState<DailyWellnessCheckin[]>([]);
   const [freezeRecords, setFreezeRecords] = useState<MembershipFreezeRecord[]>([]);
   const [challenges, setChallenges] = useState<GymChallenge[]>([]);
   const [referrals, setReferrals] = useState<ReferralRecord[]>([]);
+
+  // ════════════════════════════════════════════════════════════════
+  // ACTIVE MEMBER RESOLUTION
+  // ════════════════════════════════════════════════════════════════
+  const activeMember: Member = useMemo(() => {
+    // 1. If authenticated user is a Member, their own profile is ALWAYS top priority
+    if (appUserAccount && appUserAccount.role === 'Member') {
+      const foundByUser = members.find(
+        (m) =>
+          m.id === appUserAccount.linkedId ||
+          m.id === appUserAccount.id ||
+          m.userId === appUserAccount.id ||
+          (m.username && m.username.toLowerCase() === appUserAccount.username.toLowerCase()) ||
+          (m.email && m.email.toLowerCase() === (appUserAccount.email || '').toLowerCase())
+      );
+      if (foundByUser) return foundByUser;
+
+      return {
+        id: appUserAccount.linkedId || appUserAccount.id,
+        membershipNo: `SG-${appUserAccount.username}`,
+        name: appUserAccount.linkedName || appUserAccount.username,
+        photoUrl: '',
+        faceEnrolled: false,
+        mobile: '',
+        email: appUserAccount.email || '',
+        dob: '',
+        gender: 'Male',
+        heightCm: 0,
+        weightKg: 0,
+        startWeightKg: 0,
+        bmi: 0,
+        chestCm: 0,
+        waistCm: 0,
+        armsCm: 0,
+        thighsCm: 0,
+        bloodGroup: '',
+        emergencyContactName: '',
+        emergencyMobile: '',
+        address: '',
+        medicalHistory: '',
+        goal: 'Muscle Building',
+        referralSource: 'Direct',
+        branchId: appUserAccount.branchId || 'branch-1',
+        planId: 'plan-1',
+        planName: 'Standard Plan',
+        startDate: appUserAccount.createdAt ? appUserAccount.createdAt.split('T')[0] : new Date().toISOString().split('T')[0],
+        endDate: '',
+        status: 'Active',
+        pendingDues: 0,
+        paidAmount: 0,
+        totalPlanAmount: 0,
+      } as Member;
+    }
+
+    // 2. Check if explicit activeMemberId matches a loaded member (e.g. for Admin or Trainer inspecting a trainee)
+    if (activeMemberId) {
+      const foundById = members.find((m) => m.id === activeMemberId);
+      if (foundById) return foundById;
+    }
+
+    if (members.length > 0) return members[0];
+    return {} as Member;
+  }, [appUserAccount, members, activeMemberId]);
 
   const personalRecords = useMemo<PersonalRecord[]>(() => {
     const prMap: { [exerciseName: string]: PersonalRecord } = {};
@@ -727,7 +790,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ((e as any).username && (e as any).username.toLowerCase() === emailPrefix) ||
         (e.id && e.id.toLowerCase() === emailPrefix) ||
         (e.id && e.id.toLowerCase() === rawEmail) ||
-        (e.phone && e.phone.replace(/\D/g, '') === emailPrefix.replace(/\D/g, '')) ||
+        (e.phone && emailPrefix.replace(/\D/g, '').length >= 10 && e.phone.replace(/\D/g, '') === emailPrefix.replace(/\D/g, '')) ||
         (e.name && e.name.toLowerCase().replace(/\s+/g, '') === emailPrefix)
     );
 
@@ -770,7 +833,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         (m.email && m.email.toLowerCase() === rawEmail) ||
         (m.username && m.username.toLowerCase() === emailPrefix) ||
         (m.membershipNo && m.membershipNo.toLowerCase() === emailPrefix) ||
-        (m.mobile && m.mobile.replace(/\D/g, '') === emailPrefix.replace(/\D/g, ''))
+        (m.mobile && emailPrefix.replace(/\D/g, '').length >= 10 && m.mobile.replace(/\D/g, '') === emailPrefix.replace(/\D/g, ''))
     );
 
     if (matchingMember) {
@@ -865,98 +928,6 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubDiet();
     };
   }, [activeMemberId]);
-
-  const activeMember: Member = useMemo(() => {
-    // 1. Check if explicit activeMemberId matches a loaded member
-    const foundById = members.find((m) => m.id === activeMemberId);
-    if (foundById) return foundById;
-
-    // 2. If authenticated user is a Member, resolve their member document
-    if (appUserAccount && appUserAccount.role === 'Member') {
-      const foundByUser = members.find(
-        (m) =>
-          m.id === appUserAccount.linkedId ||
-          m.userId === appUserAccount.id ||
-          (m.username && m.username.toLowerCase() === appUserAccount.username.toLowerCase()) ||
-          (m.email && m.email.toLowerCase() === (appUserAccount.email || '').toLowerCase())
-      );
-      if (foundByUser) return foundByUser;
-
-      return {
-        id: appUserAccount.linkedId || appUserAccount.id,
-        membershipNo: `SG-${appUserAccount.username}`,
-        name: appUserAccount.linkedName || appUserAccount.username,
-        photoUrl: '',
-        faceEnrolled: false,
-        mobile: '',
-        email: appUserAccount.email || '',
-        dob: '',
-        gender: 'Male',
-        heightCm: 0,
-        weightKg: 0,
-        startWeightKg: 0,
-        bmi: 0,
-        chestCm: 0,
-        waistCm: 0,
-        armsCm: 0,
-        thighsCm: 0,
-        bloodGroup: '',
-        emergencyContactName: '',
-        emergencyMobile: '',
-        address: '',
-        medicalHistory: '',
-        goal: 'Muscle Building',
-        referralSource: 'Direct',
-        branchId: appUserAccount.branchId || 'branch-1',
-        planId: 'plan-1',
-        planName: 'Standard Plan',
-        startDate: appUserAccount.createdAt ? appUserAccount.createdAt.split('T')[0] : new Date().toISOString().split('T')[0],
-        endDate: '',
-        status: 'Active',
-        pendingDues: 0,
-        paidAmount: 0,
-        totalPlanAmount: 0,
-      } as Member;
-    }
-
-    if (members.length > 0) return members[0];
-
-    return {
-      id: 'MEM-001',
-      membershipNo: 'SG-001',
-      name: 'Member',
-      photoUrl: '',
-      faceEnrolled: false,
-      mobile: '',
-      email: '',
-      dob: '',
-      gender: 'Male',
-      heightCm: 0,
-      weightKg: 0,
-      startWeightKg: 0,
-      bmi: 0,
-      chestCm: 0,
-      waistCm: 0,
-      armsCm: 0,
-      thighsCm: 0,
-      bloodGroup: '',
-      emergencyContactName: '',
-      emergencyMobile: '',
-      address: '',
-      medicalHistory: '',
-      goal: 'Muscle Building',
-      referralSource: 'Direct',
-      branchId: 'branch-1',
-      planId: '',
-      planName: 'Standard Plan',
-      startDate: new Date().toISOString().split('T')[0],
-      endDate: '',
-      status: 'Active',
-      pendingDues: 0,
-      paidAmount: 0,
-      totalPlanAmount: 0,
-    } as Member;
-  }, [members, activeMemberId, appUserAccount]);
 
   const setActiveMemberId = (id: string) => {
     setActiveMemberIdState(id);

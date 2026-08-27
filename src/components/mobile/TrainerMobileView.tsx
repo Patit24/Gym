@@ -4,9 +4,14 @@ import { QuickDailyPlanner } from '../planner/QuickDailyPlanner';
 import { Dumbbell, Users, Plus, X, ChevronRight, User, Zap } from 'lucide-react';
 
 export const TrainerMobileView: React.FC = () => {
-  const { employees, members, setActiveMemberId, setPerspective } = useGym();
+  const { employees, members, setActiveMemberId, setPerspective, appUserAccount } = useGym();
   
-  const currentTrainer = employees.find((e) => e.role === 'Trainer') || employees[0];
+  const currentTrainer = employees.find(
+    (e) =>
+      e.id === appUserAccount?.id ||
+      e.id === appUserAccount?.linkedId ||
+      (e.email && e.email.toLowerCase() === (appUserAccount?.email || '').toLowerCase())
+  ) || employees.find((e) => e.role === 'Trainer') || employees[0];
   const assignedMembers = members.filter((m) => m.assignedTrainerId === currentTrainer.id) || members;
 
   const [showQuickModal, setShowQuickModal] = useState(false);

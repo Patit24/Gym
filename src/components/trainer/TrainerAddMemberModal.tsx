@@ -21,7 +21,12 @@ interface TrainerAddMemberModalProps {
 export const TrainerAddMemberModal: React.FC<TrainerAddMemberModalProps> = ({ isOpen, onClose }) => {
   const { addMember, employees, plans, appUserAccount } = useGym();
   
-  const currentTrainer = employees.find(e => e.id === appUserAccount?.linkedId || e.role === 'Trainer') || employees[0];
+  const currentTrainer = employees.find(
+    (e) =>
+      e.id === appUserAccount?.id ||
+      e.id === appUserAccount?.linkedId ||
+      (e.email && e.email.toLowerCase() === (appUserAccount?.email || '').toLowerCase())
+  ) || employees.find(e => e.role === 'Trainer') || employees[0];
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
