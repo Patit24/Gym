@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useGym } from '../../context/GymContext';
 import { MealItem, MonthlyDietPlan } from '../../types/gym';
-import { Utensils, Droplets, Check, Plus, X, Calendar, Sparkles, User } from 'lucide-react';
+import { Utensils, Droplets, Check, Plus, X, Calendar, Sparkles, User, Lock } from 'lucide-react';
+import { SubscriptionExpiredLockCard } from './SubscriptionExpiredLockCard';
 
 import { INITIAL_DIET } from '../../data/initialData';
 
@@ -75,6 +76,23 @@ export const DietTracker: React.FC = () => {
     addMonthlyDiet(targetMemberId, newMonthPlan);
     setShowAddMonthModal(false);
   };
+
+  const isSubscriptionExpired = useMemo(() => {
+    if (currentRole !== 'Member') return false;
+    if (!activeMember) return false;
+    if (activeMember.status === 'Expired' || activeMember.status === 'Cancelled' || activeMember.status === 'Suspended') return true;
+    if (activeMember.expiryDate || activeMember.endDate) {
+      const expDate = new Date(activeMember.expiryDate || activeMember.endDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      return expDate < today;
+    }
+    return false;
+  }, [activeMember, currentRole]);
+
+  if (isSubscriptionExpired) {
+    return <SubscriptionExpiredLockCard featureName="Diet & Nutrition Chart" />;
+  }
 
   const isStaffOrAdmin = currentRole === 'Trainer' || currentRole === 'Dietitian' || currentRole === 'Super Admin' || currentRole === 'Owner';
 

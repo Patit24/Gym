@@ -11,6 +11,7 @@ import { SubscriptionCard } from '../mobile/SubscriptionCard';
 import { MemberProfileEditor } from '../mobile/MemberProfileEditor';
 import { PrivilegePassCard } from '../shared/PrivilegePassCard';
 import { WearableHeartRateSyncModal } from '../mobile/WearableHeartRateSyncModal';
+import { SubscriptionExpiredLockCard } from '../mobile/SubscriptionExpiredLockCard';
 import {
   Home,
   Dumbbell,
@@ -51,7 +52,8 @@ import {
   ArrowRight,
   ExternalLink,
   Download,
-  AlertTriangle
+  AlertTriangle,
+  Lock
 } from 'lucide-react';
 
 type MemberScreen =
@@ -100,6 +102,21 @@ export const MobileMemberApp: React.FC = () => {
   }, [activeMember?.id, activeMemberId, setActiveMemberId]);
 
   const unreadNotifs = notifications.filter((n) => !n.read);
+
+  // Expiration Detection
+  const isSubscriptionExpired = React.useMemo(() => {
+    if (!activeMember) return false;
+    if (activeMember.status === 'Expired' || activeMember.status === 'Cancelled' || activeMember.status === 'Suspended') {
+      return true;
+    }
+    if (activeMember.expiryDate || activeMember.endDate) {
+      const expDate = new Date(activeMember.expiryDate || activeMember.endDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      return expDate < today;
+    }
+    return false;
+  }, [activeMember]);
 
   // Dynamic Day & Workout Computation across all assigned weekly plans
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -339,8 +356,26 @@ export const MobileMemberApp: React.FC = () => {
                 </button>
               </div>
 
-              {hasWorkout ? (
-                <div className="p-3 rounded-2xl bg-black/40 border border-white/[0.06] flex items-center justify-between text-xs">
+              {isSubscriptionExpired ? (
+                <div className="p-3.5 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-red-500/20 text-red-400 flex items-center justify-center border border-red-500/30">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <strong className="text-white text-xs font-black">Subscription Ended</strong>
+                      <div className="text-[10px] text-red-300">Workout routines are locked.</div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => navigateTo('subscription')}
+                    className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-red-500 to-amber-500 text-white font-black text-[10px] shadow-md active:scale-95 cursor-pointer uppercase tracking-wider"
+                  >
+                    Renew
+                  </button>
+                </div>
+              ) : hasWorkout ? (
+                <div className="p-3.5 rounded-2xl bg-black/40 border border-white/[0.06] flex items-center justify-between text-xs">
                   <div>
                     <strong className="text-white text-xs font-black">{currentSplit?.title || 'Active Routine'}</strong>
                     <div className="text-[10px] text-slate-400 mt-0.5">
@@ -355,7 +390,7 @@ export const MobileMemberApp: React.FC = () => {
                   </button>
                 </div>
               ) : (
-                <div className="p-3 rounded-2xl bg-black/30 border border-white/5 text-center text-slate-400 text-xs py-4">
+                <div className="p-3.5 rounded-2xl bg-black/30 border border-white/5 text-center text-slate-400 text-xs py-4">
                   No workout assigned for today. Tap below to log custom exercises or review past history.
                 </div>
               )}
@@ -371,12 +406,30 @@ export const MobileMemberApp: React.FC = () => {
                   <span className="text-xs font-black text-white">Nutrition & Daily Macros</span>
                 </div>
                 <span className="text-[10px] font-black text-[#00F5A0]">
-                  {hasDiet ? `${todayCalories} / ${targetCalories} kcal` : 'Custom Plan'}
+                  {hasDiet && !isSubscriptionExpired ? `${todayCalories} / ${targetCalories} kcal` : isSubscriptionExpired ? 'Locked' : 'Custom Plan'}
                 </span>
               </div>
 
               {/* Macro Bars */}
-              {hasDiet ? (
+              {isSubscriptionExpired ? (
+                <div className="p-3.5 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-red-500/20 text-red-400 flex items-center justify-center border border-red-500/30">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <strong className="text-white text-xs font-black">Subscription Ended</strong>
+                      <div className="text-[10px] text-red-300">Diet & macro plans are locked.</div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => navigateTo('subscription')}
+                    className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-red-500 to-amber-500 text-white font-black text-[10px] shadow-md active:scale-95 cursor-pointer uppercase tracking-wider"
+                  >
+                    Renew
+                  </button>
+                </div>
+              ) : hasDiet ? (
                 <div className="space-y-1.5 pt-1">
                   <div className="flex items-center justify-between text-[10px] font-bold">
                     <span className="text-slate-400">Daily Protein Target</span>
@@ -403,10 +456,10 @@ export const MobileMemberApp: React.FC = () => {
                   {hasDiet && activeMonthlyDiet ? (activeMonthlyDiet.monthTitle || 'Personal Nutrition Plan') : 'Daily Diet Plan'}
                 </span>
                 <button
-                  onClick={() => navigateTo('diet')}
+                  onClick={() => navigateTo(isSubscriptionExpired ? 'subscription' : 'diet')}
                   className="text-[11px] font-bold text-[#00F5A0] hover:underline cursor-pointer"
                 >
-                  View Diet Plan →
+                  {isSubscriptionExpired ? 'Renew Access →' : 'View Diet Plan →'}
                 </button>
               </div>
             </div>
@@ -461,7 +514,14 @@ export const MobileMemberApp: React.FC = () => {
         ═══════════════════════════════════════════════════════════ */}
         {currentScreen === 'workout' && (
           <div className="animate-in fade-in duration-300">
-            <WorkoutLogger />
+            {isSubscriptionExpired ? (
+              <SubscriptionExpiredLockCard
+                featureName="Daily Workout Tracking"
+                onRenewSuccess={() => setCurrentScreen('workout')}
+              />
+            ) : (
+              <WorkoutLogger />
+            )}
           </div>
         )}
 
@@ -470,7 +530,14 @@ export const MobileMemberApp: React.FC = () => {
         ═══════════════════════════════════════════════════════════ */}
         {currentScreen === 'diet' && (
           <div className="animate-in fade-in duration-300">
-            <DietTracker />
+            {isSubscriptionExpired ? (
+              <SubscriptionExpiredLockCard
+                featureName="Diet & Nutrition Chart"
+                onRenewSuccess={() => setCurrentScreen('diet')}
+              />
+            ) : (
+              <DietTracker />
+            )}
           </div>
         )}
 

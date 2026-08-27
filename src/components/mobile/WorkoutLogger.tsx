@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useGym } from '../../context/GymContext';
 import { Exercise, DailyWorkoutSplit, WorkoutSetLog, ExerciseExecution } from '../../types/gym';
 import { WearableHeartRateSyncModal } from './WearableHeartRateSyncModal';
+import { SubscriptionExpiredLockCard } from './SubscriptionExpiredLockCard';
 import {
   Dumbbell,
   Check,
@@ -98,6 +99,19 @@ export const WorkoutLogger: React.FC = () => {
     return diffDays <= 7;
   }).length;
   const adherencePct = Math.min(100, Math.round((completedThisWeek / totalAssignedSplits) * 100));
+
+  const isSubscriptionExpired = useMemo(() => {
+    if (currentRole !== 'Member') return false;
+    if (!activeMember) return false;
+    if (activeMember.status === 'Expired' || activeMember.status === 'Cancelled' || activeMember.status === 'Suspended') return true;
+    if (activeMember.expiryDate || activeMember.endDate) {
+      const expDate = new Date(activeMember.expiryDate || activeMember.endDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      return expDate < today;
+    }
+    return false;
+  }, [activeMember, currentRole]);
 
   useEffect(() => {
     let interval: any = null;
@@ -338,8 +352,13 @@ export const WorkoutLogger: React.FC = () => {
         </div>
       )}
 
-      {/* Navigation Tabs */}
-      <div className="flex items-center gap-1 border-b border-gym-border/40 pb-1 overflow-x-auto scrollbar-none">
+      {/* If Member Subscription Expired -> Render Lock & Renew Card */}
+      {isSubscriptionExpired ? (
+        <SubscriptionExpiredLockCard featureName="Daily Workout Tracking & Plans" />
+      ) : (
+        <>
+          {/* Navigation Tabs */}
+          <div className="flex items-center gap-1 border-b border-gym-border/40 pb-1 overflow-x-auto scrollbar-none">
         {[
           { id: 'plan', label: 'Workout Plan', icon: Dumbbell },
           { id: 'live', label: isSessionActive ? '⚡ Active Session' : 'Start Workout', icon: Play },
@@ -819,6 +838,8 @@ export const WorkoutLogger: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+      </>
       )}
 
       {/* Wearable Heart Rate Sync Preload Modal */}

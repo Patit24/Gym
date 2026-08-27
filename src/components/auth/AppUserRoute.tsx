@@ -34,10 +34,5 @@ export const AppUserRoute: React.FC = () => {
   }
 
   // If user is actually an Admin trying to visit user routes, let them proceed or redirect to admin dashboard
-  // For standard members, verify subscription
-  if (appUserAccount.role === 'Member' && subscriptionStatus === 'expired') {
-    return <Navigate to="/subscription" replace />;
-  }
-
   return <Outlet />;
 };
