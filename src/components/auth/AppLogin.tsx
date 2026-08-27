@@ -562,6 +562,22 @@ export const AppLogin: React.FC = () => {
       {/* Main Glass Authentication Card */}
       <div className="w-full max-w-md bg-[#0F1322]/90 backdrop-blur-2xl border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-5 relative z-10">
         
+        {/* Top Back Link to Get Started */}
+        {authMode !== 'first-login-change-password' && (
+          <div className="flex items-center justify-between pb-1">
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              className="text-[11px] font-bold text-slate-400 hover:text-white flex items-center gap-1 transition-colors cursor-pointer"
+            >
+              ← Welcome
+            </button>
+            <span className="text-[10px] font-mono text-cyan-400 font-extrabold px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/20">
+              v2.6
+            </span>
+          </div>
+        )}
+
         {/* Brand Header */}
         <div className="text-center space-y-1">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#4F7CFF] to-[#27D980] p-[2px] mx-auto shadow-lg shadow-[#27D980]/20">

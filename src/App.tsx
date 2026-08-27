@@ -13,6 +13,7 @@ import { WebsiteCustomerRoute } from './components/website/WebsiteCustomerRoute'
 import { WebsiteCustomerDashboard } from './components/website/WebsiteCustomerDashboard';
 
 // App Authentication & Guards
+import { GetStartedScreen } from './components/auth/GetStartedScreen';
 import { AppLogin } from './components/auth/AppLogin';
 import { AppUserRoute } from './components/auth/AppUserRoute';
 import { AppTrainerRoute } from './components/auth/AppTrainerRoute';
@@ -162,7 +163,7 @@ const AppEntryRedirect: React.FC = () => {
   }
 
   if (!firebaseUser || !appUserAccount) {
-    return <AppLogin />;
+    return <GetStartedScreen />;
   }
 
   if (appUserAccount.role === 'Member') {
@@ -197,6 +198,8 @@ const MainAppRoutes: React.FC = () => {
           1. DEDICATED MOBILE APP ENTRY & LOGIN (OWNER, TRAINER, MEMBER)
       ════════════════════════════════════════════════════════════════ */}
       <Route path="/" element={<AppEntryRedirect />} />
+      <Route path="/welcome" element={<GetStartedScreen />} />
+      <Route path="/get-started" element={<GetStartedScreen />} />
       <Route path="/login" element={<AppLogin />} />
       <Route path="/app/login" element={<AppLogin />} />
       <Route path="/app" element={<AppEntryRedirect />} />
