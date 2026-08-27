@@ -90,7 +90,7 @@ export const MobileAppHeader: React.FC<MobileAppHeaderProps> = ({
                 </span>
               </div>
               <h3 className="text-sm font-black text-white tracking-tight flex items-center gap-1">
-                <span>{userName || 'Patit Paban'}</span>
+                <span>{userName || 'Member'}</span>
                 <span className="animate-wave">👋</span>
               </h3>
             </div>

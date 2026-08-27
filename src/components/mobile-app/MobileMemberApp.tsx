@@ -181,9 +181,9 @@ export const MobileMemberApp: React.FC = () => {
       {/* ── 1. COMPACT NATIVE MOBILE HEADER ── */}
       <MobileAppHeader
         title={isSubPage ? undefined : 'Smart Gym'}
-        subtitle={isSubPage ? undefined : `Good morning, ${activeMember?.name || 'Patit Paban'} 👋`}
+        subtitle={isSubPage ? undefined : `Good morning, ${activeMember?.name || 'Member'} 👋`}
         role="Member"
-        userName={activeMember?.name || 'Patit Paban'}
+        userName={activeMember?.name || 'Member'}
         userPhoto={activeMember?.photoUrl}
         accentColor="#00D4FF"
         unreadCount={unreadNotifs.length}
@@ -491,8 +491,8 @@ export const MobileMemberApp: React.FC = () => {
                   <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-[#00F5A0] border-2 border-[#070A12]" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-black text-white">{activeMember?.name || 'Patit Paban'}</h3>
-                  <p className="text-[10px] font-mono text-cyan-400 font-bold">{activeMember?.membershipNo || 'SG-19877'}</p>
+                  <h3 className="text-sm font-black text-white">{activeMember?.name || 'Member'}</h3>
+                  <p className="text-[10px] font-mono text-cyan-400 font-bold">{activeMember?.membershipNo || 'SG-MEMBER'}</p>
                 </div>
               </div>
 

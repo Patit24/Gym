@@ -25,9 +25,9 @@ export const PrivilegePassCard: React.FC<PrivilegePassCardProps> = ({
     ? `${new Date(member.expiryDate || member.endDate).getMonth() + 1}/${String(new Date(member.expiryDate || member.endDate).getFullYear()).slice(-2)}`
     : '1/27';
 
-  const memberName = (member?.name || 'ALEX MORGAN').toUpperCase();
-  const membershipPin = member?.membershipNo ? member.membershipNo.replace(/\D/g, '').slice(-4) || '0210' : '0210';
-  const fullMembershipId = member?.membershipNo || 'SG-90210';
+  const memberName = (member?.name || 'MEMBER').toUpperCase();
+  const membershipPin = member?.membershipNo ? member.membershipNo.replace(/\D/g, '').slice(-4) || '0001' : '0001';
+  const fullMembershipId = member?.membershipNo || (member?.username ? `SG-${member.username}` : 'SG-PASS');
 
   return (
     <div className={`flex flex-col items-center space-y-2 select-none w-full ${className}`}>
