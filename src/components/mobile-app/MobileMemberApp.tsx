@@ -285,63 +285,31 @@ export const MobileMemberApp: React.FC = () => {
               </div>
             </div>
 
-            {/* Today's Summary: 4 Modular Metric Cards */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between px-1">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
-                  Today's Summary
-                </span>
-                <button
-                  onClick={() => navigateTo('progress')}
-                  className="text-[10px] font-bold text-[#00D4FF] hover:underline cursor-pointer"
-                >
-                  View All →
-                </button>
+            {/* Live Club Access & Monthly Streak Ribbon */}
+            <div className="p-3.5 rounded-3xl glass-card flex items-center justify-between shadow-xl border border-white/[0.08]">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-orange-500/15 text-orange-400 flex items-center justify-center border border-orange-500/30 shadow-md">
+                  <Flame className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-xs font-black text-white">Monthly Attendance</h4>
+                    <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-[#00F5A0]/15 text-[#00F5A0] border border-[#00F5A0]/30">
+                      {monthlyCheckIns} {monthlyCheckIns === 1 ? 'Visit' : 'Visits'}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-0.5 truncate max-w-[200px]">
+                    {currentBranch.name} • Gate 24/7 Active
+                  </p>
+                </div>
               </div>
-
-              <div className="grid grid-cols-4 gap-2">
-                
-                {/* 1. Workouts */}
-                <div className="p-3 rounded-2xl glass-card text-center space-y-1">
-                  <span className="text-[8px] font-black text-slate-400 uppercase block truncate">Workouts</span>
-                  <div className="w-7 h-7 mx-auto rounded-lg bg-cyan-500/15 text-cyan-400 flex items-center justify-center border border-cyan-500/30">
-                    <Dumbbell className="w-3.5 h-3.5" />
-                  </div>
-                  <div className="text-xs font-black text-white">{hasWorkout ? '1 Split' : '0/1'}</div>
-                  <span className="text-[8px] text-slate-400 block truncate">{hasWorkout ? 'Assigned' : 'Rest Day'}</span>
-                </div>
-
-                {/* 2. Calories */}
-                <div className="p-3 rounded-2xl glass-card text-center space-y-1">
-                  <span className="text-[8px] font-black text-slate-400 uppercase block truncate">Calories</span>
-                  <div className="w-7 h-7 mx-auto rounded-lg bg-orange-500/15 text-orange-400 flex items-center justify-center border border-orange-500/30">
-                    <Flame className="w-3.5 h-3.5" />
-                  </div>
-                  <div className="text-xs font-black text-white">{todayCalories}</div>
-                  <span className="text-[8px] text-slate-400 block truncate">/{targetCalories} kcal</span>
-                </div>
-
-                {/* 3. Water */}
-                <div className="p-3 rounded-2xl glass-card text-center space-y-1">
-                  <span className="text-[8px] font-black text-slate-400 uppercase block truncate">Water</span>
-                  <div className="w-7 h-7 mx-auto rounded-lg bg-blue-500/15 text-blue-400 flex items-center justify-center border border-blue-500/30">
-                    <Droplets className="w-3.5 h-3.5" />
-                  </div>
-                  <div className="text-xs font-black text-white">{(diet?.waterCurrentLiters || 1.8).toFixed(1)}L</div>
-                  <span className="text-[8px] text-slate-400 block truncate">/3.0L Target</span>
-                </div>
-
-                {/* 4. Monthly Visits / Steps */}
-                <div className="p-3 rounded-2xl glass-card text-center space-y-1">
-                  <span className="text-[8px] font-black text-slate-400 uppercase block truncate">Attendance</span>
-                  <div className="w-7 h-7 mx-auto rounded-lg bg-[#00F5A0]/15 text-[#00F5A0] flex items-center justify-center border border-[#00F5A0]/30">
-                    <Footprints className="w-3.5 h-3.5" />
-                  </div>
-                  <div className="text-xs font-black text-white">{monthlyCheckIns} Days</div>
-                  <span className="text-[8px] text-slate-400 block truncate">This Month</span>
-                </div>
-
-              </div>
+              <button
+                onClick={() => navigateTo('qr')}
+                className="px-3 py-2 rounded-2xl bg-gradient-to-r from-[#00D4FF] to-cyan-500 text-black font-black text-[10px] flex items-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer"
+              >
+                <QrCode className="w-3.5 h-3.5" />
+                <span>Scan</span>
+              </button>
             </div>
 
             {/* Today's Workout Split Widget */}
