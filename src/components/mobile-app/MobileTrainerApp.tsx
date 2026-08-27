@@ -604,7 +604,7 @@ export const MobileTrainerApp: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-[#07090E] text-slate-100 flex flex-col justify-between selection:bg-[#4F7CFF] selection:text-white">
+    <div className="min-h-screen bg-ambient-mesh text-slate-100 flex flex-col justify-between selection:bg-[#00D4FF] selection:text-black">
       
       {/* ── 1. COMPACT NATIVE MOBILE HEADER ── */}
       <MobileAppHeader
@@ -612,7 +612,7 @@ export const MobileTrainerApp: React.FC = () => {
         subtitle={isSubPage ? undefined : `Coach ${currentTrainer?.name} • ${currentTrainer?.specialization || 'Trainer'}`}
         role="Trainer"
         userPhoto={currentTrainer?.photoUrl}
-        accentColor="#4F7CFF"
+        accentColor="#00D4FF"
         unreadCount={unreadNotifs.length}
         onOpenNotifications={() => navigateTo('more')}
         onSignOut={signOutApp}
@@ -633,21 +633,24 @@ export const MobileTrainerApp: React.FC = () => {
             SCREEN 1: TRAINER HOME DASHBOARD
         ═══════════════════════════════════════════════════════════ */}
         {currentScreen === 'home' && (
-          <div className="space-y-4 animate-in fade-in duration-200">
+          <div className="space-y-4 animate-in fade-in duration-300">
             
-            {/* Trainer Greeting Banner */}
-            <div className="bg-gradient-to-br from-[#121727] via-[#0E1322] to-[#0A0D18] p-5 rounded-3xl border border-white/10 shadow-2xl">
+            {/* Trainer Profile Glass Banner */}
+            <div className="glass-card p-5 rounded-3xl shadow-xl flex items-center justify-between">
               <div className="flex items-center gap-3.5">
-                <img
-                  src={currentTrainer?.photoUrl}
-                  alt={currentTrainer?.name}
-                  className="w-12 h-12 rounded-2xl object-cover border-2 border-[#4F7CFF] shadow-lg"
-                />
+                <div className="relative">
+                  <img
+                    src={currentTrainer?.photoUrl}
+                    alt={currentTrainer?.name}
+                    className="w-12 h-12 rounded-2xl object-cover border-2 border-[#00D4FF] shadow-[0_0_15px_rgba(0,212,255,0.25)]"
+                  />
+                  <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-[#00F5A0] border-2 border-[#070A12]" />
+                </div>
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="text-base font-black text-white">Coach {currentTrainer?.name}</h2>
-                    <span className="px-2 py-0.5 rounded-full bg-[#4F7CFF]/15 text-[#4F7CFF] border border-[#4F7CFF]/30 text-[9px] font-black uppercase">
-                      Active
+                    <span className="px-2 py-0.5 rounded-full bg-[#00D4FF]/15 text-[#00D4FF] border border-[#00D4FF]/30 text-[9px] font-black uppercase">
+                      Trainer
                     </span>
                   </div>
                   <p className="text-xs text-slate-400 mt-0.5">
@@ -657,47 +660,47 @@ export const MobileTrainerApp: React.FC = () => {
               </div>
             </div>
 
-            {/* 3 Metrics Cards */}
+            {/* 3 Metric Cards */}
             <div className="grid grid-cols-3 gap-2.5">
               <div
                 onClick={() => navigateTo('clients')}
-                className="bg-[#101422] hover:bg-[#151A2E] p-3.5 rounded-2xl border border-white/10 text-center cursor-pointer transition-all active:scale-95 shadow-md"
+                className="glass-card hover:border-[#00D4FF]/40 p-3.5 rounded-2xl text-center cursor-pointer transition-all active:scale-95 shadow-lg group"
               >
                 <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">My Clients</div>
-                <div className="text-xl font-black text-white mt-0.5">{myClients.length}</div>
-                <span className="text-[9px] text-[#4F7CFF] font-bold block mt-0.5">Manage →</span>
+                <div className="text-xl font-black text-white mt-0.5 group-hover:text-[#00D4FF] transition-colors">{myClients.length}</div>
+                <span className="text-[9px] text-[#00D4FF] font-bold block mt-0.5">Manage →</span>
               </div>
 
               <div
                 onClick={() => navigateTo('attendance')}
-                className="bg-[#101422] hover:bg-[#151A2E] p-3.5 rounded-2xl border border-white/10 text-center cursor-pointer transition-all active:scale-95 shadow-md"
+                className="glass-card hover:border-[#00F5A0]/40 p-3.5 rounded-2xl text-center cursor-pointer transition-all active:scale-95 shadow-lg group"
               >
                 <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Checked In</div>
-                <div className="text-xl font-black text-emerald-400 mt-0.5">{myTodayAttendance.length}</div>
+                <div className="text-xl font-black text-[#00F5A0] mt-0.5">{myTodayAttendance.length}</div>
                 <span className="text-[9px] text-slate-400 font-bold block mt-0.5">Today</span>
               </div>
 
               <div
                 onClick={() => navigateTo('plans')}
-                className="bg-[#101422] hover:bg-[#151A2E] p-3.5 rounded-2xl border border-white/10 text-center cursor-pointer transition-all active:scale-95 shadow-md"
+                className="glass-card hover:border-[#8B5CF6]/40 p-3.5 rounded-2xl text-center cursor-pointer transition-all active:scale-95 shadow-lg group"
               >
                 <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Active Plans</div>
-                <div className="text-xl font-black text-purple-400 mt-0.5">{myClients.length}</div>
-                <span className="text-[9px] text-purple-400 font-bold block mt-0.5">Diets & Sets →</span>
+                <div className="text-xl font-black text-[#8B5CF6] mt-0.5">{myClients.length}</div>
+                <span className="text-[9px] text-[#8B5CF6] font-bold block mt-0.5">Diets & Sets →</span>
               </div>
             </div>
 
             {/* Quick Actions Grid */}
-            <div className="pt-2">
-              <h3 className="text-xs font-black text-slate-400 uppercase tracking-wider mb-2.5">
-                Trainer Actions
-              </h3>
+            <div className="pt-1">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block px-1 mb-2">
+                Trainer Quick Actions
+              </span>
               <div className="grid grid-cols-2 gap-2.5">
                 <button
                   onClick={() => navigateTo('add-client')}
-                  className="bg-gradient-to-br from-[#1A2238] to-[#121727] hover:from-[#202B47] hover:to-[#161D32] active:scale-95 p-4 rounded-2xl border border-[#4F7CFF]/30 text-left transition-all shadow-lg group"
+                  className="glass-card hover:border-[#00D4FF]/40 active:scale-95 p-4 rounded-3xl text-left transition-all shadow-xl group cursor-pointer"
                 >
-                  <div className="w-9 h-9 rounded-xl bg-[#4F7CFF]/20 text-[#4F7CFF] flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                  <div className="w-10 h-10 rounded-2xl bg-[#00D4FF]/15 text-[#00D4FF] flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform border border-[#00D4FF]/30 shadow-md">
                     <UserPlus className="w-5 h-5" />
                   </div>
                   <div className="font-black text-xs text-white">+ Enroll Client</div>
@@ -709,9 +712,9 @@ export const MobileTrainerApp: React.FC = () => {
                     if (myClients.length > 0) setTargetMemberId(myClients[0].id);
                     navigateTo('set-workout');
                   }}
-                  className="bg-gradient-to-br from-[#1A2238] to-[#121727] hover:from-[#202B47] hover:to-[#161D32] active:scale-95 p-4 rounded-2xl border border-purple-500/30 text-left transition-all shadow-lg group"
+                  className="glass-card hover:border-[#8B5CF6]/40 active:scale-95 p-4 rounded-3xl text-left transition-all shadow-xl group cursor-pointer"
                 >
-                  <div className="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                  <div className="w-10 h-10 rounded-2xl bg-[#8B5CF6]/15 text-[#8B5CF6] flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform border border-[#8B5CF6]/30 shadow-md">
                     <Dumbbell className="w-5 h-5" />
                   </div>
                   <div className="font-black text-xs text-white">Assign Workout</div>
@@ -723,9 +726,9 @@ export const MobileTrainerApp: React.FC = () => {
                     if (myClients.length > 0) setTargetMemberId(myClients[0].id);
                     navigateTo('set-diet');
                   }}
-                  className="bg-gradient-to-br from-[#1A2238] to-[#121727] hover:from-[#202B47] hover:to-[#161D32] active:scale-95 p-4 rounded-2xl border border-emerald-500/30 text-left transition-all shadow-lg group"
+                  className="glass-card hover:border-[#00F5A0]/40 active:scale-95 p-4 rounded-3xl text-left transition-all shadow-xl group cursor-pointer"
                 >
-                  <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                  <div className="w-10 h-10 rounded-2xl bg-[#00F5A0]/15 text-[#00F5A0] flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform border border-[#00F5A0]/30 shadow-md">
                     <Utensils className="w-5 h-5" />
                   </div>
                   <div className="font-black text-xs text-white">Assign Diet</div>
@@ -734,9 +737,9 @@ export const MobileTrainerApp: React.FC = () => {
 
                 <button
                   onClick={() => navigateTo('broadcast')}
-                  className="bg-gradient-to-br from-[#1A2238] to-[#121727] hover:from-[#202B47] hover:to-[#161D32] active:scale-95 p-4 rounded-2xl border border-amber-500/30 text-left transition-all shadow-lg group"
+                  className="glass-card hover:border-[#FFC107]/40 active:scale-95 p-4 rounded-3xl text-left transition-all shadow-xl group cursor-pointer"
                 >
-                  <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                  <div className="w-10 h-10 rounded-2xl bg-[#FFC107]/15 text-[#FFC107] flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform border border-[#FFC107]/30 shadow-md">
                     <Send className="w-5 h-5" />
                   </div>
                   <div className="font-black text-xs text-white">Notify Clients</div>
@@ -2336,7 +2339,7 @@ export const MobileTrainerApp: React.FC = () => {
           currentScreen
         }
         onSelectTab={(tabId) => navigateTo(tabId as TrainerScreen)}
-        accentColor="#4F7CFF"
+        accentColor="#00D4FF"
       />
 
     </div>

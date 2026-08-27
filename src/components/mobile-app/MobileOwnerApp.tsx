@@ -502,14 +502,14 @@ export const MobileOwnerApp: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-[#07090E] text-slate-100 flex flex-col justify-between selection:bg-[#4F7CFF] selection:text-white">
+    <div className="min-h-screen bg-ambient-mesh text-slate-100 flex flex-col justify-between selection:bg-[#00D4FF] selection:text-black">
       
       {/* ── 1. COMPACT NATIVE MOBILE HEADER ── */}
       <MobileAppHeader
         title={isSubPage ? undefined : 'Smart Gym'}
-        subtitle={isSubPage ? undefined : `${currentBranch.name} • ${currentBranch.code}`}
+        subtitle={isSubPage ? undefined : `${currentBranch.name} • Master Admin`}
         role="Admin"
-        accentColor="#4F7CFF"
+        accentColor="#00D4FF"
         unreadCount={unreadNotifs.length}
         onOpenNotifications={() => navigateTo('broadcast')}
         onSignOut={signOutApp}
@@ -536,12 +536,12 @@ export const MobileOwnerApp: React.FC = () => {
             SCREEN 1: HOME OVERVIEW (EXECUTIVE DASHBOARD)
         ═══════════════════════════════════════════════════════════ */}
         {currentScreen === 'home' && (
-          <div className="space-y-4 animate-in fade-in duration-200">
+          <div className="space-y-4 animate-in fade-in duration-300">
             
             {/* Live Branch Selector Pill */}
-            <div className="flex items-center justify-between p-3.5 rounded-2xl bg-[#101422] border border-white/10 shadow-lg">
+            <div className="flex items-center justify-between p-3.5 rounded-3xl glass-card shadow-xl">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-[#4F7CFF]/15 text-[#4F7CFF] flex items-center justify-center">
+                <div className="w-9 h-9 rounded-2xl bg-[#00D4FF]/15 text-[#00D4FF] flex items-center justify-center border border-[#00D4FF]/30 shadow-md">
                   <Building2 className="w-4 h-4" />
                 </div>
                 <div>
@@ -554,7 +554,7 @@ export const MobileOwnerApp: React.FC = () => {
                 <select
                   value={selectedBranchId}
                   onChange={(e) => setSelectedBranchId(e.target.value)}
-                  className="bg-[#07090E] text-white text-xs font-bold px-3 py-1.5 rounded-xl border border-white/10 outline-none cursor-pointer focus:border-[#4F7CFF]"
+                  className="bg-black/50 text-white text-xs font-bold px-3 py-1.5 rounded-xl border border-white/10 outline-none cursor-pointer focus:border-[#00D4FF]"
                 >
                   {branches.map((b) => (
                     <option key={b.id} value={b.id}>
@@ -564,7 +564,7 @@ export const MobileOwnerApp: React.FC = () => {
                 </select>
                 <button
                   onClick={() => navigateTo('add-branch')}
-                  className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-[#4F7CFF]"
+                  className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-[#00D4FF] active:scale-90 transition-all cursor-pointer"
                   title="Add New Branch"
                 >
                   <Plus className="w-4 h-4" />
@@ -573,15 +573,15 @@ export const MobileOwnerApp: React.FC = () => {
             </div>
 
             {/* Net Operating Profit Card */}
-            <div className="bg-gradient-to-br from-[#121727] via-[#0E1322] to-[#0A0D18] p-5 rounded-3xl border border-white/10 shadow-2xl relative overflow-hidden">
+            <div className="glass-card p-5 rounded-3xl shadow-2xl relative overflow-hidden border border-white/[0.08]">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-black text-slate-400 uppercase tracking-wider">
                   Net Operating Profit ({currentBranch.code})
                 </span>
                 <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1 ${
                   isProfitPositive
-                    ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                    : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                    ? 'bg-[#00F5A0]/15 text-[#00F5A0] border border-[#00F5A0]/30'
+                    : 'bg-[#FF5C5C]/15 text-[#FF5C5C] border border-[#FF5C5C]/30'
                 }`}>
                   {isProfitPositive ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
                   <span>{isProfitPositive ? 'Surplus' : 'Deficit'}</span>
@@ -594,14 +594,14 @@ export const MobileOwnerApp: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-4 mt-2 text-xs">
                   <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                    <span className="w-2 h-2 rounded-full bg-[#00F5A0]" />
                     <span className="text-slate-400">Collections:</span>
-                    <strong className="text-emerald-400">₹{totalCollections.toLocaleString('en-IN')}</strong>
+                    <strong className="text-[#00F5A0]">₹{totalCollections.toLocaleString('en-IN')}</strong>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-rose-400" />
+                    <span className="w-2 h-2 rounded-full bg-[#FF5C5C]" />
                     <span className="text-slate-400">Expenses:</span>
-                    <strong className="text-rose-400">₹{totalExpenseAmount.toLocaleString('en-IN')}</strong>
+                    <strong className="text-[#FF5C5C]">₹{totalExpenseAmount.toLocaleString('en-IN')}</strong>
                   </div>
                 </div>
               </div>
@@ -611,43 +611,43 @@ export const MobileOwnerApp: React.FC = () => {
             <div className="grid grid-cols-3 gap-2.5">
               <div
                 onClick={() => navigateTo('members')}
-                className="bg-[#101422] hover:bg-[#151A2E] p-3.5 rounded-2xl border border-white/10 text-center cursor-pointer transition-all active:scale-95 shadow-md"
+                className="glass-card hover:border-[#00D4FF]/40 p-3.5 rounded-2xl text-center cursor-pointer transition-all active:scale-95 shadow-lg group"
               >
                 <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Members</div>
-                <div className="text-xl font-black text-white mt-0.5">{members.length}</div>
-                <span className="text-[9px] text-[#4F7CFF] font-bold block mt-0.5">Directory →</span>
+                <div className="text-xl font-black text-white mt-0.5 group-hover:text-[#00D4FF] transition-colors">{members.length}</div>
+                <span className="text-[9px] text-[#00D4FF] font-bold block mt-0.5">Directory →</span>
               </div>
 
               <div
                 onClick={() => navigateTo('attendance')}
-                className="bg-[#101422] hover:bg-[#151A2E] p-3.5 rounded-2xl border border-white/10 text-center cursor-pointer transition-all active:scale-95 shadow-md"
+                className="glass-card hover:border-[#00F5A0]/40 p-3.5 rounded-2xl text-center cursor-pointer transition-all active:scale-95 shadow-lg group"
               >
                 <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Check-ins</div>
-                <div className="text-xl font-black text-emerald-400 mt-0.5">{todayCheckins.length}</div>
+                <div className="text-xl font-black text-[#00F5A0] mt-0.5">{todayCheckins.length}</div>
                 <span className="text-[9px] text-slate-400 font-bold block mt-0.5">Today</span>
               </div>
 
               <div
                 onClick={() => navigateTo('trainers')}
-                className="bg-[#101422] hover:bg-[#151A2E] p-3.5 rounded-2xl border border-white/10 text-center cursor-pointer transition-all active:scale-95 shadow-md"
+                className="glass-card hover:border-[#8B5CF6]/40 p-3.5 rounded-2xl text-center cursor-pointer transition-all active:scale-95 shadow-lg group"
               >
                 <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Trainers</div>
-                <div className="text-xl font-black text-purple-400 mt-0.5">{trainers.length}</div>
-                <span className="text-[9px] text-purple-400 font-bold block mt-0.5">Coaches →</span>
+                <div className="text-xl font-black text-[#8B5CF6] mt-0.5">{trainers.length}</div>
+                <span className="text-[9px] text-[#8B5CF6] font-bold block mt-0.5">Coaches →</span>
               </div>
             </div>
 
             {/* Touch-Friendly 2x2 Quick Action Grid */}
-            <div className="pt-2">
-              <h3 className="text-xs font-black text-slate-400 uppercase tracking-wider mb-2.5">
-                Quick Actions
-              </h3>
+            <div className="pt-1">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block px-1 mb-2">
+                Executive Quick Actions
+              </span>
               <div className="grid grid-cols-2 gap-2.5">
                 <button
                   onClick={() => navigateTo('add-member')}
-                  className="bg-gradient-to-br from-[#1A2238] to-[#121727] hover:from-[#202B47] hover:to-[#161D32] active:scale-95 p-4 rounded-2xl border border-[#4F7CFF]/30 text-left transition-all shadow-lg group"
+                  className="glass-card hover:border-[#00D4FF]/40 active:scale-95 p-4 rounded-3xl text-left transition-all shadow-xl group cursor-pointer"
                 >
-                  <div className="w-9 h-9 rounded-xl bg-[#4F7CFF]/20 text-[#4F7CFF] flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                  <div className="w-10 h-10 rounded-2xl bg-[#00D4FF]/15 text-[#00D4FF] flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform border border-[#00D4FF]/30 shadow-md">
                     <UserPlus className="w-5 h-5" />
                   </div>
                   <div className="font-black text-xs text-white">+ Add Member</div>
@@ -656,9 +656,9 @@ export const MobileOwnerApp: React.FC = () => {
 
                 <button
                   onClick={() => navigateTo('add-trainer')}
-                  className="bg-gradient-to-br from-[#1A2238] to-[#121727] hover:from-[#202B47] hover:to-[#161D32] active:scale-95 p-4 rounded-2xl border border-purple-500/30 text-left transition-all shadow-lg group"
+                  className="glass-card hover:border-[#8B5CF6]/40 active:scale-95 p-4 rounded-3xl text-left transition-all shadow-xl group cursor-pointer"
                 >
-                  <div className="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                  <div className="w-10 h-10 rounded-2xl bg-[#8B5CF6]/15 text-[#8B5CF6] flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform border border-[#8B5CF6]/30 shadow-md">
                     <Award className="w-5 h-5" />
                   </div>
                   <div className="font-black text-xs text-white">+ Add Coach</div>
@@ -667,9 +667,9 @@ export const MobileOwnerApp: React.FC = () => {
 
                 <button
                   onClick={() => navigateTo('add-expense')}
-                  className="bg-gradient-to-br from-[#1A2238] to-[#121727] hover:from-[#202B47] hover:to-[#161D32] active:scale-95 p-4 rounded-2xl border border-rose-500/30 text-left transition-all shadow-lg group"
+                  className="glass-card hover:border-[#FF5C5C]/40 active:scale-95 p-4 rounded-3xl text-left transition-all shadow-xl group cursor-pointer"
                 >
-                  <div className="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                  <div className="w-10 h-10 rounded-2xl bg-[#FF5C5C]/15 text-[#FF5C5C] flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform border border-[#FF5C5C]/30 shadow-md">
                     <DollarSign className="w-5 h-5" />
                   </div>
                   <div className="font-black text-xs text-white">+ Record Expense</div>
@@ -678,9 +678,9 @@ export const MobileOwnerApp: React.FC = () => {
 
                 <button
                   onClick={() => navigateTo('broadcast')}
-                  className="bg-gradient-to-br from-[#1A2238] to-[#121727] hover:from-[#202B47] hover:to-[#161D32] active:scale-95 p-4 rounded-2xl border border-amber-500/30 text-left transition-all shadow-lg group"
+                  className="glass-card hover:border-[#FFC107]/40 active:scale-95 p-4 rounded-3xl text-left transition-all shadow-xl group cursor-pointer"
                 >
-                  <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                  <div className="w-10 h-10 rounded-2xl bg-[#FFC107]/15 text-[#FFC107] flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform border border-[#FFC107]/30 shadow-md">
                     <Send className="w-5 h-5" />
                   </div>
                   <div className="font-black text-xs text-white">Push Broadcast</div>
@@ -690,16 +690,16 @@ export const MobileOwnerApp: React.FC = () => {
             </div>
 
             {/* Recent Member Admissions Stream */}
-            <div className="pt-2">
-              <div className="flex items-center justify-between mb-2.5">
-                <h3 className="text-xs font-black text-slate-400 uppercase tracking-wider">
+            <div className="pt-1">
+              <div className="flex items-center justify-between mb-2 px-1">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
                   Recent Members
-                </h3>
+                </span>
                 <button
                   onClick={() => navigateTo('members')}
-                  className="text-[11px] font-bold text-[#4F7CFF] hover:underline"
+                  className="text-[10px] font-bold text-[#00D4FF] hover:underline cursor-pointer"
                 >
-                  View All ({members.length})
+                  View All ({members.length}) →
                 </button>
               </div>
 
@@ -711,26 +711,26 @@ export const MobileOwnerApp: React.FC = () => {
                       setSelectedMember(member);
                       navigateTo('member-profile');
                     }}
-                    className="p-3 bg-[#101422] hover:bg-[#151A2E] active:scale-[0.98] rounded-2xl border border-white/10 flex items-center justify-between cursor-pointer transition-all shadow-sm"
+                    className="p-3.5 glass-card hover:border-[#00D4FF]/40 active:scale-[0.98] rounded-2xl flex items-center justify-between cursor-pointer transition-all shadow-md"
                   >
                     <div className="flex items-center gap-3">
                       <img
                         src={member.photoUrl}
                         alt={member.name}
-                        className="w-10 h-10 rounded-xl object-cover border border-[#4F7CFF]/40"
+                        className="w-10 h-10 rounded-xl object-cover border border-[#00D4FF]/40 shadow-sm"
                       />
                       <div>
                         <h4 className="text-xs font-black text-white">{member.name}</h4>
                         <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
                           <span>{member.username || member.membershipNo}</span>
                           <span>•</span>
-                          <span className="text-[#4F7CFF] font-semibold">{member.planName}</span>
+                          <span className="text-[#00D4FF] font-semibold">{member.planName}</span>
                         </div>
                       </div>
                     </div>
 
                     <div className="text-right">
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#00F5A0]/15 text-[#00F5A0] border border-[#00F5A0]/30">
                         {member.status}
                       </span>
                       <span className="text-[9px] text-slate-400 block mt-1">Exp: {member.endDate}</span>
@@ -2428,7 +2428,7 @@ export const MobileOwnerApp: React.FC = () => {
           currentScreen
         }
         onSelectTab={(tabId) => navigateTo(tabId as OwnerScreen)}
-        accentColor="#4F7CFF"
+        accentColor="#00D4FF"
       />
 
     </div>
