@@ -27,7 +27,15 @@ export const DynamicQRCard: React.FC = () => {
     return () => clearInterval(interval);
   }, [activeMember, generateNewToken]);
 
-  const currentBranch = branches.find((b) => b.id === selectedBranchId) || branches[0];
+  const currentBranch = (branches || []).find((b) => b?.id === selectedBranchId) || branches?.[0] || {
+    id: 'branch-1',
+    name: 'Smart Gym Club',
+    code: 'SG-01',
+    city: 'Main Facility',
+    activeMembers: 0,
+    currentCheckIns: 0,
+    monthlyRevenue: 0
+  };
 
   return (
     <div className="space-y-4 animate-in fade-in duration-300 text-xs">

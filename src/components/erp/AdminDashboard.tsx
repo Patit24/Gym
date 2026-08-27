@@ -32,7 +32,16 @@ interface AdminDashboardProps {
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNewMemberModal, onNavigateTab }) => {
   const { branches, selectedBranchId, members, attendance, transactions, expenses, currentRole } = useGym();
 
-  const currentBranch = branches.find((b) => b.id === selectedBranchId) || branches[0];
+  const currentBranch = (branches || []).find((b) => b?.id === selectedBranchId) || branches?.[0] || {
+    id: 'all',
+    name: 'All Branches',
+    code: 'HQ',
+    city: 'Metro',
+    capacity: 500,
+    activeMembers: 0,
+    currentCheckIns: 0,
+    monthlyRevenue: 0
+  };
   const branchMembers = selectedBranchId === 'all' 
     ? members 
     : members.filter((m) => m.branchId === selectedBranchId);

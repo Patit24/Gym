@@ -173,7 +173,15 @@ export const MobileMemberApp: React.FC = () => {
     { id: 'more', label: 'More', icon: Layers, badge: unreadNotifs.length > 0 ? unreadNotifs.length : undefined },
   ];
 
-  const currentBranch = branches.find((b) => b.id === selectedBranchId) || branches[0] || { name: 'Kolkata Downtown Club' };
+  const currentBranch = (branches || []).find((b) => b?.id === selectedBranchId) || branches?.[0] || {
+    id: 'branch-1',
+    name: 'Smart Gym Club',
+    code: 'SG-01',
+    city: 'Main Facility',
+    activeMembers: 0,
+    currentCheckIns: 0,
+    monthlyRevenue: 0
+  };
 
   return (
     <div className="min-h-screen bg-ambient-mesh text-slate-100 flex flex-col justify-between selection:bg-[#00D4FF] selection:text-black">

@@ -10,7 +10,15 @@ interface ReceptionDashboardProps {
 export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ onOpenNewMemberModal, onNavigateTab }) => {
   const { members, attendance, selectedBranchId, branches, transactions, setPerspective } = useGym();
 
-  const currentBranch = branches.find((b) => b.id === selectedBranchId) || branches[0];
+  const currentBranch = (branches || []).find((b) => b?.id === selectedBranchId) || branches?.[0] || {
+    id: 'branch-1',
+    name: 'Main Club',
+    code: 'HQ',
+    city: 'Metro',
+    activeMembers: 0,
+    currentCheckIns: 0,
+    monthlyRevenue: 0
+  };
   const branchMembers = members.filter((m) => m.branchId === selectedBranchId);
 
   const pendingDuesMembers = branchMembers.filter((m) => m.pendingDues > 0 || m.status === 'Renewal Due');

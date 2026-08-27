@@ -42,7 +42,15 @@ export const MobileAppSimulator: React.FC = () => {
   const [showRoleDrawer, setShowRoleDrawer] = useState(false);
   const [showQuickModal, setShowQuickModal] = useState<string | null>(null);
 
-  const currentBranch = branches.find((b) => b.id === selectedBranchId) || branches[0];
+  const currentBranch = (branches || []).find((b) => b?.id === selectedBranchId) || branches?.[0] || {
+    id: 'branch-1',
+    name: 'Smart Gym Club',
+    code: 'SG-01',
+    city: 'Metro',
+    activeMembers: 0,
+    currentCheckIns: 0,
+    monthlyRevenue: 0
+  };
 
   const roles: Role[] = [
     'Member',

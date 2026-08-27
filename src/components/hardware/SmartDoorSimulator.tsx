@@ -21,7 +21,15 @@ export const SmartDoorSimulator: React.FC = () => {
   const [doorStatus, setDoorStatus] = useState<'LOCKED' | 'UNLOCKED'>('LOCKED');
   const [accessResult, setAccessResult] = useState<{ success: boolean; message: string; member?: Member } | null>(null);
 
-  const currentBranch = branches.find((b) => b.id === selectedBranchId) || branches[0];
+  const currentBranch = (branches || []).find((b) => b?.id === selectedBranchId) || branches?.[0] || {
+    id: 'branch-1',
+    name: 'Main Access Gate',
+    code: 'GATE-01',
+    city: 'Metro',
+    activeMembers: 0,
+    currentCheckIns: 0,
+    monthlyRevenue: 0
+  };
 
   const handleExecuteScan = () => {
     setIsScanning(true);

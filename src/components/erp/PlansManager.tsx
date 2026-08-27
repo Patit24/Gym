@@ -17,7 +17,15 @@ import {
 
 export const PlansManager: React.FC = () => {
   const { plans, members, selectedBranchId, branches, addMembershipPlan, updateMembershipPlan, deleteMembershipPlan } = useGym();
-  const currentBranch = branches.find((b) => b.id === selectedBranchId) || branches[0];
+  const currentBranch = (branches || []).find((b) => b?.id === selectedBranchId) || branches?.[0] || {
+    id: 'all',
+    name: 'All Branches',
+    code: 'HQ',
+    city: 'Metro',
+    activeMembers: 0,
+    currentCheckIns: 0,
+    monthlyRevenue: 0
+  };
 
   const [showModal, setShowModal] = useState(false);
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);

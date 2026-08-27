@@ -49,7 +49,15 @@ export const AdminMobileConsole: React.FC = () => {
     canViewDashboard: true, canManageFinance: false, canAccessAdmin: false,
   });
 
-  const currentBranch = branches.find(b => b.id === selectedBranchId) || branches[0];
+  const currentBranch = (branches || []).find(b => b?.id === selectedBranchId) || branches?.[0] || {
+    id: 'branch-1',
+    name: 'Smart Gym Executive',
+    code: 'HQ',
+    city: 'Metro',
+    activeMembers: 0,
+    currentCheckIns: 0,
+    monthlyRevenue: 0
+  };
   const selectedPlan = plans.find(p => p.id === memberForm.planId) || plans[0];
   const branchMembers = members.filter(m => m.branchId === selectedBranchId);
   const branchTrainers = employees.filter(e => e.branchId === selectedBranchId && e.role === 'Trainer');
