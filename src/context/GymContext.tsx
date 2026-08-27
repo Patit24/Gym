@@ -2659,8 +2659,22 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const addAppUser = async (user: AppUser) => {
-    setAppUsers(prev => [user, ...prev]);
-    safeDbWrite(setDoc(doc(db, 'users', user.id), user));
+    let finalUser = { ...user };
+    if (user.tempPassword || user.password) {
+      const pass = user.tempPassword || user.password || 'SmartGym@2026';
+      const userEmail = user.email || `${user.username.toLowerCase()}@smartgym.com`;
+      try {
+        const authUid = await createIsolatedAuthUser(userEmail, pass);
+        finalUser.id = authUid;
+        if (!finalUser.linkedId) {
+          finalUser.linkedId = authUid;
+        }
+      } catch (authErr: any) {
+        console.warn('createIsolatedAuthUser notice in addAppUser (proceeding with user.id):', authErr);
+      }
+    }
+    setAppUsers(prev => [finalUser, ...prev]);
+    safeDbWrite(setDoc(doc(db, 'users', finalUser.id), finalUser));
   };
 
   const addEmployee = async (emp: Employee) => {

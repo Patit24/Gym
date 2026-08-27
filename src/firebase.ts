@@ -20,22 +20,29 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 
 /**
- * Creates a new user in Firebase Authentication using an isolated secondary App instance.
- * This guarantees the current logged-in user (e.g. Admin / Owner) is NOT signed out or replaced
- * when provisioning accounts for Trainers, Staff, or Members.
+ * Creates a new user in Firebase Authentication using an isolated in-memory secondary App instance.
+ * Using `inMemoryPersistence` guarantees the current logged-in user (e.g. Master Admin, Owner, Manager)
+ * is NEVER signed out, replaced, or interrupted when provisioning accounts for Trainers, Staff, or Members.
  */
 export async function createIsolatedAuthUser(email: string, pass: string): Promise<string> {
   const { initializeApp: initSecondaryApp, deleteApp } = await import('firebase/app');
-  const { getAuth: getSecondaryAuth, createUserWithEmailAndPassword, signOut } = await import('firebase/auth');
+  const { initializeAuth, inMemoryPersistence, createUserWithEmailAndPassword, signOut } = await import('firebase/auth');
   
   const secondaryAppName = `auth-creator-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
   const secondaryApp = initSecondaryApp(firebaseConfig, secondaryAppName);
-  const secondaryAuth = getSecondaryAuth(secondaryApp);
+  
+  // CRITICAL: Initialize secondary auth strictly in memory so it never writes to IndexedDB/LocalStorage
+  // or broadcasts auth state change events to the primary application.
+  const secondaryAuth = initializeAuth(secondaryApp, {
+    persistence: inMemoryPersistence
+  });
 
   try {
     const userCred = await createUserWithEmailAndPassword(secondaryAuth, email, pass);
     const newUid = userCred.user.uid;
-    await signOut(secondaryAuth);
+    try {
+      await signOut(secondaryAuth);
+    } catch {}
     await deleteApp(secondaryApp);
     return newUid;
   } catch (err: any) {
