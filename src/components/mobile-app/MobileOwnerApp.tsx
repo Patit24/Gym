@@ -99,7 +99,8 @@ export const MobileOwnerApp: React.FC = () => {
     updateMembershipPlan,
     signOutApp,
     notifications,
-    markNotificationRead
+    markNotificationRead,
+    recordMemberPayment
   } = useGym();
 
   const [currentScreen, setCurrentScreen] = useState<OwnerScreen>('home');
@@ -232,6 +233,8 @@ export const MobileOwnerApp: React.FC = () => {
   const [memHeight, setMemHeight] = useState(175);
   const [memWeight, setMemWeight] = useState(75);
   const [memTrainerId, setMemTrainerId] = useState('');
+  const [memPaymentMethod, setMemPaymentMethod] = useState<'UPI' | 'Cash' | 'Card' | 'Bank Transfer'>('UPI');
+  const [includeRegFee, setIncludeRegFee] = useState(true);
   const [autoCreateLogin, setAutoCreateLogin] = useState(true);
   const [autoSendWhatsApp, setAutoSendWhatsApp] = useState(true);
   const [isSubmittingMember, setIsSubmittingMember] = useState(false);
@@ -380,9 +383,13 @@ export const MobileOwnerApp: React.FC = () => {
 
     try {
       const selectedPlan = plans.find((p) => p.id === memPlanId) || plans[0];
+      const packagePrice = selectedPlan?.totalPrice || selectedPlan?.basePrice || 1500;
+      const regFeeAmount = includeRegFee ? (feeReg || 500) : 0;
+      const totalAdmissionAmount = packagePrice + regFeeAmount;
+
       const today = new Date();
       const expiry = new Date();
-      expiry.setDate(today.getDate() + (selectedPlan?.durationDays || 30));
+      expiry.setDate(today.getDate() + (selectedPlan?.durationDays || (selectedPlan?.durationMonths ? selectedPlan.durationMonths * 30 : 30)));
 
       const res = await provisionMemberWithAccount({
         name: memName.trim(),
@@ -413,16 +420,24 @@ export const MobileOwnerApp: React.FC = () => {
         endDate: expiry.toISOString().split('T')[0],
         expiryDate: expiry.toISOString().split('T')[0],
         paymentStatus: 'Paid',
+        paymentMethod: memPaymentMethod,
         assignedTrainerId: memTrainerId || (trainers[0]?.id || 'emp-trainer-1'),
         pendingDues: 0,
-        paidAmount: selectedPlan?.totalPrice || selectedPlan?.basePrice || 1500,
-        totalPlanAmount: selectedPlan?.totalPrice || selectedPlan?.basePrice || 1500,
+        paidAmount: totalAdmissionAmount,
+        totalPlanAmount: totalAdmissionAmount,
         faceEnrolled: false,
         lockerNumber: `L-${Math.floor(10 + Math.random() * 90)}`,
       }, {
         createLogin: autoCreateLogin,
         sendWhatsApp: autoSendWhatsApp
       });
+
+      // Record transaction in ledger
+      try {
+        await recordMemberPayment(res.member.id, totalAdmissionAmount, memPaymentMethod);
+      } catch (tErr) {
+        console.warn('Admission transaction recorded in context:', tErr);
+      }
 
       setNewlyCreatedMember(res.member);
       setNewlyCreatedTempPassword(res.tempPassword || '');
@@ -1292,6 +1307,82 @@ export const MobileOwnerApp: React.FC = () => {
                 </select>
               </div>
 
+              {/* Fee Breakdown & Payment Method Section */}
+              {(() => {
+                const selectedAddPlan = plans.find((p) => p.id === memPlanId) || plans[0];
+                const packagePrice = selectedAddPlan?.totalPrice || selectedAddPlan?.basePrice || 1500;
+                const regFeeAmount = includeRegFee ? (feeReg || 500) : 0;
+                const totalAdmissionAmount = packagePrice + regFeeAmount;
+
+                return (
+                  <div className="p-4 bg-gradient-to-br from-[#0B1528] via-[#0D1220] to-[#07090E] rounded-3xl border border-cyan-500/30 shadow-xl space-y-3">
+                    <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                      <span className="text-[10px] font-black text-white uppercase tracking-wider flex items-center gap-1.5">
+                        <CreditCard className="w-4 h-4 text-cyan-400" />
+                        <span>Admission Fees & Package Tariff</span>
+                      </span>
+                      <span className="text-[9px] font-black text-cyan-300 bg-cyan-500/10 px-2 py-0.5 rounded-full border border-cyan-500/20 uppercase">
+                        Payment Summary
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 text-xs">
+                      {/* Registration fee row */}
+                      <div className="flex items-center justify-between p-2.5 bg-[#07090E] rounded-2xl border border-white/5">
+                        <label className="flex items-center gap-2 cursor-pointer text-slate-300 font-semibold text-xs">
+                          <input
+                            type="checkbox"
+                            checked={includeRegFee}
+                            onChange={(e) => setIncludeRegFee(e.target.checked)}
+                            className="w-4 h-4 rounded text-cyan-500 bg-[#121727] border-white/20 focus:ring-0"
+                          />
+                          <span>Registration / Admission Fee</span>
+                        </label>
+                        <span className="text-white font-extrabold">₹{(feeReg || 500).toLocaleString('en-IN')}</span>
+                      </div>
+
+                      {/* Selected Plan row */}
+                      <div className="flex items-center justify-between p-2.5 bg-[#07090E] rounded-2xl border border-white/5">
+                        <div>
+                          <span className="text-white font-bold block">{selectedAddPlan?.name || 'Standard Plan'}</span>
+                          <span className="text-[10px] text-slate-400">Duration: {selectedAddPlan?.durationMonths || 1} Month(s)</span>
+                        </div>
+                        <span className="text-cyan-300 font-black">₹{packagePrice.toLocaleString('en-IN')}</span>
+                      </div>
+
+                      {/* Total Due Row */}
+                      <div className="flex items-center justify-between p-3 bg-cyan-950/40 rounded-2xl border border-cyan-500/40">
+                        <span className="text-xs font-black text-white uppercase">Total Payable Amount</span>
+                        <strong className="text-base font-black text-emerald-400">₹{totalAdmissionAmount.toLocaleString('en-IN')}</strong>
+                      </div>
+                    </div>
+
+                    {/* Payment Method Chips */}
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1.5">
+                        Select Payment Method *
+                      </label>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {(['UPI', 'Cash', 'Card', 'Bank Transfer'] as const).map((method) => (
+                          <button
+                            type="button"
+                            key={method}
+                            onClick={() => setMemPaymentMethod(method)}
+                            className={`py-2 rounded-xl text-[10px] font-bold border transition-all cursor-pointer ${
+                              memPaymentMethod === method
+                                ? 'bg-cyan-500/25 border-cyan-500 text-cyan-300 shadow-md font-black'
+                                : 'bg-[#080C14] border-white/10 text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            {method}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Automatic Provisioning & WhatsApp Options */}
               <div className="p-3.5 bg-[#07090E] rounded-2xl border border-white/10 space-y-2.5">
                 <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
@@ -1319,16 +1410,30 @@ export const MobileOwnerApp: React.FC = () => {
                 </label>
               </div>
 
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  disabled={isSubmittingMember}
-                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#4F7CFF] to-[#27D980] hover:opacity-95 active:scale-95 disabled:opacity-50 text-black font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-[#4F7CFF]/20"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>{isSubmittingMember ? 'Creating Account & Dispatching WhatsApp...' : 'Create Member & Dispatch Credentials'}</span>
-                </button>
-              </div>
+              {/* Submit Pay & Enroll Button */}
+              {(() => {
+                const selectedAddPlan = plans.find((p) => p.id === memPlanId) || plans[0];
+                const packagePrice = selectedAddPlan?.totalPrice || selectedAddPlan?.basePrice || 1500;
+                const regFeeAmount = includeRegFee ? (feeReg || 500) : 0;
+                const totalAdmissionAmount = packagePrice + regFeeAmount;
+
+                return (
+                  <div className="pt-2">
+                    <button
+                      type="submit"
+                      disabled={isSubmittingMember}
+                      className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#00D4FF] via-cyan-500 to-emerald-400 hover:opacity-95 active:scale-95 disabled:opacity-50 text-black font-black text-xs flex items-center justify-center gap-2 shadow-2xl shadow-cyan-500/30 cursor-pointer"
+                    >
+                      <CreditCard className="w-4 h-4" />
+                      <span>
+                        {isSubmittingMember
+                          ? 'Processing Admission & Dispatching Credentials...'
+                          : `Pay ₹${totalAdmissionAmount.toLocaleString('en-IN')} & Enroll Member`}
+                      </span>
+                    </button>
+                  </div>
+                );
+              })()}
             </form>
           </div>
         )}
@@ -1342,65 +1447,93 @@ export const MobileOwnerApp: React.FC = () => {
               <div className="w-14 h-14 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto border border-emerald-500/40 shadow-lg">
                 <CheckCircle2 className="w-7 h-7" />
               </div>
-              <h3 className="text-base font-black text-white">Member Admitted & Account Created!</h3>
-              <p className="text-xs text-slate-400">Credentials generated and linked successfully</p>
+              <h3 className="text-base font-black text-white">Payment Received & Member Enrolled! 🎉</h3>
+              <p className="text-xs text-slate-400">Account credentials generated and ready to dispatch</p>
             </div>
 
-            {/* Credentials Card */}
-            <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 shadow-xl space-y-3">
+            {/* Payment Receipt Summary Card */}
+            <div className="p-4 bg-gradient-to-br from-[#0B1528] via-[#0D1220] to-[#07090E] rounded-3xl border border-emerald-500/30 shadow-xl space-y-2.5 text-xs">
               <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                <div>
-                  <div className="text-sm font-black text-white">{newlyCreatedMember.name}</div>
-                  <div className="text-[10px] text-slate-400">ID: {newlyCreatedMember.membershipNo}</div>
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Admission Payment Receipt</span>
+                <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                  Paid via {newlyCreatedMember.paymentMethod || 'UPI'} ✓
+                </span>
+              </div>
+              <div className="flex justify-between items-baseline">
+                <span className="text-slate-300">Total Amount Paid:</span>
+                <strong className="text-base font-black text-emerald-400">
+                  ₹{(newlyCreatedMember.paidAmount || 2000).toLocaleString('en-IN')}
+                </strong>
+              </div>
+              <div className="p-2.5 bg-[#07090E] rounded-xl border border-white/5 text-[11px] space-y-1 text-slate-400">
+                <div className="flex justify-between">
+                  <span>Enrolled Package:</span>
+                  <span className="text-white font-bold">{newlyCreatedMember.planName}</span>
                 </div>
-                <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-[#27D980]/15 text-[#27D980] border border-[#27D980]/30">
-                  {newlyCreatedMember.planName}
+                <div className="flex justify-between">
+                  <span>Membership Validity:</span>
+                  <span className="text-cyan-300 font-bold">{newlyCreatedMember.endDate}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Login Credentials Card */}
+            <div className="bg-[#101422] p-4 rounded-3xl border border-cyan-500/30 shadow-2xl space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                <div className="flex items-center gap-2">
+                  <KeyRound className="w-4 h-4 text-cyan-400" />
+                  <span className="text-xs font-black text-white uppercase tracking-wider">Member Login Credentials</span>
+                </div>
+                <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                  Active
                 </span>
               </div>
 
               {/* Login Credentials Box */}
-              <div className="p-3 bg-[#07090E] rounded-2xl border border-white/10 space-y-2">
+              <div className="p-3.5 bg-[#07090E] rounded-2xl border border-white/10 space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Username</span>
-                  <div className="flex items-center gap-2">
-                    <strong className="text-xs font-mono text-white font-black">{newlyCreatedMember.username || newlyCreatedMember.membershipNo}</strong>
-                    <button
-                      onClick={() => copyToClipboard(newlyCreatedMember.username || newlyCreatedMember.membershipNo, 'Username')}
-                      className="p-1 rounded-md bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white"
-                      title="Copy Username"
-                    >
-                      {copiedField === 'Username' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                    </button>
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Username</span>
+                    <strong className="text-sm font-mono text-white font-black">{newlyCreatedMember.username || newlyCreatedMember.membershipNo}</strong>
                   </div>
+                  <button
+                    onClick={() => copyToClipboard(newlyCreatedMember.username || newlyCreatedMember.membershipNo, 'Username')}
+                    className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 text-xs font-bold flex items-center gap-1 cursor-pointer active:scale-95"
+                    title="Copy Username"
+                  >
+                    {copiedField === 'Username' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedField === 'Username' ? 'Copied' : 'Copy'}</span>
+                  </button>
                 </div>
 
-                <div className="flex items-center justify-between pt-1 border-t border-white/5">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Temporary Password</span>
-                  <div className="flex items-center gap-2">
-                    <strong className="text-xs font-mono text-amber-400 font-black">{newlyCreatedTempPassword || newlyCreatedMember.tempPassword || 'Gym@48291'}</strong>
-                    <button
-                      onClick={() => copyToClipboard(newlyCreatedTempPassword || newlyCreatedMember.tempPassword || 'Gym@48291', 'Password')}
-                      className="p-1 rounded-md bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white"
-                      title="Copy Password"
-                    >
-                      {copiedField === 'Password' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                    </button>
+                <div className="flex items-center justify-between pt-2 border-t border-white/5">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Temporary Password</span>
+                    <strong className="text-sm font-mono text-amber-400 font-black">{newlyCreatedTempPassword || newlyCreatedMember.tempPassword || 'Gym@48291'}</strong>
                   </div>
+                  <button
+                    onClick={() => copyToClipboard(newlyCreatedTempPassword || newlyCreatedMember.tempPassword || 'Gym@48291', 'Password')}
+                    className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 text-xs font-bold flex items-center gap-1 cursor-pointer active:scale-95"
+                    title="Copy Password"
+                  >
+                    {copiedField === 'Password' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedField === 'Password' ? 'Copied' : 'Copy'}</span>
+                  </button>
                 </div>
               </div>
 
-              {/* WhatsApp Status */}
-              <div className="flex items-center justify-between p-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-xs">
+              {/* WhatsApp Action Button */}
+              <div className="flex items-center justify-between p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-xs">
                 <div className="flex items-center gap-2">
                   <MessageSquare className="w-4 h-4 text-emerald-400" />
                   <span className="text-emerald-300 font-bold">
-                    {newlyCreatedWhatsAppStatus === 'SENT' ? 'Credentials Sent via WhatsApp' : 'WhatsApp Ready'}
+                    {newlyCreatedWhatsAppStatus === 'SENT' ? 'Credentials Sent via WhatsApp' : 'Dispatch via WhatsApp'}
                   </span>
                 </div>
                 {newlyCreatedWhatsAppUrl && (
                   <button
                     onClick={() => window.open(newlyCreatedWhatsAppUrl, '_blank')}
-                    className="px-2.5 py-1 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-black font-black text-[10px] flex items-center gap-1 shadow-sm"
+                    className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-black font-black text-[10px] flex items-center gap-1 shadow-md cursor-pointer active:scale-95"
                   >
                     <span>Open Chat</span>
                     <ExternalLink className="w-3 h-3" />
@@ -1411,10 +1544,10 @@ export const MobileOwnerApp: React.FC = () => {
               {/* Copy Full Text */}
               <button
                 onClick={() => {
-                  const fullText = `Welcome to Smart Gym!\n\nHi ${newlyCreatedMember.name},\nYour member account is created.\nMember ID: ${newlyCreatedMember.membershipNo}\nUsername: ${newlyCreatedMember.username}\nTemporary Password: ${newlyCreatedTempPassword}\n\nPlease log in and set your new password.`;
+                  const fullText = `Welcome to Smart Gym!\n\nHi ${newlyCreatedMember.name},\nYour member account is created.\nMember ID: ${newlyCreatedMember.membershipNo}\nUsername: ${newlyCreatedMember.username}\nTemporary Password: ${newlyCreatedTempPassword || 'Gym@48291'}\n\nPlease log in at: https://smartgym.app/login`;
                   copyToClipboard(fullText, 'FullCredentials');
                 }}
-                className="w-full py-2.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white text-xs font-bold flex items-center justify-center gap-2"
+                className="w-full py-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer active:scale-95"
               >
                 {copiedField === 'FullCredentials' ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                 <span>{copiedField === 'FullCredentials' ? 'Copied Full Credentials Message!' : 'Copy Full Credentials Message'}</span>
@@ -1426,20 +1559,20 @@ export const MobileOwnerApp: React.FC = () => {
               <PrivilegePassCard member={newlyCreatedMember} />
             </div>
 
-            {/* Actions */}
+            {/* Navigation Actions */}
             <div className="flex items-center gap-2 pt-1">
               <button
                 onClick={() => {
                   setSelectedMember(newlyCreatedMember);
                   navigateTo('member-profile');
                 }}
-                className="flex-1 py-3 rounded-2xl bg-[#101422] hover:bg-[#151A2E] border border-white/10 text-white font-bold text-xs"
+                className="flex-1 py-3 rounded-2xl bg-[#101422] hover:bg-[#151A2E] border border-white/10 text-white font-bold text-xs cursor-pointer active:scale-95"
               >
                 View Profile
               </button>
               <button
                 onClick={() => navigateTo('members')}
-                className="flex-1 py-3 rounded-2xl bg-[#4F7CFF] hover:bg-[#3D69EB] text-white font-black text-xs"
+                className="flex-1 py-3 rounded-2xl bg-[#4F7CFF] hover:bg-[#3D69EB] text-white font-black text-xs cursor-pointer active:scale-95"
               >
                 Done
               </button>

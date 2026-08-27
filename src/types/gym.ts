@@ -118,6 +118,7 @@ export interface Member {
   lastPaymentDate?: string;
   nextDueDate?: string;
   paymentStatus?: 'Paid' | 'Partially Paid' | 'Pending' | 'Overdue';
+  paymentMethod?: string;
   lockerNumber?: string;
   userId?: string;
   username?: string;
