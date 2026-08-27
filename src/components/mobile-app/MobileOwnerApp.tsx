@@ -1714,134 +1714,6 @@ export const MobileOwnerApp: React.FC = () => {
         )}
 
         {/* ═══════════════════════════════════════════════════════════
-            BOTTOM SHEET: RENEW MEMBER SUBSCRIPTION
-        ═══════════════════════════════════════════════════════════ */}
-        {isMobileRenewOpen && selectedMember && (
-          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-            <div
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-lg bg-[#0E121E] border-t border-white/12 rounded-t-[32px] p-5 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto animate-in slide-in-from-bottom duration-300 text-xs"
-            >
-              <div className="w-12 h-1 bg-white/20 rounded-full mx-auto" />
-
-              <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center border border-cyan-500/40">
-                    <Sparkles className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-black text-white">Renew / Extend Membership</h3>
-                    <p className="text-[10px] text-slate-400">{selectedMember.name} • {selectedMember.membershipNo}</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setIsMobileRenewOpen(false)}
-                  className="w-7 h-7 rounded-full bg-white/10 text-slate-400 hover:text-white flex items-center justify-center"
-                >
-                  ✕
-                </button>
-              </div>
-
-              {mobileRenewSuccessToast && (
-                <div className="p-2.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>{mobileRenewSuccessToast}</span>
-                </div>
-              )}
-
-              {/* Current Status Preview */}
-              <div className="p-3 rounded-2xl bg-[#080C14] border border-white/10 space-y-1 text-[11px]">
-                <div className="flex justify-between text-slate-400">
-                  <span>Current Pass:</span>
-                  <span className="text-white font-bold">{selectedMember.planName}</span>
-                </div>
-                <div className="flex justify-between text-slate-400">
-                  <span>Current Expiry:</span>
-                  <span className="text-cyan-300 font-black">{selectedMember.expiryDate || selectedMember.endDate || 'Expired'}</span>
-                </div>
-                {new Date(selectedMember.expiryDate || selectedMember.endDate || '') > new Date() && (
-                  <p className="text-[10px] text-emerald-400 font-semibold pt-1">
-                    ✓ Active: New duration will be appended to current expiry date.
-                  </p>
-                )}
-              </div>
-
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (!mobileRenewPlanId) return;
-                  setIsMobileRenewing(true);
-                  try {
-                    await renewSubscription(selectedMember.id, mobileRenewPlanId, mobileRenewPaymentMethod);
-                    const updated = members.find((m) => m.id === selectedMember.id);
-                    if (updated) setSelectedMember(updated);
-                    setMobileRenewSuccessToast('Subscription renewed successfully!');
-                    setTimeout(() => {
-                      setMobileRenewSuccessToast(null);
-                      setIsMobileRenewOpen(false);
-                    }, 1500);
-                  } catch (err: any) {
-                    alert(err.message || 'Renewal failed');
-                  } finally {
-                    setIsMobileRenewing(false);
-                  }
-                }}
-                className="space-y-3"
-              >
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
-                    Select Renewal Package *
-                  </label>
-                  <select
-                    value={mobileRenewPlanId}
-                    onChange={(e) => setMobileRenewPlanId(e.target.value)}
-                    required
-                    className="w-full bg-[#080C14] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white font-bold outline-none focus:border-cyan-400"
-                  >
-                    {plans.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} ({p.durationMonths}M) — ₹{p.totalPrice.toLocaleString('en-IN')}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
-                    Payment Method *
-                  </label>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {(['UPI', 'Cash', 'Card', 'Bank Transfer'] as const).map((m) => (
-                      <button
-                        type="button"
-                        key={m}
-                        onClick={() => setMobileRenewPaymentMethod(m)}
-                        className={`py-2 rounded-xl text-[10px] font-bold border transition-all cursor-pointer ${
-                          mobileRenewPaymentMethod === m
-                            ? 'bg-cyan-500/25 border-cyan-500 text-cyan-300 shadow-md'
-                            : 'bg-[#080C14] border-white/10 text-slate-400'
-                        }`}
-                      >
-                        {m}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isMobileRenewing}
-                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#00D4FF] via-cyan-500 to-blue-600 text-black font-black text-xs flex items-center justify-center gap-2 shadow-xl shadow-cyan-500/25 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>{isMobileRenewing ? 'Processing Renewal...' : 'Confirm & Renew Pass'}</span>
-                </button>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* ═══════════════════════════════════════════════════════════
             SUBPAGE 4: SECURITY & AUDIT LOGS
         ═══════════════════════════════════════════════════════════ */}
         {currentScreen === 'audit-logs' && (
@@ -2854,6 +2726,135 @@ export const MobileOwnerApp: React.FC = () => {
         )}
 
       </main>
+
+      {/* ── 2.5. RENEW MEMBER SUBSCRIPTION MODAL ── */}
+      {isMobileRenewOpen && selectedMember && (
+        <div 
+          onClick={() => setIsMobileRenewOpen(false)}
+          className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-md p-0 sm:p-4 animate-in fade-in duration-200"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md bg-[#0E121E] border-t sm:border border-cyan-500/30 rounded-t-[32px] sm:rounded-[32px] p-5 pb-12 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom duration-300 text-xs"
+          >
+            <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto" />
+
+            <div className="flex items-center justify-between pb-2 border-b border-white/10">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center border border-cyan-500/40">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white">Renew / Extend Membership</h3>
+                  <p className="text-[10px] text-slate-400">{selectedMember.name} • {selectedMember.membershipNo}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsMobileRenewOpen(false)}
+                className="w-8 h-8 rounded-full bg-white/10 text-slate-400 hover:text-white flex items-center justify-center text-sm font-bold active:scale-90 transition-all cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {mobileRenewSuccessToast && (
+              <div className="p-3 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2 animate-in fade-in">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{mobileRenewSuccessToast}</span>
+              </div>
+            )}
+
+            {/* Current Status Preview */}
+            <div className="p-3.5 rounded-2xl bg-[#080C14] border border-white/10 space-y-1.5 text-[11px]">
+              <div className="flex justify-between text-slate-400">
+                <span>Current Pass:</span>
+                <span className="text-white font-bold">{selectedMember.planName}</span>
+              </div>
+              <div className="flex justify-between text-slate-400">
+                <span>Current Expiry:</span>
+                <span className="text-cyan-300 font-black">{selectedMember.expiryDate || selectedMember.endDate || 'Expired'}</span>
+              </div>
+              {new Date(selectedMember.expiryDate || selectedMember.endDate || '') > new Date() && (
+                <p className="text-[10px] text-emerald-400 font-semibold pt-1 border-t border-white/5">
+                  ✓ Active: New duration will be appended to current expiry date.
+                </p>
+              )}
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!mobileRenewPlanId) return;
+                setIsMobileRenewing(true);
+                try {
+                  await renewSubscription(selectedMember.id, mobileRenewPlanId, mobileRenewPaymentMethod);
+                  const updated = members.find((m) => m.id === selectedMember.id);
+                  if (updated) setSelectedMember(updated);
+                  setMobileRenewSuccessToast('Subscription renewed successfully!');
+                  setTimeout(() => {
+                    setMobileRenewSuccessToast(null);
+                    setIsMobileRenewOpen(false);
+                  }, 1200);
+                } catch (err: any) {
+                  alert(err.message || 'Renewal failed');
+                } finally {
+                  setIsMobileRenewing(false);
+                }
+              }}
+              className="space-y-3 pt-1"
+            >
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                  Select Renewal Package *
+                </label>
+                <select
+                  value={mobileRenewPlanId}
+                  onChange={(e) => setMobileRenewPlanId(e.target.value)}
+                  required
+                  className="w-full bg-[#080C14] border border-white/10 rounded-2xl px-3.5 py-3 text-xs text-white font-bold outline-none focus:border-cyan-400"
+                >
+                  {plans.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.durationMonths}M) — ₹{p.totalPrice.toLocaleString('en-IN')}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                  Payment Method *
+                </label>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {(['UPI', 'Cash', 'Card', 'Bank Transfer'] as const).map((m) => (
+                    <button
+                      type="button"
+                      key={m}
+                      onClick={() => setMobileRenewPaymentMethod(m)}
+                      className={`py-2.5 rounded-xl text-[10px] font-bold border transition-all cursor-pointer ${
+                        mobileRenewPaymentMethod === m
+                          ? 'bg-cyan-500/25 border-cyan-500 text-cyan-300 shadow-md font-black'
+                          : 'bg-[#080C14] border-white/10 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isMobileRenewing}
+                className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#00D4FF] via-cyan-500 to-blue-600 text-black font-black text-xs flex items-center justify-center gap-2 shadow-2xl shadow-cyan-500/30 active:scale-95 transition-all cursor-pointer disabled:opacity-50 mt-3"
+              >
+                <Check className="w-4 h-4" />
+                <span>{isMobileRenewing ? 'Processing Renewal...' : 'Confirm & Renew Pass'}</span>
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* ── 3. PASSWORD RESET CONFIRMATION MODAL ── */}
       {resetModalOpen && selectedMember && (
