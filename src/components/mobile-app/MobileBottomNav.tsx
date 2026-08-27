@@ -27,7 +27,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       role="navigation"
       aria-label="Mobile Bottom Navigation"
     >
-      <div className="max-w-md mx-auto pointer-events-auto bg-[#070A12]/85 backdrop-blur-2xl border border-white/[0.1] rounded-3xl p-1.5 shadow-[0_16px_48px_rgba(0,0,0,0.6)] flex items-center justify-around">
+      <div className="max-w-md mx-auto pointer-events-auto bg-[#0A0D14]/90 backdrop-blur-2xl border border-white/12 rounded-[24px] p-2 shadow-[0_10px_30px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.2)] flex items-center justify-around">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -46,11 +46,11 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
               {/* Active Background Glow Pill */}
               {isActive && (
                 <div
-                  className="absolute inset-0 rounded-2xl transition-all duration-300"
+                  className="absolute inset-0 rounded-2xl transition-all duration-300 pointer-events-none"
                   style={{
                     backgroundColor: `${accentColor}18`,
                     border: `1px solid ${accentColor}40`,
-                    boxShadow: `0 0 20px ${accentColor}30`
+                    boxShadow: `0 0 20px ${accentColor}35, inset 0 1px 0 rgba(255, 255, 255, 0.2)`
                   }}
                 />
               )}

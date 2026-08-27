@@ -19,6 +19,8 @@ import {
   AlertCircle,
   Sparkles,
   Zap,
+  Activity,
+  Dumbbell,
   LogOut,
   Clock,
   Phone,
@@ -502,8 +504,15 @@ export const MobileOwnerApp: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-ambient-mesh text-slate-100 flex flex-col justify-between selection:bg-[#00D4FF] selection:text-black">
+    <div className="min-h-screen bg-[#0A0D14] bg-ambient-mesh text-slate-100 flex flex-col justify-between selection:bg-[#00D4FF] selection:text-black relative overflow-hidden font-sans">
       
+      {/* ── 0. AMBIENT GLOWING BLURRED GRADIENT SPHERES (CYAN, MAGENTA, AMBER) ── */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0" aria-hidden="true">
+        <div className="absolute -top-24 -left-20 w-80 h-80 rounded-full bg-[#00D4FF]/12 blur-[100px] pointer-events-none animate-pulse" />
+        <div className="absolute top-1/4 -right-24 w-96 h-96 rounded-full bg-[#EC4899]/10 blur-[120px] pointer-events-none" />
+        <div className="absolute bottom-16 left-1/3 w-80 h-80 rounded-full bg-[#F59E0B]/08 blur-[100px] pointer-events-none" />
+      </div>
+
       {/* ── 1. COMPACT NATIVE MOBILE HEADER ── */}
       <MobileAppHeader
         title={isSubPage ? undefined : 'Smart Gym'}
@@ -530,7 +539,7 @@ export const MobileOwnerApp: React.FC = () => {
       />
 
       {/* ── 2. MAIN SCROLLABLE CONTENT ── */}
-      <main className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-24 max-w-lg mx-auto w-full">
+      <main className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-24 max-w-lg mx-auto w-full relative z-10">
 
         {/* ═══════════════════════════════════════════════════════════
             SCREEN 1: HOME OVERVIEW (EXECUTIVE DASHBOARD)
@@ -539,7 +548,7 @@ export const MobileOwnerApp: React.FC = () => {
           <div className="space-y-4 animate-in fade-in duration-300">
             
             {/* Live Branch Selector Pill */}
-            <div className="flex items-center justify-between p-3.5 rounded-3xl glass-card shadow-xl">
+            <div className="flex items-center justify-between p-3.5 rounded-[20px] glass-card-premium shadow-xl">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-2xl bg-[#00D4FF]/15 text-[#00D4FF] flex items-center justify-center border border-[#00D4FF]/30 shadow-md">
                   <Building2 className="w-4 h-4" />
@@ -554,17 +563,17 @@ export const MobileOwnerApp: React.FC = () => {
                 <select
                   value={selectedBranchId}
                   onChange={(e) => setSelectedBranchId(e.target.value)}
-                  className="bg-black/50 text-white text-xs font-bold px-3 py-1.5 rounded-xl border border-white/10 outline-none cursor-pointer focus:border-[#00D4FF]"
+                  className="bg-black/60 text-white text-xs font-bold px-3 py-1.5 rounded-xl border border-white/12 outline-none cursor-pointer focus:border-[#00D4FF] backdrop-blur-md"
                 >
                   {branches.map((b) => (
-                    <option key={b.id} value={b.id}>
+                    <option key={b.id} value={b.id} className="bg-[#0A0D14] text-white">
                       {b.name} ({b.code})
                     </option>
                   ))}
                 </select>
                 <button
                   onClick={() => navigateTo('add-branch')}
-                  className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-[#00D4FF] active:scale-90 transition-all cursor-pointer"
+                  className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/12 text-[#00D4FF] active:scale-90 transition-all cursor-pointer shadow-sm"
                   title="Add New Branch"
                 >
                   <Plus className="w-4 h-4" />
@@ -572,47 +581,52 @@ export const MobileOwnerApp: React.FC = () => {
               </div>
             </div>
 
-            {/* Net Operating Profit Card */}
-            <div className="glass-card p-5 rounded-3xl shadow-2xl relative overflow-hidden border border-white/[0.08]">
-              <div className="flex items-center justify-between">
+            {/* Net Operating Profit Hero Container */}
+            <div className="glass-card-premium p-5 rounded-[20px] shadow-2xl relative overflow-hidden">
+              <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-[#10B981]/10 blur-[50px] pointer-events-none" />
+              
+              <div className="flex items-center justify-between relative z-10">
                 <span className="text-xs font-black text-slate-400 uppercase tracking-wider">
                   Net Operating Profit ({currentBranch.code})
                 </span>
-                <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1 ${
+                <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-sm ${
                   isProfitPositive
-                    ? 'bg-[#00F5A0]/15 text-[#00F5A0] border border-[#00F5A0]/30'
-                    : 'bg-[#FF5C5C]/15 text-[#FF5C5C] border border-[#FF5C5C]/30'
+                    ? 'bg-[#10B981]/15 text-[#10B981] border border-[#10B981]/30'
+                    : 'bg-[#F87171]/15 text-[#F87171] border border-[#F87171]/30'
                 }`}>
                   {isProfitPositive ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
                   <span>{isProfitPositive ? 'Surplus' : 'Deficit'}</span>
                 </span>
               </div>
 
-              <div className="mt-2">
+              <div className="mt-2 relative z-10">
                 <div className="text-3xl font-black text-white tracking-tight">
                   ₹{Math.abs(netProfit).toLocaleString('en-IN')}
                 </div>
-                <div className="flex items-center gap-4 mt-2 text-xs">
+                <div className="flex items-center gap-4 mt-2.5 text-xs">
                   <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-[#00F5A0]" />
+                    <span className="w-2 h-2 rounded-full bg-[#10B981] shadow-[0_0_8px_#10B981]" />
                     <span className="text-slate-400">Collections:</span>
-                    <strong className="text-[#00F5A0]">₹{totalCollections.toLocaleString('en-IN')}</strong>
+                    <strong className="text-[#10B981] font-black">₹{totalCollections.toLocaleString('en-IN')}</strong>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-[#FF5C5C]" />
+                    <span className="w-2 h-2 rounded-full bg-[#F87171] shadow-[0_0_8px_#F87171]" />
                     <span className="text-slate-400">Expenses:</span>
-                    <strong className="text-[#FF5C5C]">₹{totalExpenseAmount.toLocaleString('en-IN')}</strong>
+                    <strong className="text-[#F87171] font-black">₹{totalExpenseAmount.toLocaleString('en-IN')}</strong>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* 3 Metric Cards */}
+            {/* 3-Column Key Stats Grid */}
             <div className="grid grid-cols-3 gap-2.5">
               <div
                 onClick={() => navigateTo('members')}
-                className="glass-card hover:border-[#00D4FF]/40 p-3.5 rounded-2xl text-center cursor-pointer transition-all active:scale-95 shadow-lg group"
+                className="glass-card-premium hover:border-[#00D4FF]/40 p-3.5 rounded-[20px] text-center cursor-pointer transition-all active:scale-95 shadow-lg group relative overflow-hidden"
               >
+                <div className="w-7 h-7 rounded-xl bg-[#00D4FF]/15 text-[#00D4FF] flex items-center justify-center mx-auto mb-1 border border-[#00D4FF]/25 shadow-sm group-hover:scale-110 transition-transform">
+                  <Users className="w-3.5 h-3.5" />
+                </div>
                 <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Members</div>
                 <div className="text-xl font-black text-white mt-0.5 group-hover:text-[#00D4FF] transition-colors">{members.length}</div>
                 <span className="text-[9px] text-[#00D4FF] font-bold block mt-0.5">Directory →</span>
@@ -620,24 +634,30 @@ export const MobileOwnerApp: React.FC = () => {
 
               <div
                 onClick={() => navigateTo('attendance')}
-                className="glass-card hover:border-[#00F5A0]/40 p-3.5 rounded-2xl text-center cursor-pointer transition-all active:scale-95 shadow-lg group"
+                className="glass-card-premium hover:border-[#10B981]/40 p-3.5 rounded-[20px] text-center cursor-pointer transition-all active:scale-95 shadow-lg group relative overflow-hidden"
               >
+                <div className="w-7 h-7 rounded-xl bg-[#10B981]/15 text-[#10B981] flex items-center justify-center mx-auto mb-1 border border-[#10B981]/25 shadow-sm group-hover:scale-110 transition-transform">
+                  <Activity className="w-3.5 h-3.5" />
+                </div>
                 <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Check-ins</div>
-                <div className="text-xl font-black text-[#00F5A0] mt-0.5">{todayCheckins.length}</div>
-                <span className="text-[9px] text-slate-400 font-bold block mt-0.5">Today</span>
+                <div className="text-xl font-black text-[#10B981] mt-0.5">{todayCheckins.length}</div>
+                <span className="text-[9px] text-slate-400 font-bold block mt-0.5">Live Today</span>
               </div>
 
               <div
                 onClick={() => navigateTo('trainers')}
-                className="glass-card hover:border-[#8B5CF6]/40 p-3.5 rounded-2xl text-center cursor-pointer transition-all active:scale-95 shadow-lg group"
+                className="glass-card-premium hover:border-[#EC4899]/40 p-3.5 rounded-[20px] text-center cursor-pointer transition-all active:scale-95 shadow-lg group relative overflow-hidden"
               >
+                <div className="w-7 h-7 rounded-xl bg-[#EC4899]/15 text-[#EC4899] flex items-center justify-center mx-auto mb-1 border border-[#EC4899]/25 shadow-sm group-hover:scale-110 transition-transform">
+                  <Dumbbell className="w-3.5 h-3.5" />
+                </div>
                 <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Trainers</div>
-                <div className="text-xl font-black text-[#8B5CF6] mt-0.5">{trainers.length}</div>
-                <span className="text-[9px] text-[#8B5CF6] font-bold block mt-0.5">Coaches →</span>
+                <div className="text-xl font-black text-[#EC4899] mt-0.5">{trainers.length}</div>
+                <span className="text-[9px] text-[#EC4899] font-bold block mt-0.5">Coaches →</span>
               </div>
             </div>
 
-            {/* Touch-Friendly 2x2 Quick Action Grid */}
+            {/* 2x2 Grid for Executive Quick Action Tiles */}
             <div className="pt-1">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block px-1 mb-2">
                 Executive Quick Actions
@@ -645,7 +665,7 @@ export const MobileOwnerApp: React.FC = () => {
               <div className="grid grid-cols-2 gap-2.5">
                 <button
                   onClick={() => navigateTo('add-member')}
-                  className="glass-card hover:border-[#00D4FF]/40 active:scale-95 p-4 rounded-3xl text-left transition-all shadow-xl group cursor-pointer"
+                  className="glass-card-premium hover:border-[#00D4FF]/40 active:scale-95 p-4 rounded-[20px] text-left transition-all shadow-xl group cursor-pointer"
                 >
                   <div className="w-10 h-10 rounded-2xl bg-[#00D4FF]/15 text-[#00D4FF] flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform border border-[#00D4FF]/30 shadow-md">
                     <UserPlus className="w-5 h-5" />
@@ -656,9 +676,9 @@ export const MobileOwnerApp: React.FC = () => {
 
                 <button
                   onClick={() => navigateTo('add-trainer')}
-                  className="glass-card hover:border-[#8B5CF6]/40 active:scale-95 p-4 rounded-3xl text-left transition-all shadow-xl group cursor-pointer"
+                  className="glass-card-premium hover:border-[#EC4899]/40 active:scale-95 p-4 rounded-[20px] text-left transition-all shadow-xl group cursor-pointer"
                 >
-                  <div className="w-10 h-10 rounded-2xl bg-[#8B5CF6]/15 text-[#8B5CF6] flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform border border-[#8B5CF6]/30 shadow-md">
+                  <div className="w-10 h-10 rounded-2xl bg-[#EC4899]/15 text-[#EC4899] flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform border border-[#EC4899]/30 shadow-md">
                     <Award className="w-5 h-5" />
                   </div>
                   <div className="font-black text-xs text-white">+ Add Coach</div>
@@ -667,9 +687,9 @@ export const MobileOwnerApp: React.FC = () => {
 
                 <button
                   onClick={() => navigateTo('add-expense')}
-                  className="glass-card hover:border-[#FF5C5C]/40 active:scale-95 p-4 rounded-3xl text-left transition-all shadow-xl group cursor-pointer"
+                  className="glass-card-premium hover:border-[#F87171]/40 active:scale-95 p-4 rounded-[20px] text-left transition-all shadow-xl group cursor-pointer"
                 >
-                  <div className="w-10 h-10 rounded-2xl bg-[#FF5C5C]/15 text-[#FF5C5C] flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform border border-[#FF5C5C]/30 shadow-md">
+                  <div className="w-10 h-10 rounded-2xl bg-[#F87171]/15 text-[#F87171] flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform border border-[#F87171]/30 shadow-md">
                     <DollarSign className="w-5 h-5" />
                   </div>
                   <div className="font-black text-xs text-white">+ Record Expense</div>
@@ -678,9 +698,9 @@ export const MobileOwnerApp: React.FC = () => {
 
                 <button
                   onClick={() => navigateTo('broadcast')}
-                  className="glass-card hover:border-[#FFC107]/40 active:scale-95 p-4 rounded-3xl text-left transition-all shadow-xl group cursor-pointer"
+                  className="glass-card-premium hover:border-[#F59E0B]/40 active:scale-95 p-4 rounded-[20px] text-left transition-all shadow-xl group cursor-pointer"
                 >
-                  <div className="w-10 h-10 rounded-2xl bg-[#FFC107]/15 text-[#FFC107] flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform border border-[#FFC107]/30 shadow-md">
+                  <div className="w-10 h-10 rounded-2xl bg-[#F59E0B]/15 text-[#F59E0B] flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform border border-[#F59E0B]/30 shadow-md">
                     <Send className="w-5 h-5" />
                   </div>
                   <div className="font-black text-xs text-white">Push Broadcast</div>
@@ -711,7 +731,7 @@ export const MobileOwnerApp: React.FC = () => {
                       setSelectedMember(member);
                       navigateTo('member-profile');
                     }}
-                    className="p-3.5 glass-card hover:border-[#00D4FF]/40 active:scale-[0.98] rounded-2xl flex items-center justify-between cursor-pointer transition-all shadow-md"
+                    className="p-3.5 glass-card-premium hover:border-[#00D4FF]/40 active:scale-[0.98] rounded-[20px] flex items-center justify-between cursor-pointer transition-all shadow-md"
                   >
                     <div className="flex items-center gap-3">
                       <img
@@ -730,7 +750,7 @@ export const MobileOwnerApp: React.FC = () => {
                     </div>
 
                     <div className="text-right">
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#00F5A0]/15 text-[#00F5A0] border border-[#00F5A0]/30">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#10B981]/15 text-[#10B981] border border-[#10B981]/30">
                         {member.status}
                       </span>
                       <span className="text-[9px] text-slate-400 block mt-1">Exp: {member.endDate}</span>
