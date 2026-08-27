@@ -419,7 +419,7 @@ export const AppLogin: React.FC = () => {
       const user = userCredential.user;
 
       // Register new member record in database
-      const defaultPlan = plans[0] || { id: 'plan-1', name: 'Annual VIP All-Access Franchise', durationMonths: 12 };
+      const defaultPlan = plans[0] || { id: 'plan-1', name: 'Annual VIP All-Access Pass', durationMonths: 12 };
       const startDate = new Date().toISOString().split('T')[0];
       const endDateObj = new Date();
       endDateObj.setMonth(endDateObj.getMonth() + (defaultPlan.durationMonths || 12));
