@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useGym } from '../../context/GymContext';
 import { Exercise, DailyWorkoutSplit, WorkoutSetLog, ExerciseExecution } from '../../types/gym';
+import { WearableHeartRateSyncModal } from './WearableHeartRateSyncModal';
 import {
   Dumbbell,
   Check,
@@ -16,7 +17,11 @@ import {
   CheckCircle2,
   Zap,
   TrendingUp,
-  Award
+  Award,
+  Heart,
+  Watch,
+  Radio,
+  Activity
 } from 'lucide-react';
 
 export const WorkoutLogger: React.FC = () => {
@@ -40,6 +45,8 @@ export const WorkoutLogger: React.FC = () => {
 
   // Live Workout Session State
   const [isSessionActive, setIsSessionActive] = useState<boolean>(false);
+  const [isWearableSyncOpen, setIsWearableSyncOpen] = useState<boolean>(false);
+  const [liveWatchBpm, setLiveWatchBpm] = useState<number>(138);
   const [sessionStartTime, setSessionStartTime] = useState<number | null>(null);
   const [sessionExercises, setSessionExercises] = useState<{
     exerciseId: string;
@@ -104,6 +111,15 @@ export const WorkoutLogger: React.FC = () => {
 
   const startRestTimer = (seconds: number) => {
     setActiveRestTimer(seconds);
+  };
+
+  const initiateWorkoutWithWearableSync = () => {
+    setIsWearableSyncOpen(true);
+  };
+
+  const handleWearableSyncComplete = () => {
+    setIsWearableSyncOpen(false);
+    handleStartWorkout();
   };
 
   const handleStartWorkout = () => {
@@ -426,7 +442,7 @@ export const WorkoutLogger: React.FC = () => {
                 <span className="text-[10px] text-gym-subtext">{completedCount} of {currentSplit.exercises.length} Exercises Completed</span>
               </div>
               <button
-                onClick={handleStartWorkout}
+                onClick={initiateWorkoutWithWearableSync}
                 className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-[#27D980] to-emerald-500 hover:from-emerald-400 hover:to-emerald-500 text-black font-black text-xs flex items-center gap-1.5 shadow-lg shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer"
               >
                 <Play className="w-3.5 h-3.5 fill-black" />
@@ -495,7 +511,7 @@ export const WorkoutLogger: React.FC = () => {
                 Track every set weight, reps, and check-offs live to automatically record personal records.
               </p>
               <button
-                onClick={handleStartWorkout}
+                onClick={initiateWorkoutWithWearableSync}
                 className="px-5 py-2.5 rounded-2xl bg-[#27D980] hover:bg-[#20BE6F] text-black font-black text-xs shadow-xl active:scale-95 transition-all cursor-pointer inline-flex items-center gap-2"
               >
                 <Play className="w-4 h-4 fill-black" />
@@ -504,6 +520,44 @@ export const WorkoutLogger: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-4">
+              
+              {/* Companion Watch Live Biometric Sync Ribbon */}
+              <div className="p-3.5 rounded-2xl glass-card-premium border border-[#00D4FF]/30 bg-gradient-to-r from-[#0E1726] via-[#090D17] to-[#0E1726] shadow-xl flex items-center justify-between text-xs">
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <div className="w-10 h-10 rounded-xl bg-[#EC4899]/15 text-[#EC4899] flex items-center justify-center border border-[#EC4899]/30">
+                      <Heart className="w-5 h-5 fill-[#EC4899] animate-pulse" />
+                    </div>
+                    <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-[#10B981] border-2 border-[#0A0D14] animate-ping" />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-base font-black text-white font-mono">{liveWatchBpm}</span>
+                      <span className="text-[10px] text-slate-400 font-bold">BPM</span>
+                      <span className="px-1.5 py-0.2 rounded-full bg-[#10B981]/15 text-[#10B981] text-[8px] font-black border border-[#10B981]/30 uppercase ml-1">
+                        Zone 3 Cardio
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-[9.5px] text-slate-400 mt-0.5">
+                      <span>🔥 9.4 kcal/min</span>
+                      <span>•</span>
+                      <span>⚡ HRV 64ms</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-right">
+                  <div className="flex items-center justify-end gap-1 text-[9px] font-black text-[#00D4FF]">
+                    <Watch className="w-3 h-3" />
+                    <span> Ultra Sync</span>
+                  </div>
+                  <span className="text-[8px] font-mono text-emerald-400 font-bold block mt-0.5">
+                    🔒 0.2ms Locked
+                  </span>
+                </div>
+              </div>
+
               {/* Active Session Header */}
               <div className="p-4 rounded-3xl bg-gradient-to-r from-[#141F36] to-[#0D1524] border border-cyan-500/40 flex items-center justify-between shadow-xl">
                 <div>
@@ -766,6 +820,14 @@ export const WorkoutLogger: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Wearable Heart Rate Sync Preload Modal */}
+      <WearableHeartRateSyncModal
+        isOpen={isWearableSyncOpen}
+        workoutTitle={currentSplit?.title || 'Daily Training'}
+        onSyncComplete={handleWearableSyncComplete}
+        onCancel={() => setIsWearableSyncOpen(false)}
+      />
 
     </div>
   );

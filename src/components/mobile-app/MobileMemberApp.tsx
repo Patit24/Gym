@@ -10,6 +10,7 @@ import { AIChatCoach } from '../mobile/AIChatCoach';
 import { SubscriptionCard } from '../mobile/SubscriptionCard';
 import { MemberProfileEditor } from '../mobile/MemberProfileEditor';
 import { PrivilegePassCard } from '../shared/PrivilegePassCard';
+import { WearableHeartRateSyncModal } from '../mobile/WearableHeartRateSyncModal';
 import {
   Home,
   Dumbbell,
@@ -90,6 +91,7 @@ export const MobileMemberApp: React.FC = () => {
   const [currentScreen, setCurrentScreen] = useState<MemberScreen>('home');
   const [copiedCode, setCopiedCode] = useState(false);
   const [notifFilter, setNotifFilter] = useState<'all' | 'unread' | 'important'>('all');
+  const [isWearableSyncOpen, setIsWearableSyncOpen] = useState(false);
 
   useEffect(() => {
     if (activeMember?.id && activeMember.id !== activeMemberId) {
@@ -346,7 +348,7 @@ export const MobileMemberApp: React.FC = () => {
                     </div>
                   </div>
                   <button
-                    onClick={() => navigateTo('workout')}
+                    onClick={() => setIsWearableSyncOpen(true)}
                     className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#00D4FF] to-cyan-500 text-black font-black text-[10px] shadow-md active:scale-95 cursor-pointer"
                   >
                     Start
@@ -981,6 +983,17 @@ export const MobileMemberApp: React.FC = () => {
         }
         onSelectTab={(tabId) => navigateTo(tabId as MemberScreen)}
         accentColor="#00D4FF"
+      />
+
+      {/* Wearable Heart Rate Sync Preload Modal */}
+      <WearableHeartRateSyncModal
+        isOpen={isWearableSyncOpen}
+        workoutTitle={currentSplit?.title || 'Daily Training'}
+        onSyncComplete={() => {
+          setIsWearableSyncOpen(false);
+          navigateTo('workout');
+        }}
+        onCancel={() => setIsWearableSyncOpen(false)}
       />
 
     </div>
