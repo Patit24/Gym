@@ -259,11 +259,58 @@ export const AppLogin: React.FC = () => {
       return;
     }
 
-    // GENERAL USER (STAFF, TRAINER, MEMBER) AUTHENTICATION PATH
     try {
       localStorage.setItem('gym_auth_context', 'app');
       await signInWithEmailAndPassword(auth, authEmail, cleanPass);
-      if (matchedUser) setLocalSessionUser(matchedUser);
+      if (matchedUser) {
+        setLocalSessionUser(matchedUser);
+      } else if (matchedMember) {
+        const mAcc: AppUser = {
+          id: matchedMember.userId || matchedMember.id,
+          username: matchedMember.username || cleanInput,
+          email: matchedMember.email || authEmail,
+          role: 'Member',
+          linkedId: matchedMember.id,
+          linkedName: matchedMember.name,
+          branchId: matchedMember.branchId || 'branch-1',
+          createdAt: matchedMember.startDate || new Date().toISOString(),
+          createdByAdminId: 'system',
+          isActive: true,
+          mustChangePassword: matchedMember.mustChangePassword ?? false,
+          permissions: {
+            canViewDashboard: true,
+            canEditWorkouts: false,
+            canEditDiets: false,
+            canViewMembers: false,
+            canManageFinance: false,
+            canAccessAdmin: false,
+          }
+        };
+        setLocalSessionUser(mAcc);
+      } else if (matchedEmployee) {
+        const empAcc: AppUser = {
+          id: matchedEmployee.id,
+          username: (matchedEmployee as any).username || cleanInput,
+          email: matchedEmployee.email || authEmail,
+          role: matchedEmployee.role,
+          linkedId: matchedEmployee.id,
+          linkedName: matchedEmployee.name,
+          branchId: matchedEmployee.branchId || 'branch-1',
+          createdAt: matchedEmployee.joiningDate || new Date().toISOString(),
+          createdByAdminId: 'system',
+          isActive: true,
+          mustChangePassword: false,
+          permissions: {
+            canViewDashboard: true,
+            canEditWorkouts: matchedEmployee.role === 'Trainer',
+            canEditDiets: matchedEmployee.role === 'Dietitian',
+            canViewMembers: true,
+            canManageFinance: matchedEmployee.role === 'Manager',
+            canAccessAdmin: matchedEmployee.role === 'Manager',
+          }
+        };
+        setLocalSessionUser(empAcc);
+      }
     } catch (fbErr: any) {
       const isMatchingLocalPassword =
         (matchedUser && (matchedUser.password === cleanPass || matchedUser.tempPassword === cleanPass)) ||

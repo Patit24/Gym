@@ -298,26 +298,31 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [challenges, setChallenges] = useState<GymChallenge[]>([]);
   const [referrals, setReferrals] = useState<ReferralRecord[]>([]);
 
-  // ════════════════════════════════════════════════════════════════
-  // ACTIVE MEMBER RESOLUTION
-  // ════════════════════════════════════════════════════════════════
   const activeMember: Member = useMemo(() => {
     // 1. If authenticated user is a Member, their own profile is ALWAYS top priority
     if (appUserAccount && appUserAccount.role === 'Member') {
+      const targetId = appUserAccount.linkedId || appUserAccount.id;
+      const targetUname = (appUserAccount.username || '').toLowerCase();
+      const targetEmail = (appUserAccount.email || '').toLowerCase();
+
       const foundByUser = members.find(
         (m) =>
-          m.id === appUserAccount.linkedId ||
+          m.id === targetId ||
           m.id === appUserAccount.id ||
           m.userId === appUserAccount.id ||
-          (m.username && m.username.toLowerCase() === appUserAccount.username.toLowerCase()) ||
-          (m.email && m.email.toLowerCase() === (appUserAccount.email || '').toLowerCase())
+          m.userId === targetId ||
+          (m.username && m.username.toLowerCase() === targetUname) ||
+          (m.email && m.email.toLowerCase() === targetEmail) ||
+          (m.membershipNo && m.membershipNo.toLowerCase() === targetUname) ||
+          (m.membershipNo && targetUname && m.membershipNo.toLowerCase().replace(/\D/g, '') === targetUname.replace(/\D/g, ''))
       );
       if (foundByUser) return foundByUser;
 
+      // If member record is still syncing from Firestore, synthesize their exact profile from appUserAccount (NEVER leak another member's profile!)
       return {
-        id: appUserAccount.linkedId || appUserAccount.id,
-        membershipNo: `SG-${appUserAccount.username}`,
-        name: appUserAccount.linkedName || appUserAccount.username,
+        id: targetId,
+        membershipNo: `SG-${appUserAccount.username || 'NEW'}`,
+        name: appUserAccount.linkedName || appUserAccount.username || 'Member',
         photoUrl: '',
         faceEnrolled: false,
         mobile: '',
@@ -351,13 +356,14 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } as Member;
     }
 
-    // 2. Check if explicit activeMemberId matches a loaded member (e.g. for Admin or Trainer inspecting a trainee)
+    // 2. For Admin or Trainer inspecting a specific trainee via activeMemberId:
     if (activeMemberId) {
       const foundById = members.find((m) => m.id === activeMemberId);
       if (foundById) return foundById;
     }
 
-    if (members.length > 0) return members[0];
+    // 3. Fallback ONLY for Admin/Trainer when no specific trainee is selected:
+    if (members.length > 0 && appUserAccount?.role !== 'Member') return members[0];
     return {} as Member;
   }, [appUserAccount, members, activeMemberId]);
 
@@ -862,6 +868,8 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setActiveMemberIdState(matchingMember.id);
       localStorage.setItem('gym_app_user_account', JSON.stringify(memberAccount));
       safeDbWrite(setDoc(doc(db, 'users', authUid), memberAccount));
+      safeDbWrite(updateDoc(doc(db, 'members', matchingMember.id), { userId: authUid }));
+      setMembers(prev => prev.map(m => m.id === matchingMember.id ? { ...m, userId: authUid } : m));
       const isExpired = matchingMember.status === 'Expired' || new Date(matchingMember.expiryDate || matchingMember.endDate) < new Date();
       setSubscriptionStatus(isExpired ? 'expired' : 'active');
       return;
