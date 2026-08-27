@@ -4,99 +4,156 @@
 
 @layer base {
   :root {
-    --bg-dark: #0B0D12;
-    --card-bg: #14171F;
-    --accent-blue: #4F7CFF;
-    --accent-emerald: #27D980;
+    --bg-dark: #06080F;
+    --card-glass-1: rgba(255, 255, 255, 0.035);
+    --card-glass-2: rgba(255, 255, 255, 0.06);
+    --card-glass-3: rgba(255, 255, 255, 0.09);
+    --border-glass: rgba(255, 255, 255, 0.08);
+    --border-glass-hover: rgba(255, 255, 255, 0.16);
+    --neon-blue: #00D4FF;
+    --neon-purple: #8B5CF6;
+    --neon-green: #00F5A0;
+    --neon-amber: #FFC107;
+    --neon-coral: #FF5C5C;
   }
 
   body {
-    background-color: #0B0D12;
-    color: #F1F5F9;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: #06080F;
+    color: #F8FAFC;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
   }
 }
 
-/* Glassmorphism & Depth Utilities */
+/* ════════════════════════════════════════════════════════════════
+   GLASSMORPHISM SURFACES & CONTAINERS
+════════════════════════════════════════════════════════════════ */
 .glass-panel {
-  background: rgba(20, 23, 31, 0.75);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: rgba(14, 18, 28, 0.7);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
 }
 
 .glass-card {
-  background: linear-gradient(135deg, rgba(26, 31, 44, 0.8) 0%, rgba(18, 21, 30, 0.9) 100%);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%), rgba(12, 16, 26, 0.75);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 12px 36px 0 rgba(0, 0, 0, 0.35), inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
 }
 
-.glass-card:hover {
-  border-color: rgba(79, 124, 255, 0.3);
-  box-shadow: 0 12px 40px 0 rgba(79, 124, 255, 0.12);
+.glass-card-elevated {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%), rgba(16, 21, 34, 0.85);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 16px 48px 0 rgba(0, 0, 0, 0.45), inset 0 1px 1px 0 rgba(255, 255, 255, 0.15);
 }
 
-.glow-blue {
-  box-shadow: 0 0 25px rgba(79, 124, 255, 0.35);
+.glass-card-interactive {
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.glass-card-interactive:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+  box-shadow: 0 16px 40px 0 rgba(0, 0, 0, 0.45), 0 0 20px 0 rgba(0, 212, 255, 0.1);
+}
+.glass-card-interactive:active {
+  transform: scale(0.98);
 }
 
-.glow-emerald {
-  box-shadow: 0 0 25px rgba(39, 217, 128, 0.35);
+.glass-input {
+  background: rgba(8, 11, 20, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #FFFFFF;
+  transition: all 0.2s ease;
+}
+.glass-input:focus {
+  border-color: #00D4FF;
+  box-shadow: 0 0 16px rgba(0, 212, 255, 0.25);
+  outline: none;
 }
 
-/* Custom Scrollbar */
+/* ════════════════════════════════════════════════════════════════
+   HOLOGRAPHIC & VIP CARD SHEEN
+════════════════════════════════════════════════════════════════ */
+.holographic-sheen {
+  background: linear-gradient(
+    115deg,
+    rgba(255, 255, 255, 0.05) 0%,
+    rgba(0, 212, 255, 0.15) 25%,
+    rgba(139, 92, 246, 0.18) 50%,
+    rgba(0, 245, 160, 0.15) 75%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+  background-size: 200% 200%;
+  animation: holoShift 8s ease infinite;
+}
+
+@keyframes holoShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   NEON GLOW EFFECTS
+════════════════════════════════════════════════════════════════ */
+.glow-cyan {
+  box-shadow: 0 0 24px rgba(0, 212, 255, 0.35);
+}
+.glow-green {
+  box-shadow: 0 0 24px rgba(0, 245, 160, 0.35);
+}
+.glow-purple {
+  box-shadow: 0 0 24px rgba(139, 92, 246, 0.35);
+}
+.glow-amber {
+  box-shadow: 0 0 24px rgba(255, 193, 7, 0.35);
+}
+.glow-coral {
+  box-shadow: 0 0 24px rgba(255, 92, 92, 0.35);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   AMBIENT BACKGROUND MESH
+════════════════════════════════════════════════════════════════ */
+.bg-ambient-mesh {
+  background-color: #06080F;
+  background-image:
+    radial-gradient(at 0% 0%, rgba(0, 212, 255, 0.08) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.08) 0px, transparent 50%),
+    radial-gradient(at 50% 100%, rgba(0, 245, 160, 0.06) 0px, transparent 50%);
+  background-attachment: fixed;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   CUSTOM SCROLLBAR
+════════════════════════════════════════════════════════════════ */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
-
 ::-webkit-scrollbar-track {
-  background: #0B0D12;
+  background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
-  background: #232938;
+  background: rgba(255, 255, 255, 0.12);
   border-radius: 9999px;
 }
-
-/* Wave Animation for Hand Waving */
-@keyframes wave-hand {
-  0% { transform: rotate(0deg); }
-  15% { transform: rotate(14deg); }
-  30% { transform: rotate(-8deg); }
-  45% { transform: rotate(14deg); }
-  60% { transform: rotate(-4deg); }
-  75% { transform: rotate(10deg); }
-  100% { transform: rotate(0deg); }
-}
-
-.animate-wave {
-  display: inline-block;
-  transform-origin: 70% 70%;
-  animation: wave-hand 1.8s infinite ease-in-out;
-}
-
-/* Text Shimmer Wave Glow */
-@keyframes text-shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-
-.animate-text-shimmer {
-  background: linear-gradient(90deg, #FFFFFF 0%, #38BDF8 30%, #27D980 60%, #FFFFFF 100%);
-  background-size: 200% auto;
-  color: transparent;
-  -webkit-background-clip: text;
-  background-clip: text;
-  animation: text-shimmer 3s linear infinite;
-}
-
 ::-webkit-scrollbar-thumb:hover {
-  background: #3B455E;
+  background: rgba(255, 255, 255, 0.25);
 }
 
-/* Custom Text Wave & Waving Hand Animations */
+/* ════════════════════════════════════════════════════════════════
+   MICRO-ANIMATIONS
+════════════════════════════════════════════════════════════════ */
 @keyframes wave {
   0%, 100% { transform: rotate(0deg); }
   20% { transform: rotate(14deg); }
@@ -105,27 +162,26 @@
   80% { transform: rotate(-4deg); }
 }
 
-@keyframes textWave {
-  0%, 100% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-}
-
 .animate-wave {
   display: inline-block;
   transform-origin: 70% 70%;
   animation: wave 2.2s infinite;
 }
 
+@keyframes textWave {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
 .text-gradient-wave {
-  background: linear-gradient(90deg, #FFFFFF 0%, #27D980 30%, #38BDF8 60%, #FFFFFF 100%);
+  background: linear-gradient(90deg, #FFFFFF 0%, #00D4FF 30%, #00F5A0 60%, #FFFFFF 100%);
   background-size: 200% auto;
   color: transparent;
   -webkit-background-clip: text;
   background-clip: text;
-  animation: textWave 3s ease infinite;
+  animation: textWave 3.5s ease infinite;
 }
 
-/* Pulsing QR Code animation */
 @keyframes qrScanLine {
   0% { top: 0%; opacity: 0.8; }
   50% { top: 95%; opacity: 1; }
@@ -136,8 +192,8 @@
   position: absolute;
   left: 0;
   width: 100%;
-  height: 4px;
-  background: linear-gradient(90deg, transparent, #27D980, transparent);
-  box-shadow: 0 0 15px #27D980;
-  animation: qrScanLine 2.5s ease-in-out infinite;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #00D4FF, #00F5A0, transparent);
+  box-shadow: 0 0 14px #00D4FF;
+  animation: qrScanLine 2.2s ease-in-out infinite;
 }
