@@ -53,7 +53,11 @@ import {
   ExternalLink,
   Download,
   AlertTriangle,
-  Lock
+  Lock,
+  LogIn,
+  UserCheck,
+  MapPin,
+  AlertCircle,
 } from 'lucide-react';
 
 type MemberScreen =
@@ -87,13 +91,18 @@ export const MobileMemberApp: React.FC = () => {
     transactions,
     selectedBranchId,
     branches,
-    setSelectedBranchId
+    setSelectedBranchId,
+    manualCheckIn,
+    manualCheckOut,
+    subscriptionStatus,
   } = useGym();
 
   const [currentScreen, setCurrentScreen] = useState<MemberScreen>('home');
   const [copiedCode, setCopiedCode] = useState(false);
   const [notifFilter, setNotifFilter] = useState<'all' | 'unread' | 'important'>('all');
   const [isWearableSyncOpen, setIsWearableSyncOpen] = useState(false);
+  const [isCheckInLoading, setIsCheckInLoading] = useState(false);
+  const [checkInFeedback, setCheckInFeedback] = useState<{ success: boolean; message: string } | null>(null);
 
   useEffect(() => {
     if (activeMember?.id && activeMember.id !== activeMemberId) {
@@ -146,11 +155,63 @@ export const MobileMemberApp: React.FC = () => {
 
   // Dynamic Attendance / Check-ins
   const currentMonthPrefix = new Date().toISOString().slice(0, 7);
+  const todayDateStr = new Date().toISOString().split('T')[0];
   const monthlyCheckIns = attendance.filter(
     (a) =>
       (a.memberId === activeMember?.id || (a.memberName && a.memberName.toLowerCase() === activeMember?.name?.toLowerCase())) &&
       a.date.startsWith(currentMonthPrefix)
   ).length;
+
+  const activeTodayAttendance =
+    attendance.find(
+      (a) =>
+        (a.memberId === activeMember?.id ||
+          a.memberName?.toLowerCase() === activeMember?.name?.toLowerCase()) &&
+        a.date === todayDateStr &&
+        a.status === 'Active In Gym'
+    ) ||
+    attendance.find(
+      (a) =>
+        (a.memberId === activeMember?.id ||
+          a.memberName?.toLowerCase() === activeMember?.name?.toLowerCase()) &&
+        a.status === 'Active In Gym'
+    );
+
+  const isCheckedIn = Boolean(activeTodayAttendance);
+
+  const handleDirectCheckIn = async () => {
+    if (isSubscriptionExpired) {
+      navigateTo('subscription');
+      return;
+    }
+    setIsCheckInLoading(true);
+    setCheckInFeedback(null);
+    try {
+      const res = await manualCheckIn(activeMember?.id, selectedBranchId);
+      setCheckInFeedback(res);
+      setTimeout(() => setCheckInFeedback(null), 5000);
+    } catch (e: any) {
+      setCheckInFeedback({ success: false, message: e.message || 'Check-in failed.' });
+      setTimeout(() => setCheckInFeedback(null), 5000);
+    } finally {
+      setIsCheckInLoading(false);
+    }
+  };
+
+  const handleDirectCheckOut = async () => {
+    setIsCheckInLoading(true);
+    setCheckInFeedback(null);
+    try {
+      const res = await manualCheckOut(activeMember?.id);
+      setCheckInFeedback(res);
+      setTimeout(() => setCheckInFeedback(null), 5000);
+    } catch (e: any) {
+      setCheckInFeedback({ success: false, message: e.message || 'Check-out failed.' });
+      setTimeout(() => setCheckInFeedback(null), 5000);
+    } finally {
+      setIsCheckInLoading(false);
+    }
+  };
 
   const memberWeight = activeMember?.weightKg || 0;
   const startWeight = activeMember?.startWeightKg || activeMember?.weightKg || 0;
@@ -254,15 +315,21 @@ export const MobileMemberApp: React.FC = () => {
               </span>
               <div className="grid grid-cols-5 gap-2">
                 
-                {/* 1. QR Access */}
+                {/* 1. Check In / Pass */}
                 <button
                   onClick={() => navigateTo('qr')}
                   className="p-3 rounded-2xl glass-card hover:border-[#00D4FF]/40 flex flex-col items-center justify-center gap-1.5 transition-all active:scale-90 group cursor-pointer shadow-lg"
                 >
-                  <div className="w-9 h-9 rounded-xl bg-[#00D4FF]/15 text-[#00D4FF] flex items-center justify-center border border-[#00D4FF]/30 group-hover:scale-110 transition-transform">
-                    <QrCode className="w-4 h-4" />
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center border group-hover:scale-110 transition-transform ${
+                    isCheckedIn 
+                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' 
+                      : 'bg-[#00D4FF]/15 text-[#00D4FF] border-[#00D4FF]/30'
+                  }`}>
+                    {isCheckedIn ? <UserCheck className="w-4 h-4" /> : <LogIn className="w-4 h-4" />}
                   </div>
-                  <span className="text-[9.5px] font-bold text-slate-200 tracking-tight">QR Pass</span>
+                  <span className="text-[9.5px] font-bold text-slate-200 tracking-tight">
+                    {isCheckedIn ? 'Checked In' : 'Check In'}
+                  </span>
                 </button>
 
                 {/* 2. Workout */}
@@ -312,31 +379,74 @@ export const MobileMemberApp: React.FC = () => {
               </div>
             </div>
 
-            {/* Live Club Access & Monthly Streak Ribbon */}
-            <div className="p-3.5 rounded-3xl glass-card flex items-center justify-between shadow-xl border border-white/[0.08]">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-orange-500/15 text-orange-400 flex items-center justify-center border border-orange-500/30 shadow-md">
-                  <Flame className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h4 className="text-xs font-black text-white">Monthly Attendance</h4>
-                    <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-[#00F5A0]/15 text-[#00F5A0] border border-[#00F5A0]/30">
-                      {monthlyCheckIns} {monthlyCheckIns === 1 ? 'Visit' : 'Visits'}
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-slate-400 mt-0.5 truncate max-w-[200px]">
-                    {currentBranch.name} • Gate 24/7 Active
-                  </p>
-                </div>
+            {/* Check-In Feedback Toast Banner */}
+            {checkInFeedback && (
+              <div className={`p-3 rounded-2xl border text-xs flex items-center gap-2.5 animate-in fade-in ${
+                checkInFeedback.success 
+                  ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300' 
+                  : 'bg-rose-500/15 border-rose-500/30 text-rose-300'
+              }`}>
+                {checkInFeedback.success ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                )}
+                <span className="font-medium text-[11px]">{checkInFeedback.message}</span>
               </div>
-              <button
-                onClick={() => navigateTo('qr')}
-                className="px-3 py-2 rounded-2xl bg-gradient-to-r from-[#00D4FF] to-cyan-500 text-black font-black text-[10px] flex items-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer"
-              >
-                <QrCode className="w-3.5 h-3.5" />
-                <span>Scan</span>
-              </button>
+            )}
+
+            {/* Live Interactive Manual Gym Check-In / Check-Out Widget */}
+            <div className={`p-4 rounded-3xl glass-card flex flex-col space-y-3 shadow-xl transition-all ${
+              isCheckedIn ? 'border-emerald-500/40 bg-emerald-950/20' : 'border-white/[0.08]'
+            }`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-2xl flex items-center justify-center border shadow-md ${
+                    isCheckedIn 
+                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' 
+                      : 'bg-orange-500/15 text-orange-400 border-orange-500/30'
+                  }`}>
+                    {isCheckedIn ? <UserCheck className="w-5 h-5" /> : <Flame className="w-5 h-5" />}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-xs font-black text-white">
+                        {isCheckedIn ? 'Currently In Gym' : 'Daily Gym Check-In'}
+                      </h4>
+                      <span className={`text-[9px] font-black px-2 py-0.5 rounded-full border ${
+                        isCheckedIn 
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 animate-pulse' 
+                          : 'bg-[#00F5A0]/15 text-[#00F5A0] border-[#00F5A0]/30'
+                      }`}>
+                        {isCheckedIn ? `In Session (${activeTodayAttendance?.entryTime})` : `${monthlyCheckIns} ${monthlyCheckIns === 1 ? 'Visit' : 'Visits'} this month`}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-0.5 truncate max-w-[200px]">
+                      {currentBranch.name} • {isCheckedIn ? 'Tap Check Out when leaving' : 'Self-service mobile check-in'}
+                    </p>
+                  </div>
+                </div>
+
+                {isCheckedIn ? (
+                  <button
+                    onClick={handleDirectCheckOut}
+                    disabled={isCheckInLoading}
+                    className="px-3.5 py-2 rounded-2xl bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white font-black text-[10px] flex items-center gap-1.5 shadow-md shadow-rose-500/20 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>{isCheckInLoading ? '...' : 'Check Out'}</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleDirectCheckIn}
+                    disabled={isCheckInLoading}
+                    className="px-3.5 py-2 rounded-2xl bg-gradient-to-r from-[#00D4FF] via-cyan-400 to-[#00F5A0] text-black font-black text-[10px] flex items-center gap-1.5 shadow-md shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <LogIn className="w-3.5 h-3.5" />
+                    <span>{isCheckInLoading ? '...' : 'Check In'}</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Today's Workout Split Widget */}

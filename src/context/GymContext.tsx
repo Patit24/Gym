@@ -163,6 +163,8 @@ interface GymContextType {
 
   generateNewToken: (memberId: string) => string;
   scanDoorQR: (qrToken: string, targetBranchId: BranchId, verificationMethod?: 'Dynamic QR' | 'Face ID') => { success: boolean; message: string; member?: Member };
+  manualCheckIn: (targetMemberId?: string, targetBranchId?: string) => Promise<{ success: boolean; message: string; record?: AttendanceRecord }>;
+  manualCheckOut: (targetMemberId?: string) => Promise<{ success: boolean; message: string }>;
   addMember: (newMember: Omit<Member, 'id' | 'membershipNo' | 'status' | 'rewardPoints' | 'referralCode'>) => Promise<Member>;
   updateMember: (id: string, updatedData: Partial<Member>) => Promise<void>;
   recordMemberPayment: (memberId: string, amount: number, paymentMethod: Transaction['paymentMethod'], notes?: string) => Promise<Transaction>;
@@ -1278,6 +1280,151 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       success: true,
       message: `GATE UNLOCKED: Welcome ${scannedMember.name}! Entry recorded at ${timeStr}.`,
       member: scannedMember,
+    };
+  };
+
+  const manualCheckIn = async (
+    targetMemberId?: string,
+    targetBranchId?: string
+  ): Promise<{ success: boolean; message: string; record?: AttendanceRecord }> => {
+    const member = (targetMemberId ? members.find((m) => m.id === targetMemberId) : activeMember) || activeMember;
+
+    if (!member || !member.id) {
+      return { success: false, message: 'No member record selected for check-in.' };
+    }
+
+    const todayDateStr = new Date().toISOString().split('T')[0];
+
+    // Check if already active in gym today
+    const existingActive = attendance.find(
+      (a) =>
+        (a.memberId === member.id || a.memberName?.toLowerCase() === member.name?.toLowerCase()) &&
+        a.date === todayDateStr &&
+        a.status === 'Active In Gym'
+    );
+    if (existingActive) {
+      return {
+        success: false,
+        message: `Already checked in at ${existingActive.entryTime}. Tap Check Out when leaving.`,
+        record: existingActive,
+      };
+    }
+
+    // Status / Expiration checks
+    const rawStatus = (member.status as string) || '';
+    if (rawStatus === 'Cancelled' || rawStatus === 'Suspended' || rawStatus === 'Inactive' || rawStatus === 'Expired') {
+      return {
+        success: false,
+        message: `Check-in blocked: Membership status is ${member.status}. Please renew your plan.`,
+      };
+    }
+    if (rawStatus === 'Frozen') {
+      return {
+        success: false,
+        message: 'Check-in blocked: Membership is currently frozen.',
+      };
+    }
+
+    const expiryStr = member.expiryDate || member.endDate;
+    if (expiryStr) {
+      const expDate = new Date(expiryStr);
+      expDate.setHours(23, 59, 59, 999);
+      if (expDate < new Date()) {
+        return {
+          success: false,
+          message: `Check-in blocked: Membership expired on ${expiryStr}. Please renew.`,
+        };
+      }
+    }
+
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const branchToUse = targetBranchId || member.branchId || selectedBranchId || 'branch-1';
+
+    const newRecord: AttendanceRecord = {
+      id: `att-man-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+      memberId: member.id,
+      memberName: member.name,
+      memberPhoto: member.photoUrl || '',
+      branchId: branchToUse,
+      entryTime: timeStr,
+      verificationMethod: 'Dynamic QR',
+      deviceInfo: `Member App Manual Check-In (${branchToUse})`,
+      date: todayDateStr,
+      status: 'Active In Gym',
+    };
+
+    setAttendance((prev) => [newRecord, ...prev]);
+    safeDbWrite(setDoc(doc(db, 'attendance', newRecord.id), newRecord));
+
+    await recordAuditLog(
+      'MEMBER_CHECKIN' as any,
+      member.id,
+      member.name,
+      `Manual check-in recorded at ${timeStr} (${branchToUse})`
+    );
+
+    return {
+      success: true,
+      message: `Checked in successfully at ${timeStr}! Welcome to the gym, ${member.name}.`,
+      record: newRecord,
+    };
+  };
+
+  const manualCheckOut = async (
+    targetMemberId?: string
+  ): Promise<{ success: boolean; message: string }> => {
+    const member = (targetMemberId ? members.find((m) => m.id === targetMemberId) : activeMember) || activeMember;
+
+    if (!member || !member.id) {
+      return { success: false, message: 'No member record selected for check-out.' };
+    }
+
+    const todayDateStr = new Date().toISOString().split('T')[0];
+
+    // Find active check-in record
+    const activeRecord =
+      attendance.find(
+        (a) =>
+          (a.memberId === member.id || a.memberName?.toLowerCase() === member.name?.toLowerCase()) &&
+          a.date === todayDateStr &&
+          a.status === 'Active In Gym'
+      ) ||
+      attendance.find(
+        (a) =>
+          (a.memberId === member.id || a.memberName?.toLowerCase() === member.name?.toLowerCase()) &&
+          a.status === 'Active In Gym'
+      );
+
+    if (!activeRecord) {
+      return {
+        success: false,
+        message: 'No active check-in found for today. You are currently not marked inside the gym.',
+      };
+    }
+
+    const now = new Date();
+    const exitTimeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    const updatedRecord: AttendanceRecord = {
+      ...activeRecord,
+      exitTime: exitTimeStr,
+      status: 'Checked Out',
+    };
+
+    setAttendance((prev) => prev.map((a) => (a.id === activeRecord.id ? updatedRecord : a)));
+    safeDbWrite(setDoc(doc(db, 'attendance', activeRecord.id), updatedRecord));
+
+    await recordAuditLog(
+      'MEMBER_CHECKOUT' as any,
+      member.id,
+      member.name,
+      `Manual check-out recorded at ${exitTimeStr} (Entry was ${activeRecord.entryTime})`
+    );
+
+    return {
+      success: true,
+      message: `Checked out successfully at ${exitTimeStr}. Great workout today!`,
     };
   };
 
@@ -2864,6 +3011,8 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addBranch,
         generateNewToken,
         scanDoorQR,
+        manualCheckIn,
+        manualCheckOut,
         addMember,
         updateMember,
         recordMemberPayment,
