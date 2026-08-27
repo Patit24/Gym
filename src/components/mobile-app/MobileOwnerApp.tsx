@@ -68,7 +68,8 @@ type OwnerScreen =
   | 'audit-logs'
   | 'member-created-success'
   | 'add-branch'
-  | 'trainer-created-success';
+  | 'trainer-created-success'
+  | 'fee-matrix';
 
 export const MobileOwnerApp: React.FC = () => {
   const {
@@ -94,6 +95,8 @@ export const MobileOwnerApp: React.FC = () => {
     addEmployee,
     sendBulkNotification,
     renewSubscription,
+    addMembershipPlan,
+    updateMembershipPlan,
     signOutApp,
     notifications,
     markNotificationRead
@@ -119,6 +122,102 @@ export const MobileOwnerApp: React.FC = () => {
   const [mobileRenewPaymentMethod, setMobileRenewPaymentMethod] = useState<'UPI' | 'Cash' | 'Card' | 'Bank Transfer'>('UPI');
   const [isMobileRenewing, setIsMobileRenewing] = useState(false);
   const [mobileRenewSuccessToast, setMobileRenewSuccessToast] = useState<string | null>(null);
+
+  // Fee Matrix State
+  const monthlyPlanItem = plans.find(p => p.durationMonths === 1 || p.duration === 'Monthly');
+  const quarterlyPlanItem = plans.find(p => p.durationMonths === 3 || p.duration === 'Quarterly');
+  const yearlyPlanItem = plans.find(p => p.durationMonths === 12 || p.duration === 'Yearly');
+
+  const [feeReg, setFeeReg] = useState<number>(monthlyPlanItem?.joiningFee || 500);
+  const [feeMonthly, setFeeMonthly] = useState<number>(monthlyPlanItem?.basePrice || 1500);
+  const [feeQuarterly, setFeeQuarterly] = useState<number>(quarterlyPlanItem?.basePrice || 4000);
+  const [feeYearly, setFeeYearly] = useState<number>(yearlyPlanItem?.basePrice || 12000);
+  const [isSavingFeeMatrix, setIsSavingFeeMatrix] = useState(false);
+  const [feeMatrixToast, setFeeMatrixToast] = useState<string | null>(null);
+
+  const handleSaveMobileFeeMatrix = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingFeeMatrix(true);
+    try {
+      const calcTot = (b: number, j: number, gst: number = 18) => Math.round((b + j) * (1 + gst / 100));
+
+      if (monthlyPlanItem) {
+        await updateMembershipPlan(monthlyPlanItem.id, {
+          basePrice: feeMonthly,
+          joiningFee: feeReg,
+          totalPrice: calcTot(feeMonthly, feeReg, monthlyPlanItem.gstPercent || 18)
+        });
+      } else {
+        await addMembershipPlan({
+          id: `plan-monthly-${Date.now()}`,
+          name: 'Monthly Standard Membership',
+          durationMonths: 1,
+          duration: 'Monthly',
+          basePrice: feeMonthly,
+          joiningFee: feeReg,
+          gstPercent: 18,
+          totalPrice: calcTot(feeMonthly, feeReg, 18),
+          description: 'Standard monthly gym pass with full floor access.',
+          includedAddons: ['Gym Floor Access', 'Locker Access'],
+          includedFeatures: { personalTraining: false, dietPlan: false, locker: true, steam: false },
+          isActive: true
+        });
+      }
+
+      if (quarterlyPlanItem) {
+        await updateMembershipPlan(quarterlyPlanItem.id, {
+          basePrice: feeQuarterly,
+          joiningFee: feeReg,
+          totalPrice: calcTot(feeQuarterly, feeReg, quarterlyPlanItem.gstPercent || 18)
+        });
+      } else {
+        await addMembershipPlan({
+          id: `plan-quarterly-${Date.now()}`,
+          name: 'Quarterly Pro Fitness Pass',
+          durationMonths: 3,
+          duration: 'Quarterly',
+          basePrice: feeQuarterly,
+          joiningFee: feeReg,
+          gstPercent: 18,
+          totalPrice: calcTot(feeQuarterly, feeReg, 18),
+          description: '3-month transformation plan with trainer assessments.',
+          includedAddons: ['Gym Floor Access', 'Bi-weekly Assessment', 'Locker Room'],
+          includedFeatures: { personalTraining: true, dietPlan: true, locker: true, steam: false },
+          isActive: true
+        });
+      }
+
+      if (yearlyPlanItem) {
+        await updateMembershipPlan(yearlyPlanItem.id, {
+          basePrice: feeYearly,
+          joiningFee: feeReg,
+          totalPrice: calcTot(feeYearly, feeReg, yearlyPlanItem.gstPercent || 18)
+        });
+      } else {
+        await addMembershipPlan({
+          id: `plan-yearly-${Date.now()}`,
+          name: 'Annual VIP All-Access Pass',
+          durationMonths: 12,
+          duration: 'Yearly',
+          basePrice: feeYearly,
+          joiningFee: feeReg,
+          gstPercent: 18,
+          totalPrice: calcTot(feeYearly, feeReg, 18),
+          description: '12-month unlimited gym floor & sauna pass.',
+          includedAddons: ['All Access', 'Unlimited PT', 'Steam & Sauna', 'Diet Plan'],
+          includedFeatures: { personalTraining: true, dietPlan: true, locker: true, steam: true },
+          isActive: true
+        });
+      }
+
+      setFeeMatrixToast('Standard fee rates applied successfully!');
+      setTimeout(() => setFeeMatrixToast(null), 3000);
+    } catch (err: any) {
+      alert(err.message || 'Failed to save fee structure');
+    } finally {
+      setIsSavingFeeMatrix(false);
+    }
+  };
 
   const [searchMember, setSearchMember] = useState('');
   const [goalFilter, setGoalFilter] = useState<string>('all');
@@ -500,7 +599,8 @@ export const MobileOwnerApp: React.FC = () => {
     'audit-logs',
     'member-created-success',
     'add-branch',
-    'trainer-created-success'
+    'trainer-created-success',
+    'fee-matrix'
   ].includes(currentScreen);
 
   const bottomNavTabs: MobileNavTab[] = [
@@ -542,6 +642,7 @@ export const MobileOwnerApp: React.FC = () => {
           currentScreen === 'audit-logs' ? 'Audit Logs' :
           currentScreen === 'add-branch' ? 'New Branch' :
           currentScreen === 'trainer-created-success' ? 'Coach Created' :
+          currentScreen === 'fee-matrix' ? 'Fee Matrix & Rates' :
           currentScreen === 'member-created-success' ? 'Member Created' : 'Back'
         }
       />
@@ -708,6 +809,17 @@ export const MobileOwnerApp: React.FC = () => {
                 </button>
 
                 <button
+                  onClick={() => navigateTo('fee-matrix')}
+                  className="glass-card-premium hover:border-cyan-400/50 active:scale-95 p-4 rounded-[20px] text-left transition-all shadow-xl group cursor-pointer border border-cyan-500/30 bg-gradient-to-br from-cyan-950/20 to-blue-950/20"
+                >
+                  <div className="w-10 h-10 rounded-2xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform border border-cyan-500/40 shadow-md">
+                    <CreditCard className="w-5 h-5" />
+                  </div>
+                  <div className="font-black text-xs text-white">Fee Rates & Matrix</div>
+                  <div className="text-[10px] text-cyan-300 font-medium mt-0.5">Reg, Monthly, Quarterly, Yearly</div>
+                </button>
+
+                <button
                   onClick={() => navigateTo('broadcast')}
                   className="glass-card-premium hover:border-[#F59E0B]/40 active:scale-95 p-4 rounded-[20px] text-left transition-all shadow-xl group cursor-pointer"
                 >
@@ -760,11 +872,26 @@ export const MobileOwnerApp: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="text-right">
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#10B981]/15 text-[#10B981] border border-[#10B981]/30">
-                        {member.status}
-                      </span>
-                      <span className="text-[9px] text-slate-400 block mt-1">Exp: {member.endDate}</span>
+                    <div className="flex items-center gap-2">
+                      <div className="text-right">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#10B981]/15 text-[#10B981] border border-[#10B981]/30">
+                          {member.status}
+                        </span>
+                        <span className="text-[9px] text-slate-400 block mt-1">Exp: {member.endDate}</span>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedMember(member);
+                          setMobileRenewPlanId(member.planId || plans[0]?.id || '');
+                          setIsMobileRenewOpen(true);
+                        }}
+                        className="px-2.5 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 font-bold text-[10px] flex items-center gap-1 active:scale-95 cursor-pointer"
+                        title="Extend / Renew Plan"
+                      >
+                        <Sparkles className="w-3 h-3 text-cyan-400" />
+                        <span>Extend</span>
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -850,9 +977,24 @@ export const MobileOwnerApp: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="text-right">
-                    <span className="text-xs font-black text-slate-200">{member.planName}</span>
-                    <span className="text-[9px] text-slate-400 block mt-0.5">Exp: {member.endDate}</span>
+                  <div className="flex items-center gap-2">
+                    <div className="text-right">
+                      <span className="text-xs font-black text-slate-200">{member.planName}</span>
+                      <span className="text-[9px] text-slate-400 block mt-0.5">Exp: {member.endDate}</span>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedMember(member);
+                        setMobileRenewPlanId(member.planId || plans[0]?.id || '');
+                        setIsMobileRenewOpen(true);
+                      }}
+                      className="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500/20 to-blue-500/20 hover:from-cyan-500/30 hover:to-blue-500/30 border border-cyan-500/40 text-cyan-300 font-bold text-[10px] flex items-center gap-1 active:scale-95 cursor-pointer shadow-sm"
+                      title="Extend / Renew Plan"
+                    >
+                      <Sparkles className="w-3 h-3 text-cyan-400" />
+                      <span>Extend</span>
+                    </button>
                   </div>
                 </div>
               ))}
@@ -938,6 +1080,20 @@ export const MobileOwnerApp: React.FC = () => {
 
             {/* Quick Management Links */}
             <div className="bg-[#101422] rounded-3xl border border-white/10 overflow-hidden shadow-xl divide-y divide-white/5">
+              <button
+                onClick={() => navigateTo('fee-matrix')}
+                className="w-full p-4 flex items-center justify-between text-left hover:bg-[#151A2E] active:bg-[#1B2238] transition-all bg-gradient-to-r from-cyan-950/20 to-transparent"
+              >
+                <div className="flex items-center gap-3">
+                  <CreditCard className="w-5 h-5 text-cyan-400" />
+                  <div>
+                    <span className="text-xs font-bold text-white block">Membership Fee Matrix & Rates</span>
+                    <span className="text-[10px] text-cyan-300">Set Registration, Monthly, Quarterly & Yearly tariffs</span>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-cyan-400" />
+              </button>
+
               <button
                 onClick={() => navigateTo('add-branch')}
                 className="w-full p-4 flex items-center justify-between text-left hover:bg-[#151A2E] active:bg-[#1B2238] transition-all"
@@ -1457,17 +1613,81 @@ export const MobileOwnerApp: React.FC = () => {
               </div>
             </div>
 
-            {/* Renew / Extend Pass Action Button */}
-            <button
-              onClick={() => {
-                setMobileRenewPlanId(selectedMember.planId || plans[0]?.id || '');
-                setIsMobileRenewOpen(true);
-              }}
-              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#00D4FF] via-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-black font-black text-xs flex items-center justify-center gap-2 shadow-xl shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer"
-            >
-              <Sparkles className="w-4 h-4" />
-              <span>Renew / Extend Member Subscription</span>
-            </button>
+            {/* ── SUBSCRIPTION EXTENSION & RENEWAL CARD ── */}
+            <div className="p-4 bg-gradient-to-br from-[#0B1528] via-[#0D1220] to-[#07090E] rounded-3xl border border-cyan-500/30 shadow-2xl space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-cyan-400" />
+                  <span className="text-xs font-black text-white uppercase tracking-wider">Subscription & Renewal</span>
+                </div>
+                <span className="text-[10px] font-bold text-cyan-300">
+                  {new Date(selectedMember.expiryDate || selectedMember.endDate || '') > new Date() ? '⚡ Extends Active Pass' : 'Expired'}
+                </span>
+              </div>
+
+              {/* 1-Tap Quick Extend Buttons */}
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  onClick={async () => {
+                    const plan1M = plans.find(p => p.durationMonths === 1) || plans[0];
+                    if (plan1M) {
+                      await renewSubscription(selectedMember.id, plan1M.id, 'UPI');
+                      const updated = members.find((m) => m.id === selectedMember.id);
+                      if (updated) setSelectedMember(updated);
+                      alert(`Subscription extended by 1 Month (Valid until ${updated?.endDate || updated?.expiryDate})`);
+                    }
+                  }}
+                  className="p-2.5 rounded-2xl bg-[#141E34] hover:bg-[#1A2846] border border-cyan-500/30 text-center active:scale-95 transition-all cursor-pointer"
+                >
+                  <div className="text-xs font-black text-cyan-300">+1 Month</div>
+                  <div className="text-[9px] text-slate-400 mt-0.5">Quick Extend</div>
+                </button>
+
+                <button
+                  onClick={async () => {
+                    const plan3M = plans.find(p => p.durationMonths === 3) || plans[1] || plans[0];
+                    if (plan3M) {
+                      await renewSubscription(selectedMember.id, plan3M.id, 'UPI');
+                      const updated = members.find((m) => m.id === selectedMember.id);
+                      if (updated) setSelectedMember(updated);
+                      alert(`Subscription extended by 3 Months (Valid until ${updated?.endDate || updated?.expiryDate})`);
+                    }
+                  }}
+                  className="p-2.5 rounded-2xl bg-[#1D1634] hover:bg-[#271E46] border border-purple-500/30 text-center active:scale-95 transition-all cursor-pointer"
+                >
+                  <div className="text-xs font-black text-purple-300">+3 Months</div>
+                  <div className="text-[9px] text-slate-400 mt-0.5">Quarterly</div>
+                </button>
+
+                <button
+                  onClick={async () => {
+                    const plan12M = plans.find(p => p.durationMonths === 12) || plans[2] || plans[0];
+                    if (plan12M) {
+                      await renewSubscription(selectedMember.id, plan12M.id, 'UPI');
+                      const updated = members.find((m) => m.id === selectedMember.id);
+                      if (updated) setSelectedMember(updated);
+                      alert(`Subscription extended by 12 Months (Valid until ${updated?.endDate || updated?.expiryDate})`);
+                    }
+                  }}
+                  className="p-2.5 rounded-2xl bg-[#122A22] hover:bg-[#18382E] border border-emerald-500/30 text-center active:scale-95 transition-all cursor-pointer"
+                >
+                  <div className="text-xs font-black text-emerald-300">+1 Year</div>
+                  <div className="text-[9px] text-slate-400 mt-0.5">Annual VIP</div>
+                </button>
+              </div>
+
+              {/* Full Renewal Bottom Sheet Trigger */}
+              <button
+                onClick={() => {
+                  setMobileRenewPlanId(selectedMember.planId || plans[0]?.id || '');
+                  setIsMobileRenewOpen(true);
+                }}
+                className="w-full py-3 rounded-2xl bg-gradient-to-r from-[#00D4FF] via-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-black font-black text-xs flex items-center justify-center gap-2 shadow-xl shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>Custom Plan & Payment Mode Renewal</span>
+              </button>
+            </div>
 
             {/* Quick Member Actions */}
             <div className="grid grid-cols-2 gap-2">
@@ -2460,6 +2680,178 @@ export const MobileOwnerApp: React.FC = () => {
             </div>
           );
         })()}
+
+        {/* ═══════════════════════════════════════════════════════════
+            SUBPAGE: STANDARD GYM FEE MATRIX & TARIFF RATES
+        ═══════════════════════════════════════════════════════════ */}
+        {currentScreen === 'fee-matrix' && (
+          <div className="space-y-4 animate-in fade-in duration-200">
+            
+            {/* Header Hero Banner */}
+            <div className="p-5 bg-gradient-to-br from-[#0B1528] via-[#0D101C] to-[#07090E] rounded-3xl border border-cyan-500/30 shadow-2xl relative overflow-hidden space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center border border-cyan-500/40">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-white">Membership Fee Rates</h3>
+                    <p className="text-[10px] text-slate-400">Master Tariff & Admission Structure</p>
+                  </div>
+                </div>
+                <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                  Admin Master
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 pt-1">
+                Manually configure standard admission fees and recurring subscription tariffs. All changes synchronize across user apps instantly.
+              </p>
+            </div>
+
+            {feeMatrixToast && (
+              <div className="p-3 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2 animate-in fade-in">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{feeMatrixToast}</span>
+              </div>
+            )}
+
+            {/* Matrix Form */}
+            <form onSubmit={handleSaveMobileFeeMatrix} className="space-y-3">
+              
+              {/* 1. Registration / Admission Fee */}
+              <div className="p-4 bg-[#101422] rounded-3xl border border-white/10 shadow-lg space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-white flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-amber-400" />
+                    <span>Registration / Admission Fee</span>
+                  </span>
+                  <span className="text-[9px] font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-md border border-amber-400/20">
+                    One-Time
+                  </span>
+                </div>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-black text-sm">₹</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={feeReg}
+                    onChange={(e) => setFeeReg(Number(e.target.value))}
+                    className="w-full pl-8 pr-3 py-2.5 bg-[#07090E] rounded-2xl border border-white/10 text-white font-extrabold text-sm focus:border-cyan-400 focus:outline-none"
+                    placeholder="500"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400">One-time joining fee charged at first admission</p>
+              </div>
+
+              {/* 2. Monthly Fee */}
+              <div className="p-4 bg-[#101422] rounded-3xl border border-white/10 shadow-lg space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-white flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-cyan-400" />
+                    <span>Monthly Pass Fee (1 Month)</span>
+                  </span>
+                  <span className="text-[9px] font-bold text-cyan-400 bg-cyan-400/10 px-2 py-0.5 rounded-md border border-cyan-400/20">
+                    30 Days
+                  </span>
+                </div>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-black text-sm">₹</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={feeMonthly}
+                    onChange={(e) => setFeeMonthly(Number(e.target.value))}
+                    className="w-full pl-8 pr-3 py-2.5 bg-[#07090E] rounded-2xl border border-white/10 text-white font-extrabold text-sm focus:border-cyan-400 focus:outline-none"
+                    placeholder="1500"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400">Recurring 1-month gym floor pass rate</p>
+              </div>
+
+              {/* 3. Quarterly Fee */}
+              <div className="p-4 bg-[#101422] rounded-3xl border border-white/10 shadow-lg space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-white flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-purple-400" />
+                    <span>Quarterly Fee (3 Months)</span>
+                  </span>
+                  <span className="text-[9px] font-bold text-purple-400 bg-purple-400/10 px-2 py-0.5 rounded-md border border-purple-400/20">
+                    90 Days
+                  </span>
+                </div>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-black text-sm">₹</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={feeQuarterly}
+                    onChange={(e) => setFeeQuarterly(Number(e.target.value))}
+                    className="w-full pl-8 pr-3 py-2.5 bg-[#07090E] rounded-2xl border border-white/10 text-white font-extrabold text-sm focus:border-cyan-400 focus:outline-none"
+                    placeholder="4000"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400">Quarterly transformation package rate</p>
+              </div>
+
+              {/* 4. Yearly Fee */}
+              <div className="p-4 bg-[#101422] rounded-3xl border border-white/10 shadow-lg space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-white flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                    <span>Yearly VIP Fee (12 Months)</span>
+                  </span>
+                  <span className="text-[9px] font-bold text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded-md border border-emerald-400/20">
+                    Annual Pass
+                  </span>
+                </div>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-black text-sm">₹</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={feeYearly}
+                    onChange={(e) => setFeeYearly(Number(e.target.value))}
+                    className="w-full pl-8 pr-3 py-2.5 bg-[#07090E] rounded-2xl border border-white/10 text-white font-extrabold text-sm focus:border-cyan-400 focus:outline-none"
+                    placeholder="12000"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400">Full 12-month unlimited membership rate</p>
+              </div>
+
+              {/* Submit Save Button */}
+              <button
+                type="submit"
+                disabled={isSavingFeeMatrix}
+                className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#00D4FF] via-cyan-500 to-blue-600 text-black font-black text-xs flex items-center justify-center gap-2 shadow-2xl shadow-cyan-500/25 active:scale-95 transition-all cursor-pointer disabled:opacity-50 mt-2"
+              >
+                <Check className="w-4 h-4" />
+                <span>{isSavingFeeMatrix ? 'Updating Rates...' : 'Save & Apply Standard Fee Rates'}</span>
+              </button>
+            </form>
+
+            {/* Current Active Packages Summary */}
+            <div className="p-4 bg-[#101422] rounded-3xl border border-white/10 shadow-xl space-y-2.5">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
+                Active System Packages ({plans.length})
+              </span>
+              <div className="space-y-2">
+                {plans.map((p) => (
+                  <div key={p.id} className="p-3 bg-[#07090E] rounded-2xl border border-white/5 flex items-center justify-between text-xs">
+                    <div>
+                      <strong className="text-white font-black block">{p.name}</strong>
+                      <span className="text-[10px] text-cyan-400 font-semibold">{p.durationMonths} Months</span>
+                    </div>
+                    <div className="text-right">
+                      <strong className="text-emerald-400 font-black text-sm">₹{p.totalPrice.toLocaleString('en-IN')}</strong>
+                      <span className="text-[9px] text-slate-400 block">incl. {p.gstPercent}% GST</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+          </div>
+        )}
 
       </main>
 
