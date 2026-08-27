@@ -6,13 +6,12 @@ import {
   Dumbbell,
   Zap,
   ShieldCheck,
-  Watch,
-  Brain,
+  Utensils,
+  Trophy,
   ArrowRight,
   Sparkles,
-  QrCode,
+  CreditCard,
   Users,
-  Lock,
   ChevronRight
 } from 'lucide-react';
 
@@ -39,25 +38,32 @@ export const GetStartedScreen: React.FC<GetStartedScreenProps> = ({ onGetStarted
 
   const featurePills = [
     {
-      icon: QrCode,
-      title: 'Smart Turnstile Pass',
-      desc: 'Dynamic dynamic QR & smart access',
+      icon: Dumbbell,
+      title: 'Daily Workout Tracking',
+      desc: 'Log sets, reps, progressive weights & PRs',
       color: '#00D4FF',
       bg: 'rgba(0, 212, 255, 0.12)'
     },
     {
-      icon: Watch,
-      title: 'Wearable HR Sync',
-      desc: ' Watch & Garmin telemetry lock',
+      icon: Utensils,
+      title: 'Nutrition & Macro Planning',
+      desc: 'Custom calorie targets, meals & hydration',
+      color: '#10B981',
+      bg: 'rgba(16, 185, 129, 0.12)'
+    },
+    {
+      icon: CreditCard,
+      title: 'Digital Membership Pass',
+      desc: 'Live subscription status, validity & history',
       color: '#EC4899',
       bg: 'rgba(236, 72, 153, 0.12)'
     },
     {
-      icon: Brain,
-      title: 'AI Coach Studio',
-      desc: 'Personalized routines & hypertrophy',
-      color: '#10B981',
-      bg: 'rgba(16, 185, 129, 0.12)'
+      icon: Trophy,
+      title: 'Gym Challenges & Rewards',
+      desc: 'Active fitness contests & reward milestones',
+      color: '#F59E0B',
+      bg: 'rgba(245, 158, 11, 0.12)'
     }
   ];
 
@@ -123,7 +129,7 @@ export const GetStartedScreen: React.FC<GetStartedScreenProps> = ({ onGetStarted
             </h2>
 
             <p className="text-xs sm:text-sm text-slate-400 leading-relaxed max-w-sm">
-              All-in-one smart portal for workouts, biometric door pass, dietary planning, and club telemetry.
+              Your complete companion for daily workout tracking, nutrition planning, and digital membership access.
             </p>
           </motion.div>
 
