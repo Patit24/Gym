@@ -6,6 +6,7 @@ type Gender = 'Male' | 'Female' | 'Other';
 import { MobileAppHeader } from './MobileAppHeader';
 import { MobileBottomNav, MobileNavTab } from './MobileBottomNav';
 import { PrivilegePassCard } from '../shared/PrivilegePassCard';
+import { MobileFinanceScreen } from '../mobile/MobileFinanceScreen';
 import {
   Home,
   Users,
@@ -856,77 +857,7 @@ export const MobileOwnerApp: React.FC = () => {
         {/* ═══════════════════════════════════════════════════════════
             SCREEN 3: FINANCE & CASHFLOW
         ═══════════════════════════════════════════════════════════ */}
-        {currentScreen === 'finance' && (
-          <div className="space-y-4 animate-in fade-in duration-200">
-            {/* Live Branch Selector Pill */}
-            <div className="flex items-center justify-between p-3 rounded-2xl bg-[#101422] border border-white/10 shadow-lg gap-2.5">
-              <div className="flex items-center gap-2.5 min-w-0 shrink-0">
-                <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
-                  <DollarSign className="w-4 h-4" />
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Accounting</span>
-                  <span className="text-[10px] font-bold text-emerald-400 truncate max-w-[80px]">{currentBranch.code}</span>
-                </div>
-              </div>
-
-              <div className="relative flex-1 min-w-0 max-w-[210px]">
-                <select
-                  value={selectedBranchId}
-                  onChange={(e) => setSelectedBranchId(e.target.value)}
-                  className="w-full bg-[#07090E] text-white text-xs font-bold pl-3 pr-7 py-1.5 rounded-xl border border-white/10 outline-none cursor-pointer focus:border-[#4F7CFF] appearance-none truncate"
-                >
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id} className="bg-[#0A0D14] text-white">
-                      {b.name} ({b.code})
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              </div>
-            </div>
-
-            <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 shadow-xl space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-black text-slate-400 uppercase tracking-wider">Branch Cashflow ({currentBranch.code})</span>
-                <button
-                  onClick={() => navigateTo('add-expense')}
-                  className="px-3 py-1.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-black text-[10px] flex items-center gap-1 shadow-md"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Record Expense</span>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2.5 pt-1">
-                <div className="p-3 bg-[#0B0E17] rounded-2xl border border-white/10">
-                  <div className="text-[10px] text-slate-400 font-medium uppercase">Collections</div>
-                  <div className="text-lg font-black text-emerald-400 mt-0.5">₹{totalCollections.toLocaleString('en-IN')}</div>
-                </div>
-                <div className="p-3 bg-[#0B0E17] rounded-2xl border border-white/10">
-                  <div className="text-[10px] text-slate-400 font-medium uppercase">Expenses</div>
-                  <div className="text-lg font-black text-rose-400 mt-0.5">₹{totalExpenseAmount.toLocaleString('en-IN')}</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Recent Expenses List */}
-            <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 shadow-xl space-y-3">
-              <span className="text-xs font-black text-slate-400 uppercase tracking-wider block">Recent Expenses Log</span>
-              <div className="space-y-2">
-                {branchExpenses.map((exp) => (
-                  <div key={exp.id} className="p-3 bg-[#0B0E17] rounded-2xl border border-white/10 flex items-center justify-between">
-                    <div>
-                      <div className="text-xs font-black text-white">{exp.name}</div>
-                      <div className="text-[10px] text-slate-400">{exp.category} • {exp.date}</div>
-                    </div>
-                    <span className="text-xs font-black text-rose-400">-₹{exp.amount.toLocaleString('en-IN')}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
+        {currentScreen === 'finance' && <MobileFinanceScreen />}
 
         {/* ═══════════════════════════════════════════════════════════
             SCREEN 4: ATTENDANCE
