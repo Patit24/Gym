@@ -128,11 +128,11 @@ export const TrainerDashboard: React.FC = () => {
         </div>
 
         <div className="glass-card rounded-2xl p-4 border border-gym-border">
-          <span className="text-[11px] font-semibold text-gym-subtext uppercase">Monthly PT Earnings</span>
+          <span className="text-[11px] font-semibold text-gym-subtext uppercase">Transformation Score</span>
           <div className="text-2xl font-black text-[#27D980] mt-1">
-            ₹{((currentTrainer.baseSalary || 25000) + ((currentTrainer.baseSalary || 25000) * (currentTrainer.ptCommissionRate || 10)) / 100).toLocaleString('en-IN')}
+            96.4%
           </div>
-          <span className="text-[11px] text-gym-subtext">Base: ₹{(currentTrainer.baseSalary || 25000).toLocaleString('en-IN')}</span>
+          <span className="text-[11px] text-gym-subtext">Client Goal Compliance</span>
         </div>
 
         <div className="glass-card rounded-2xl p-4 border border-gym-border">

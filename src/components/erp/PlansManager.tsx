@@ -43,9 +43,106 @@ export const PlansManager: React.FC = () => {
   const [lockerFeature, setLockerFeature] = useState(true);
   const [steamFeature, setSteamFeature] = useState(false);
 
+  // Standard Rates Form State
+  const monthlyPlan = plans.find(p => p.durationMonths === 1 || p.duration === 'Monthly');
+  const quarterlyPlan = plans.find(p => p.durationMonths === 3 || p.duration === 'Quarterly');
+  const yearlyPlan = plans.find(p => p.durationMonths === 12 || p.duration === 'Yearly');
+
+  const [regFee, setRegFee] = useState<number>(monthlyPlan?.joiningFee || 500);
+  const [monthlyFee, setMonthlyFee] = useState<number>(monthlyPlan?.basePrice || 1500);
+  const [quarterlyFee, setQuarterlyFee] = useState<number>(quarterlyPlan?.basePrice || 4000);
+  const [yearlyFee, setYearlyFee] = useState<number>(yearlyPlan?.basePrice || 12000);
+  const [isSavingStandardFees, setIsSavingStandardFees] = useState(false);
+  const [standardFeeSuccess, setStandardFeeSuccess] = useState(false);
+
   const calculateTotal = (base: number, joining: number, gst: number) => {
     const subtotal = base + joining;
     return Math.round(subtotal * (1 + gst / 100));
+  };
+
+  const handleSaveStandardFeeMatrix = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingStandardFees(true);
+    try {
+      // 1. Update or create Monthly plan
+      if (monthlyPlan) {
+        await updateMembershipPlan(monthlyPlan.id, {
+          basePrice: monthlyFee,
+          joiningFee: regFee,
+          totalPrice: calculateTotal(monthlyFee, regFee, monthlyPlan.gstPercent || 18)
+        });
+      } else {
+        await addMembershipPlan({
+          id: `plan-monthly-${Date.now()}`,
+          name: 'Monthly Standard Membership',
+          durationMonths: 1,
+          duration: 'Monthly',
+          basePrice: monthlyFee,
+          joiningFee: regFee,
+          gstPercent: 18,
+          totalPrice: calculateTotal(monthlyFee, regFee, 18),
+          description: 'Standard monthly gym pass with full facility access.',
+          includedAddons: ['Gym Floor Access', 'Locker Room'],
+          includedFeatures: { personalTraining: false, dietPlan: false, locker: true, steam: false },
+          isActive: true
+        });
+      }
+
+      // 2. Update or create Quarterly plan
+      if (quarterlyPlan) {
+        await updateMembershipPlan(quarterlyPlan.id, {
+          basePrice: quarterlyFee,
+          joiningFee: regFee,
+          totalPrice: calculateTotal(quarterlyFee, regFee, quarterlyPlan.gstPercent || 18)
+        });
+      } else {
+        await addMembershipPlan({
+          id: `plan-quarterly-${Date.now()}`,
+          name: 'Quarterly Transformation Pass',
+          durationMonths: 3,
+          duration: 'Quarterly',
+          basePrice: quarterlyFee,
+          joiningFee: regFee,
+          gstPercent: 18,
+          totalPrice: calculateTotal(quarterlyFee, regFee, 18),
+          description: '3-month gym pass with trainer assessments.',
+          includedAddons: ['Gym Floor Access', 'Locker Room', 'Trainer Assessment'],
+          includedFeatures: { personalTraining: true, dietPlan: true, locker: true, steam: false },
+          isActive: true
+        });
+      }
+
+      // 3. Update or create Yearly plan
+      if (yearlyPlan) {
+        await updateMembershipPlan(yearlyPlan.id, {
+          basePrice: yearlyFee,
+          joiningFee: regFee,
+          totalPrice: calculateTotal(yearlyFee, regFee, yearlyPlan.gstPercent || 18)
+        });
+      } else {
+        await addMembershipPlan({
+          id: `plan-yearly-${Date.now()}`,
+          name: 'Annual VIP All-Access Pass',
+          durationMonths: 12,
+          duration: 'Yearly',
+          basePrice: yearlyFee,
+          joiningFee: regFee,
+          gstPercent: 18,
+          totalPrice: calculateTotal(yearlyFee, regFee, 18),
+          description: 'Full 12-month unlimited gym floor and amenities pass.',
+          includedAddons: ['Gym Floor Access', 'Locker Room', 'Steam & Sauna', 'Diet Plan'],
+          includedFeatures: { personalTraining: true, dietPlan: true, locker: true, steam: true },
+          isActive: true
+        });
+      }
+
+      setStandardFeeSuccess(true);
+      setTimeout(() => setStandardFeeSuccess(false), 3500);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSavingStandardFees(false);
+    }
   };
 
   const handleOpenAddModal = () => {
@@ -167,6 +264,129 @@ export const PlansManager: React.FC = () => {
           <Plus className="w-4 h-4" />
           <span>+ Create Package</span>
         </button>
+      </div>
+
+      {/* Standard Gym Fee Rates & Admission Structure Matrix */}
+      <div className="glass-card rounded-3xl p-6 border border-cyan-500/30 relative overflow-hidden bg-gradient-to-br from-[#0E1424] via-[#0B0F19] to-[#07090E] shadow-2xl space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-cyan-500/15 text-cyan-400 flex items-center justify-center border border-cyan-500/30 shadow-md">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-white flex items-center gap-2">
+                <span>Standard Membership Fee Matrix</span>
+                <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                  Admin Master Rates
+                </span>
+              </h3>
+              <p className="text-xs text-slate-400">
+                Manually configure standard admission fees and recurring subscription tariffs across your branches.
+              </p>
+            </div>
+          </div>
+
+          {standardFeeSuccess && (
+            <div className="px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-bold flex items-center gap-1.5 animate-in fade-in">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <span>Standard rates applied & saved!</span>
+            </div>
+          )}
+        </div>
+
+        <form onSubmit={handleSaveStandardFeeMatrix} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-1">
+          {/* 1. Registration / Admission Fee */}
+          <div className="p-4 rounded-2xl bg-[#070A12] border border-white/10 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Registration Fee</span>
+              <span className="text-[9px] font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-md border border-amber-400/20">One-Time</span>
+            </div>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-black">₹</span>
+              <input
+                type="number"
+                min="0"
+                value={regFee}
+                onChange={(e) => setRegFee(Number(e.target.value))}
+                className="w-full pl-7 pr-3 py-2 bg-[#0E1322] rounded-xl border border-white/10 text-white font-extrabold text-sm focus:border-cyan-400 focus:outline-none"
+                placeholder="500"
+              />
+            </div>
+            <p className="text-[10px] text-slate-500">New member admission / joining fee</p>
+          </div>
+
+          {/* 2. Monthly Fee */}
+          <div className="p-4 rounded-2xl bg-[#070A12] border border-white/10 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Monthly Fee (1M)</span>
+              <span className="text-[9px] font-bold text-cyan-400 bg-cyan-400/10 px-2 py-0.5 rounded-md border border-cyan-400/20">1 Month</span>
+            </div>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-black">₹</span>
+              <input
+                type="number"
+                min="0"
+                value={monthlyFee}
+                onChange={(e) => setMonthlyFee(Number(e.target.value))}
+                className="w-full pl-7 pr-3 py-2 bg-[#0E1322] rounded-xl border border-white/10 text-white font-extrabold text-sm focus:border-cyan-400 focus:outline-none"
+                placeholder="1500"
+              />
+            </div>
+            <p className="text-[10px] text-slate-500">Regular recurring 30-day pass</p>
+          </div>
+
+          {/* 3. Quarterly Fee */}
+          <div className="p-4 rounded-2xl bg-[#070A12] border border-white/10 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Quarterly Fee (3M)</span>
+              <span className="text-[9px] font-bold text-purple-400 bg-purple-400/10 px-2 py-0.5 rounded-md border border-purple-400/20">3 Months</span>
+            </div>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-black">₹</span>
+              <input
+                type="number"
+                min="0"
+                value={quarterlyFee}
+                onChange={(e) => setQuarterlyFee(Number(e.target.value))}
+                className="w-full pl-7 pr-3 py-2 bg-[#0E1322] rounded-xl border border-white/10 text-white font-extrabold text-sm focus:border-cyan-400 focus:outline-none"
+                placeholder="4000"
+              />
+            </div>
+            <p className="text-[10px] text-slate-500">90-day transformation package</p>
+          </div>
+
+          {/* 4. Yearly Fee */}
+          <div className="p-4 rounded-2xl bg-[#070A12] border border-white/10 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Yearly Fee (12M)</span>
+              <span className="text-[9px] font-bold text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded-md border border-emerald-400/20">Annual VIP</span>
+            </div>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-black">₹</span>
+              <input
+                type="number"
+                min="0"
+                value={yearlyFee}
+                onChange={(e) => setYearlyFee(Number(e.target.value))}
+                className="w-full pl-7 pr-3 py-2 bg-[#0E1322] rounded-xl border border-white/10 text-white font-extrabold text-sm focus:border-cyan-400 focus:outline-none"
+                placeholder="12000"
+              />
+            </div>
+            <p className="text-[10px] text-slate-500">365-day all-access membership</p>
+          </div>
+
+          {/* Action Row */}
+          <div className="sm:col-span-2 lg:col-span-4 flex items-center justify-end pt-2">
+            <button
+              type="submit"
+              disabled={isSavingStandardFees}
+              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#00D4FF] via-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-black font-black text-xs flex items-center gap-2 shadow-lg shadow-cyan-500/25 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+            >
+              <Check className="w-4 h-4" />
+              <span>{isSavingStandardFees ? 'Updating Standard Rates...' : 'Save & Update Standard Fee Structure'}</span>
+            </button>
+          </div>
+        </form>
       </div>
 
       {/* Packages Grid */}

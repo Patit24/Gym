@@ -19,6 +19,7 @@ import {
   DollarSign,
   AlertTriangle,
   CheckCircle2,
+  Check,
   Clock,
   Send,
   CreditCard,
@@ -44,6 +45,7 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
     transactions,
     recordMemberPayment,
     sendBulkNotification,
+    renewSubscription,
     plans,
     workout,
     diet,
@@ -63,6 +65,13 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'UPI' | 'Card' | 'Bank Transfer'>('UPI');
   const [paymentNotes, setPaymentNotes] = useState('');
+
+  // Renewal Modal
+  const [showRenewalModal, setShowRenewalModal] = useState(false);
+  const [renewalPlanId, setRenewalPlanId] = useState<string>('');
+  const [renewalPaymentMethod, setRenewalPaymentMethod] = useState<'UPI' | 'Cash' | 'Card' | 'Bank Transfer'>('UPI');
+  const [isRenewing, setIsRenewing] = useState(false);
+  const [renewalSuccessMsg, setRenewalSuccessMsg] = useState<string | null>(null);
 
   const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [notifTarget, setNotifTarget] = useState<'all' | 'unpaid' | 'expiring' | 'expired' | 'single'>('all');
@@ -135,6 +144,27 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
       setPaymentNotes('');
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  // Membership Renewal
+  const handleRenewMemberSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedMember || !renewalPlanId) return;
+    setIsRenewing(true);
+    try {
+      await renewSubscription(selectedMember.id, renewalPlanId, renewalPaymentMethod);
+      const updated = members.find(m => m.id === selectedMember.id);
+      if (updated) setSelectedMember(updated);
+      setRenewalSuccessMsg('Membership renewed & extended successfully!');
+      setTimeout(() => {
+        setRenewalSuccessMsg(null);
+        setShowRenewalModal(false);
+      }, 1500);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsRenewing(false);
     }
   };
 
@@ -408,6 +438,16 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
             </div>
 
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setRenewalPlanId(selectedMember.planId || plans[0]?.id || '');
+                  setShowRenewalModal(true);
+                }}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-black font-black text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>Renew / Extend Pass</span>
+              </button>
               <button
                 onClick={() => {
                   setPaymentAmount(selectedMember.pendingDues || 0);
@@ -901,6 +941,114 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
                 >
                   <Send className="w-3.5 h-3.5" />
                   <span>Send Notification</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL 3: MEMBERSHIP RENEWAL & EXTENSION ── */}
+      {showRenewalModal && selectedMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+          <div className="bg-[#14171F] border border-cyan-500/30 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-gym-border">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center border border-cyan-500/30">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-white">Renew / Extend Membership</h3>
+                  <p className="text-xs text-gym-subtext">{selectedMember.name} • {selectedMember.membershipNo}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowRenewalModal(false)}
+                className="w-7 h-7 rounded-full bg-[#1E2330] text-slate-400 hover:text-white flex items-center justify-center"
+              >
+                ✕
+              </button>
+            </div>
+
+            {renewalSuccessMsg && (
+              <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{renewalSuccessMsg}</span>
+              </div>
+            )}
+
+            {/* Current Expiry Info Banner */}
+            <div className="p-3 rounded-2xl bg-[#0B0D12] border border-gym-border/60 space-y-1 text-xs">
+              <div className="flex justify-between text-slate-400">
+                <span>Current Plan:</span>
+                <span className="text-white font-bold">{selectedMember.planName}</span>
+              </div>
+              <div className="flex justify-between text-slate-400">
+                <span>Current Expiry Date:</span>
+                <span className="text-cyan-300 font-extrabold">{selectedMember.expiryDate || selectedMember.endDate || 'Expired'}</span>
+              </div>
+              {new Date(selectedMember.expiryDate || selectedMember.endDate || '') > new Date() && (
+                <p className="text-[10px] text-emerald-400 font-semibold pt-1">
+                  ✓ Active subscription: New plan duration will be appended to current expiry date.
+                </p>
+              )}
+            </div>
+
+            <form onSubmit={handleRenewMemberSubmit} className="space-y-3.5 text-xs">
+              {/* Plan Selector */}
+              <div>
+                <label className="block text-[10px] font-black text-slate-300 uppercase mb-1">Select Renewal Package *</label>
+                <select
+                  value={renewalPlanId}
+                  onChange={(e) => setRenewalPlanId(e.target.value)}
+                  required
+                  className="w-full bg-[#0B0D12] border border-gym-border rounded-xl px-3 py-2.5 text-white font-bold outline-none focus:border-cyan-400"
+                >
+                  {plans.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.durationMonths}M) — ₹{p.totalPrice.toLocaleString('en-IN')}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Payment Method */}
+              <div>
+                <label className="block text-[10px] font-black text-slate-300 uppercase mb-1">Payment Mode *</label>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {(['UPI', 'Cash', 'Card', 'Bank Transfer'] as const).map((mode) => (
+                    <button
+                      type="button"
+                      key={mode}
+                      onClick={() => setRenewalPaymentMethod(mode)}
+                      className={`py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                        renewalPaymentMethod === mode
+                          ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 shadow-md'
+                          : 'bg-[#0B0D12] border-gym-border text-slate-400'
+                      }`}
+                    >
+                      {mode}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowRenewalModal(false)}
+                  className="px-4 py-2.5 rounded-xl bg-[#1E2330] text-slate-300 font-bold hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isRenewing}
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-black font-black shadow-lg shadow-cyan-500/25 flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{isRenewing ? 'Renewing...' : 'Confirm & Renew Membership'}</span>
                 </button>
               </div>
             </form>

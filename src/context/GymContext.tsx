@@ -202,7 +202,7 @@ interface GymContextType {
   addNotification: (notif: Omit<SystemNotification, 'id' | 'timestamp' | 'read'>) => Promise<void>;
   markNotificationRead: (id: string) => Promise<void>;
   sendBulkNotification: (targetFilter: 'all' | 'unpaid' | 'expiring' | 'expired' | 'single', title: string, message: string, singleMemberId?: string) => Promise<void>;
-  renewSubscription: (memberId: string, planId: string) => Promise<void>;
+  renewSubscription: (memberId: string, planId: string, paymentMethod?: 'UPI' | 'Cash' | 'Card' | 'Bank Transfer') => Promise<void>;
   
   addExpense: (expense: Omit<Expense, 'id'>) => Promise<Expense>;
   updateExpense: (id: string, updated: Partial<Expense>) => Promise<void>;
@@ -2645,27 +2645,44 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     createdNotifs.forEach(n => safeDbWrite(setDoc(doc(db, 'notifications', n.id), n)));
   };
 
-  const renewSubscription = async (memberId: string, planId: string) => {
+  const renewSubscription = async (memberId: string, planId: string, paymentMethod: 'UPI' | 'Cash' | 'Card' | 'Bank Transfer' = 'UPI') => {
     const targetPlan = plans.find((p) => p.id === planId) || plans[0];
     const targetMemberId = memberId || activeMemberId;
+    const existingMember = members.find((m) => m.id === targetMemberId);
 
-    const startDateObj = new Date();
-    const newStartDate = startDateObj.toISOString().split('T')[0];
-    const endDateObj = new Date();
-    endDateObj.setMonth(endDateObj.getMonth() + targetPlan.durationMonths);
-    const newEndDate = endDateObj.toISOString().split('T')[0];
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+
+    let baseExpiryDate = new Date(today);
+    let effectiveStartDate = todayStr;
+
+    // Check if member is renewing BEFORE expiration
+    if (existingMember?.expiryDate || existingMember?.endDate) {
+      const currentExpiryStr = existingMember.expiryDate || existingMember.endDate || '';
+      const currentExpiryObj = new Date(currentExpiryStr);
+      if (!isNaN(currentExpiryObj.getTime()) && currentExpiryObj > today) {
+        // Extend existing active subscription!
+        baseExpiryDate = new Date(currentExpiryObj);
+        effectiveStartDate = existingMember.startDate || todayStr;
+      }
+    }
+
+    // Add target plan duration months to the base expiry date
+    const newExpiryObj = new Date(baseExpiryDate);
+    newExpiryObj.setMonth(newExpiryObj.getMonth() + targetPlan.durationMonths);
+    const newEndDate = newExpiryObj.toISOString().split('T')[0];
 
     const updatedData = {
       planId: targetPlan.id,
       planName: targetPlan.name,
-      startDate: newStartDate,
+      startDate: effectiveStartDate,
       endDate: newEndDate,
       expiryDate: newEndDate,
       status: 'Active' as const,
       pendingDues: 0,
       paidAmount: targetPlan.totalPrice,
       totalPlanAmount: targetPlan.totalPrice,
-      lastPaymentDate: newStartDate,
+      lastPaymentDate: todayStr,
       nextDueDate: newEndDate,
       paymentStatus: 'Paid' as const
     };
@@ -2703,7 +2720,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           branchId: appUserAccount?.branchId || selectedBranchId || 'branch-1',
           planId: targetPlan.id,
           planName: targetPlan.name,
-          startDate: newStartDate,
+          startDate: effectiveStartDate,
           endDate: newEndDate,
           status: 'Active',
           rewardPoints: 100,
@@ -2711,13 +2728,31 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           pendingDues: 0,
           paidAmount: targetPlan.totalPrice,
           totalPlanAmount: targetPlan.totalPrice,
-          lastPaymentDate: newStartDate,
+          lastPaymentDate: todayStr,
           nextDueDate: newEndDate,
           paymentStatus: 'Paid'
         };
         return [...prevMembers, fullNewMember];
       }
     });
+
+    // Record renewal transaction
+    const newTx: Transaction = {
+      id: `TX-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+      memberId: targetMemberId,
+      memberName: existingMember?.name || appUserAccount?.linkedName || 'Member',
+      branchId: (existingMember?.branchId || selectedBranchId || 'branch-1') as BranchId,
+      amount: targetPlan.totalPrice,
+      paymentMethod,
+      category: 'Membership Dues',
+      date: todayStr,
+      receiptNo: `RCP-${Date.now().toString().slice(-6)}`,
+      planName: targetPlan.name,
+      notes: `Membership renewal (${targetPlan.durationMonths}M extended to ${newEndDate})`
+    };
+
+    setTransactions((prev) => [newTx, ...prev]);
+    safeDbWrite(setDoc(doc(db, 'transactions', newTx.id), newTx));
 
     setActiveMemberIdState(targetMemberId);
     setSubscriptionStatus('active');
@@ -2726,10 +2761,17 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     safeDbWrite(addNotification({
       targetRole: 'Member',
       memberId: targetMemberId,
-      title: '🎉 Subscription Renewed & Active!',
-      message: `Your ${targetPlan.name} membership is now active until ${newEndDate}.`,
+      title: '🎉 Subscription Extended & Active!',
+      message: `Your ${targetPlan.name} membership has been extended to ${newEndDate}.`,
       type: 'billing',
     }));
+
+    await recordAuditLog(
+      'ACCOUNT_ACTIVATED' as any,
+      targetMemberId,
+      existingMember?.name || 'Member',
+      `Membership renewed with ${targetPlan.name} until ${newEndDate} (${paymentMethod})`
+    );
   };
 
   // === EXPENSE MANAGEMENT ===
