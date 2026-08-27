@@ -362,9 +362,44 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (foundById) return foundById;
     }
 
-    // 3. Fallback ONLY for Admin/Trainer when no specific trainee is selected:
-    if (members.length > 0 && appUserAccount?.role !== 'Member') return members[0];
-    return {} as Member;
+    // 3. For Staff/Admin when no specific trainee is selected, return clean empty record (NEVER leak another member's profile)
+    return {
+      id: '',
+      membershipNo: '',
+      name: '',
+      photoUrl: '',
+      faceEnrolled: false,
+      mobile: '',
+      email: '',
+      dob: '',
+      gender: 'Male',
+      heightCm: 0,
+      weightKg: 0,
+      startWeightKg: 0,
+      bmi: 0,
+      chestCm: 0,
+      waistCm: 0,
+      armsCm: 0,
+      thighsCm: 0,
+      bloodGroup: '',
+      emergencyContactName: '',
+      emergencyMobile: '',
+      address: '',
+      medicalHistory: '',
+      goal: 'General Fitness',
+      referralSource: 'Direct',
+      branchId: '',
+      planId: '',
+      planName: '',
+      startDate: '',
+      endDate: '',
+      status: 'Expired',
+      pendingDues: 0,
+      paidAmount: 0,
+      totalPlanAmount: 0,
+      rewardPoints: 0,
+      referralCode: '',
+    } as unknown as Member;
   }, [appUserAccount, members, activeMemberId]);
 
   const personalRecords = useMemo<PersonalRecord[]>(() => {
@@ -663,245 +698,220 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     if (!firebaseUser) {
-      // 1. Strict session flush: NEVER retain previous profile or role across sessions
+      // Strict session flush: NEVER retain previous profile or role across sessions
       setAppUserAccount(null);
       setCurrentRole('Member');
       setActiveMemberIdState('');
       setWorkout(INITIAL_WORKOUT);
       setDiet(INITIAL_DIET);
+      setProgress([]);
+      setWorkoutLogs([]);
+      setTrainerNotes([]);
+      setWellnessCheckins([]);
+      setFreezeRecords([]);
+      setReferrals([]);
       setSubscriptionStatus('none');
-      localStorage.removeItem('gym_app_user_account');
+      try {
+        localStorage.removeItem('gym_app_user_account');
+        localStorage.removeItem('gym_auth_context');
+      } catch {}
       return;
     }
 
-    const rawEmail = (firebaseUser.email || '').toLowerCase();
-    const emailPrefix = rawEmail.includes('@') ? rawEmail.split('@')[0] : rawEmail;
     const authUid = firebaseUser.uid;
+    const rawEmail = (firebaseUser.email || '').toLowerCase().trim();
+    const emailPrefix = rawEmail.includes('@') ? rawEmail.split('@')[0] : rawEmail;
 
-    // 1. Master Admin resolution
-    if (rawEmail === 'masteradmin@smartgym.com' || rawEmail === 'masteradmin@smartgym.internal' || emailPrefix === 'masteradmin') {
-      const existingMaster = appUsers.find(u => u.username.toUpperCase() === 'MASTERADMIN' || (u.email && u.email.toLowerCase().includes('masteradmin')));
-      const masterAccount: AppUser = {
-        id: authUid,
-        username: 'MASTERADMIN',
-        email: 'masteradmin@smartgym.com',
-        role: 'Super Admin',
-        linkedId: 'EMP-MASTERADMIN',
-        linkedName: 'Master Administrator',
-        branchId: 'all',
-        createdAt: existingMaster?.createdAt || new Date().toISOString(),
-        createdByAdminId: 'system',
-        isActive: true,
-        mustChangePassword: existingMaster ? (existingMaster.mustChangePassword ?? false) : false,
-        isProtected: true,
-        permissions: {
-          canViewDashboard: true,
-          canEditWorkouts: true,
-          canEditDiets: true,
-          canViewMembers: true,
-          canManageFinance: true,
-          canAccessAdmin: true,
-        }
-      };
-      setAppUserAccount(masterAccount);
-      setCurrentRole('Super Admin');
-      setSelectedBranchId(branches[0]?.id || 'all');
-      setSubscriptionStatus('active');
-      localStorage.setItem('gym_app_user_account', JSON.stringify(masterAccount));
-      return;
-    }
-
-    // 2. Authoritative Primary Key Lookup: Match by exact Firebase Auth UID
-    const foundUserByUid = (appUsers || []).find(
-      u => u.id === authUid || (u as any).uid === authUid
-    );
-
-    if (foundUserByUid) {
-      setAppUserAccount(foundUserByUid);
-      setCurrentRole(foundUserByUid.role);
-      setSelectedBranchId(foundUserByUid.branchId || branches[0]?.id || 'all');
-      localStorage.setItem('gym_app_user_account', JSON.stringify(foundUserByUid));
-
-      if (foundUserByUid.role === 'Member') {
-        const memberRec = members.find(
-          m =>
-            m.id === foundUserByUid.linkedId ||
-            m.userId === authUid ||
-            (m.username && m.username.toLowerCase() === foundUserByUid.username.toLowerCase()) ||
-            (m.email && m.email.toLowerCase() === rawEmail)
+    const resolveAuthProfile = async () => {
+      // 1. Master Administrator Direct Bootstrap Resolution
+      if (
+        rawEmail === 'masteradmin@smartgym.com' ||
+        rawEmail === 'masteradmin@smartgym.internal' ||
+        emailPrefix === 'masteradmin'
+      ) {
+        const existingMaster = appUsers.find(
+          (u) => u.username?.toUpperCase() === 'MASTERADMIN' || u.email?.toLowerCase().includes('masteradmin')
         );
-        setActiveMemberIdState(memberRec?.id || foundUserByUid.linkedId || authUid);
-        if (memberRec) {
-          const isExpired = memberRec.status === 'Expired' || new Date(memberRec.expiryDate || memberRec.endDate) < new Date();
-          setSubscriptionStatus(isExpired ? 'expired' : 'active');
-        } else {
-          setSubscriptionStatus('active');
-        }
-      } else {
+        const masterAccount: AppUser = {
+          id: authUid,
+          username: 'MASTERADMIN',
+          email: 'masteradmin@smartgym.com',
+          role: 'Super Admin',
+          linkedId: 'EMP-MASTERADMIN',
+          linkedName: 'Master Administrator',
+          branchId: 'all',
+          createdAt: existingMaster?.createdAt || new Date().toISOString(),
+          createdByAdminId: 'system',
+          isActive: true,
+          mustChangePassword: existingMaster ? (existingMaster.mustChangePassword ?? false) : false,
+          isProtected: true,
+          permissions: {
+            canViewDashboard: true,
+            canEditWorkouts: true,
+            canEditDiets: true,
+            canViewMembers: true,
+            canManageFinance: true,
+            canAccessAdmin: true,
+          },
+        };
+        setAppUserAccount(masterAccount);
+        setCurrentRole('Super Admin');
+        setSelectedBranchId(branches[0]?.id || 'all');
         setSubscriptionStatus('active');
+        localStorage.setItem('gym_app_user_account', JSON.stringify(masterAccount));
+        return;
       }
-      return;
-    }
 
-    // 3. Fallback matching by username or email for accounts created prior to UID migration
-    const foundUserByEmailOrUname = (appUsers || []).find(
-      u =>
-        (u.email && u.email.toLowerCase() === rawEmail) ||
-        u.username.toLowerCase() === rawEmail ||
-        u.username.toLowerCase() === emailPrefix
-    ) || INITIAL_APP_USERS.find(
-      u =>
-        (u.email && u.email.toLowerCase() === rawEmail) ||
-        u.username.toLowerCase() === rawEmail ||
-        u.username.toLowerCase() === emailPrefix
-    );
+      // 2. Authoritative Database Profile Lookup: Primary Key in `users/{authUid}`
+      try {
+        const userDocSnap = await getDoc(doc(db, 'users', authUid));
+        if (userDocSnap.exists()) {
+          const userDocData = userDocSnap.data() as AppUser;
+          const verifiedUser: AppUser = {
+            ...userDocData,
+            id: authUid,
+          };
+          setAppUserAccount(verifiedUser);
+          setCurrentRole(verifiedUser.role);
+          setSelectedBranchId(verifiedUser.branchId || branches[0]?.id || 'all');
+          localStorage.setItem('gym_app_user_account', JSON.stringify(verifiedUser));
 
-    if (foundUserByEmailOrUname) {
-      // Reconcile and anchor to current Firebase Auth UID
-      const reconciledUser: AppUser = {
-        ...foundUserByEmailOrUname,
-        id: authUid,
-      };
-      setAppUserAccount(reconciledUser);
-      setCurrentRole(reconciledUser.role);
-      setSelectedBranchId(reconciledUser.branchId || branches[0]?.id || 'all');
-      localStorage.setItem('gym_app_user_account', JSON.stringify(reconciledUser));
-      safeDbWrite(setDoc(doc(db, 'users', authUid), reconciledUser));
+          if (verifiedUser.role === 'Member') {
+            const memberTargetId = verifiedUser.linkedId || authUid;
+            setActiveMemberIdState(memberTargetId);
+            const memberRec = members.find(
+              (m) =>
+                m.id === memberTargetId ||
+                m.userId === authUid ||
+                (m.email && m.email.toLowerCase() === rawEmail)
+            );
+            if (memberRec) {
+              const isExpired =
+                memberRec.status === 'Expired' ||
+                (memberRec.expiryDate && new Date(memberRec.expiryDate) < new Date());
+              setSubscriptionStatus(isExpired ? 'expired' : 'active');
+            } else {
+              setSubscriptionStatus('active');
+            }
+          } else {
+            setActiveMemberIdState('');
+            setSubscriptionStatus('active');
+          }
+          return;
+        }
+      } catch (docErr) {
+        console.warn('Direct user document fetch notice:', docErr);
+      }
 
-      if (reconciledUser.role === 'Member') {
-        const memberRec = members.find(
-          m =>
-            m.id === reconciledUser.linkedId ||
-            (m.username && m.username.toLowerCase() === reconciledUser.username.toLowerCase()) ||
-            (m.email && m.email.toLowerCase() === rawEmail)
-        );
-        setActiveMemberIdState(memberRec?.id || reconciledUser.linkedId || authUid);
-        if (memberRec) {
-          const isExpired = memberRec.status === 'Expired' || new Date(memberRec.expiryDate || memberRec.endDate) < new Date();
-          setSubscriptionStatus(isExpired ? 'expired' : 'active');
+      // 3. Check memory store `appUsers` for matching UID
+      const foundInAppUsers = (appUsers || []).find((u) => u.id === authUid || (u as any).uid === authUid);
+      if (foundInAppUsers) {
+        setAppUserAccount(foundInAppUsers);
+        setCurrentRole(foundInAppUsers.role);
+        setSelectedBranchId(foundInAppUsers.branchId || branches[0]?.id || 'all');
+        localStorage.setItem('gym_app_user_account', JSON.stringify(foundInAppUsers));
+        if (foundInAppUsers.role === 'Member') {
+          setActiveMemberIdState(foundInAppUsers.linkedId || authUid);
         } else {
-          setSubscriptionStatus('active');
+          setActiveMemberIdState('');
         }
-      } else {
         setSubscriptionStatus('active');
+        return;
       }
-      return;
-    }
 
-    // 4. Check matching employee (Trainers, Dietitians, Staff) from employees collection
-    const matchingEmployee = employees.find(
-      e =>
-        e.id === authUid ||
-        (e.email && e.email.toLowerCase() === rawEmail) ||
-        ((e as any).username && (e as any).username.toLowerCase() === emailPrefix) ||
-        (e.id && e.id.toLowerCase() === emailPrefix) ||
-        (e.id && e.id.toLowerCase() === rawEmail) ||
-        (e.phone && emailPrefix.replace(/\D/g, '').length >= 10 && e.phone.replace(/\D/g, '') === emailPrefix.replace(/\D/g, '')) ||
-        (e.name && e.name.toLowerCase().replace(/\s+/g, '') === emailPrefix)
-    );
+      // 4. Check matching employee record in `employees`
+      const matchingEmployee = employees.find(
+        (e) =>
+          e.id === authUid ||
+          (e.email && e.email.toLowerCase() === rawEmail) ||
+          ((e as any).username && (e as any).username.toLowerCase() === emailPrefix)
+      );
 
-    if (matchingEmployee) {
-      const isTrainerOrDietitian = matchingEmployee.role === 'Trainer' || matchingEmployee.role === 'Dietitian';
-      const empAccount: AppUser = {
-        id: authUid,
-        username: (matchingEmployee as any).username || emailPrefix.toUpperCase(),
-        email: matchingEmployee.email || rawEmail,
-        role: matchingEmployee.role,
-        linkedId: matchingEmployee.id,
-        linkedName: matchingEmployee.name,
-        branchId: matchingEmployee.branchId || branches[0]?.id || 'all',
-        createdAt: matchingEmployee.joiningDate || new Date().toISOString(),
-        createdByAdminId: 'system',
-        isActive: (matchingEmployee as any).status !== 'Inactive',
-        permissions: {
-          canViewDashboard: true,
-          canEditWorkouts: matchingEmployee.role === 'Trainer' || isTrainerOrDietitian,
-          canEditDiets: matchingEmployee.role === 'Dietitian' || isTrainerOrDietitian,
-          canViewMembers: true,
-          canManageFinance: matchingEmployee.role === 'Accountant' || matchingEmployee.role === 'Manager',
-          canAccessAdmin: matchingEmployee.role === 'Manager' || matchingEmployee.role === 'Super Admin' || matchingEmployee.role === 'Owner',
-        }
-      };
-      setAppUserAccount(empAccount);
-      setCurrentRole(matchingEmployee.role);
-      setSelectedBranchId(matchingEmployee.branchId || branches[0]?.id || 'all');
-      setSubscriptionStatus('active');
-      localStorage.setItem('gym_app_user_account', JSON.stringify(empAccount));
-      safeDbWrite(setDoc(doc(db, 'users', authUid), empAccount));
-      return;
-    }
-
-    // 5. Check if this Firebase User corresponds directly to a member in members collection
-    const matchingMember = members.find(
-      m =>
-        m.userId === authUid ||
-        m.id === authUid ||
-        (m.email && m.email.toLowerCase() === rawEmail) ||
-        (m.username && m.username.toLowerCase() === emailPrefix) ||
-        (m.membershipNo && m.membershipNo.toLowerCase() === emailPrefix) ||
-        (m.mobile && emailPrefix.replace(/\D/g, '').length >= 10 && m.mobile.replace(/\D/g, '') === emailPrefix.replace(/\D/g, ''))
-    );
-
-    if (matchingMember) {
-      const memberAccount: AppUser = {
-        id: authUid,
-        username: matchingMember.username || emailPrefix.toUpperCase(),
-        email: matchingMember.email || rawEmail,
-        role: 'Member',
-        linkedId: matchingMember.id,
-        linkedName: matchingMember.name,
-        branchId: matchingMember.branchId || branches[0]?.id || 'all',
-        createdAt: matchingMember.startDate || new Date().toISOString(),
-        createdByAdminId: 'system',
-        isActive: matchingMember.status !== 'Cancelled' && matchingMember.status !== 'Suspended',
-        permissions: {
-          canViewDashboard: true,
-          canEditWorkouts: false,
-          canEditDiets: false,
-          canViewMembers: false,
-          canManageFinance: false,
-          canAccessAdmin: false,
-        }
-      };
-      setAppUserAccount(memberAccount);
-      setCurrentRole('Member');
-      setActiveMemberIdState(matchingMember.id);
-      localStorage.setItem('gym_app_user_account', JSON.stringify(memberAccount));
-      safeDbWrite(setDoc(doc(db, 'users', authUid), memberAccount));
-      safeDbWrite(updateDoc(doc(db, 'members', matchingMember.id), { userId: authUid }));
-      setMembers(prev => prev.map(m => m.id === matchingMember.id ? { ...m, userId: authUid } : m));
-      const isExpired = matchingMember.status === 'Expired' || new Date(matchingMember.expiryDate || matchingMember.endDate) < new Date();
-      setSubscriptionStatus(isExpired ? 'expired' : 'active');
-      return;
-    }
-
-    // 6. Default fallback dynamic member user
-    const dynamicUser: AppUser = {
-      id: authUid,
-      username: emailPrefix.toUpperCase(),
-      email: firebaseUser.email || `${emailPrefix}@smartgym.com`,
-      role: 'Member',
-      linkedId: authUid,
-      linkedName: firebaseUser.displayName || emailPrefix,
-      branchId: branches[0]?.id || 'all',
-      createdAt: new Date().toISOString(),
-      createdByAdminId: 'system',
-      isActive: true,
-      permissions: {
-        canViewDashboard: true,
-        canEditWorkouts: false,
-        canEditDiets: false,
-        canViewMembers: false,
-        canManageFinance: false,
-        canAccessAdmin: false,
+      if (matchingEmployee) {
+        const isTrainerOrDietitian = matchingEmployee.role === 'Trainer' || matchingEmployee.role === 'Dietitian';
+        const empAccount: AppUser = {
+          id: authUid,
+          username: (matchingEmployee as any).username || emailPrefix.toUpperCase(),
+          email: matchingEmployee.email || rawEmail,
+          role: matchingEmployee.role,
+          linkedId: matchingEmployee.id,
+          linkedName: matchingEmployee.name,
+          branchId: matchingEmployee.branchId || branches[0]?.id || 'all',
+          createdAt: matchingEmployee.joiningDate || new Date().toISOString(),
+          createdByAdminId: 'system',
+          isActive: (matchingEmployee as any).status !== 'Inactive',
+          mustChangePassword: false,
+          permissions: {
+            canViewDashboard: true,
+            canEditWorkouts: matchingEmployee.role === 'Trainer' || isTrainerOrDietitian,
+            canEditDiets: matchingEmployee.role === 'Dietitian' || isTrainerOrDietitian,
+            canViewMembers: true,
+            canManageFinance: matchingEmployee.role === 'Accountant' || matchingEmployee.role === 'Manager',
+            canAccessAdmin:
+              matchingEmployee.role === 'Manager' ||
+              matchingEmployee.role === 'Super Admin' ||
+              matchingEmployee.role === 'Owner',
+          },
+        };
+        setAppUserAccount(empAccount);
+        setCurrentRole(matchingEmployee.role);
+        setSelectedBranchId(matchingEmployee.branchId || branches[0]?.id || 'all');
+        setActiveMemberIdState('');
+        setSubscriptionStatus('active');
+        localStorage.setItem('gym_app_user_account', JSON.stringify(empAccount));
+        safeDbWrite(setDoc(doc(db, 'users', authUid), empAccount));
+        return;
       }
+
+      // 5. Check matching member record in `members`
+      const matchingMember = members.find(
+        (m) =>
+          m.userId === authUid ||
+          m.id === authUid ||
+          (m.email && m.email.toLowerCase() === rawEmail) ||
+          (m.username && m.username.toLowerCase() === emailPrefix)
+      );
+
+      if (matchingMember) {
+        const memberAccount: AppUser = {
+          id: authUid,
+          username: matchingMember.username || emailPrefix.toUpperCase(),
+          email: matchingMember.email || rawEmail,
+          role: 'Member',
+          linkedId: matchingMember.id,
+          linkedName: matchingMember.name,
+          branchId: matchingMember.branchId || branches[0]?.id || 'all',
+          createdAt: matchingMember.startDate || new Date().toISOString(),
+          createdByAdminId: 'system',
+          isActive: matchingMember.status !== 'Cancelled' && matchingMember.status !== 'Suspended',
+          mustChangePassword: matchingMember.mustChangePassword ?? false,
+          permissions: {
+            canViewDashboard: true,
+            canEditWorkouts: false,
+            canEditDiets: false,
+            canViewMembers: false,
+            canManageFinance: false,
+            canAccessAdmin: false,
+          },
+        };
+        setAppUserAccount(memberAccount);
+        setCurrentRole('Member');
+        setActiveMemberIdState(matchingMember.id);
+        localStorage.setItem('gym_app_user_account', JSON.stringify(memberAccount));
+        safeDbWrite(setDoc(doc(db, 'users', authUid), memberAccount));
+        safeDbWrite(updateDoc(doc(db, 'members', matchingMember.id), { userId: authUid }));
+        const isExpired =
+          matchingMember.status === 'Expired' ||
+          (matchingMember.expiryDate && new Date(matchingMember.expiryDate) < new Date());
+        setSubscriptionStatus(isExpired ? 'expired' : 'active');
+        return;
+      }
+
+      // 6. Fail-closed: If profile is unverified or unregistered, do not assign a fake role
+      console.warn('Unverified identity profile for UID:', authUid);
     };
-    setAppUserAccount(dynamicUser);
-    setCurrentRole('Member');
-    setActiveMemberIdState(dynamicUser.linkedId);
-    setSelectedBranchId(branches[0]?.id || 'all');
-    setSubscriptionStatus('active');
-    safeDbWrite(setDoc(doc(db, 'users', authUid), dynamicUser));
+
+    resolveAuthProfile();
   }, [firebaseUser, appUsers, members, employees, branches]);
 
   // Workout & Diet active member sync
@@ -959,8 +969,10 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const signOutApp = async () => {
-    localStorage.removeItem('gym_app_user_account');
-    localStorage.removeItem('gym_auth_context');
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+    } catch {}
     try {
       await signOut(auth);
     } catch {}
@@ -970,6 +982,12 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setActiveMemberIdState('');
     setWorkout(INITIAL_WORKOUT);
     setDiet(INITIAL_DIET);
+    setProgress([]);
+    setWorkoutLogs([]);
+    setTrainerNotes([]);
+    setWellnessCheckins([]);
+    setFreezeRecords([]);
+    setReferrals([]);
     setSubscriptionStatus('none');
     setAuthContext(null);
   };
@@ -1123,8 +1141,16 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const generateNewToken = (memberId: string) => {
     const timestamp = Date.now();
-    const randomHex = Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0');
-    return `SMARTGYM-${memberId}-${timestamp}-${randomHex}`.toUpperCase();
+    const tokenSecret = 'SG-SECURE-KEY-2026';
+    let hash = 0;
+    const rawStr = `${memberId}:${timestamp}:${tokenSecret}`;
+    for (let i = 0; i < rawStr.length; i++) {
+      const char = rawStr.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash |= 0;
+    }
+    const sig = Math.abs(hash).toString(36).padStart(8, '0');
+    return `SGQR.v2.${memberId}.${timestamp}.${sig}`.toUpperCase();
   };
 
   const scanDoorQR = (
@@ -1132,20 +1158,100 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     targetBranchId: BranchId,
     verificationMethod: 'Dynamic QR' | 'Face ID' = 'Dynamic QR'
   ) => {
-    let scannedMember = activeMember;
-    if (qrToken.startsWith('SMARTGYM-') || qrToken.startsWith('PULSEFIT-')) {
-      const parts = qrToken.split('-');
-      const mId = `${parts[1]}-${parts[2]}-${parts[3]}`;
-      const found = members.find((m) => m.id === mId || m.membershipNo === qrToken);
-      if (found) scannedMember = found;
-    }
-
-    if (scannedMember.status === 'Expired' || scannedMember.status === 'Cancelled') {
+    if (!qrToken || typeof qrToken !== 'string') {
       return {
         success: false,
-        message: `ACCESS DENIED: Membership is ${scannedMember.status}. Please renew at front desk.`,
+        message: 'ACCESS DENIED: Invalid QR code payload.',
+      };
+    }
+
+    const cleanToken = qrToken.trim().toUpperCase();
+    let memberId = '';
+    let tokenTimestamp = 0;
+
+    // Format 1: SGQR.v2.<memberId>.<timestamp>.<sig>
+    if (cleanToken.startsWith('SGQR.V2.')) {
+      const parts = cleanToken.split('.');
+      if (parts.length >= 5) {
+        memberId = parts[2];
+        tokenTimestamp = parseInt(parts[3], 10);
+      }
+    } else if (cleanToken.startsWith('SMARTGYM-') || cleanToken.startsWith('PULSEFIT-')) {
+      const parts = cleanToken.split('-');
+      if (parts.length >= 4) {
+        memberId = `${parts[1]}-${parts[2]}-${parts[3]}`;
+        tokenTimestamp = parseInt(parts[parts.length - 2], 10);
+      }
+    } else {
+      const foundByNo = members.find((m) => m.membershipNo.toUpperCase() === cleanToken);
+      if (foundByNo) memberId = foundByNo.id;
+    }
+
+    // Replay attack check: If token has a timestamp, reject if older than 90 seconds (1.5 min)
+    if (tokenTimestamp > 0) {
+      const ageMs = Date.now() - tokenTimestamp;
+      if (ageMs > 90 * 1000) {
+        return {
+          success: false,
+          message: 'ACCESS DENIED: QR pass has expired. Please present a live active QR.',
+        };
+      }
+      if (ageMs < -15 * 1000) {
+        return {
+          success: false,
+          message: 'ACCESS DENIED: Invalid timestamp on QR pass.',
+        };
+      }
+    }
+
+    if (!memberId) {
+      return {
+        success: false,
+        message: 'ACCESS DENIED: Member credentials not recognized.',
+      };
+    }
+
+    // Authoritative lookup from database members list
+    const scannedMember = members.find(
+      (m) => m.id === memberId || m.membershipNo.toUpperCase() === memberId.toUpperCase()
+    );
+    if (!scannedMember) {
+      return {
+        success: false,
+        message: 'ACCESS DENIED: Member record not found in system.',
+      };
+    }
+
+    // Status checks
+    const rawStatus = (scannedMember.status as string) || '';
+    if (rawStatus === 'Cancelled' || rawStatus === 'Suspended' || rawStatus === 'Inactive' || rawStatus === 'Expired') {
+      return {
+        success: false,
+        message: `ACCESS DENIED: Membership is ${scannedMember.status}. Access blocked.`,
         member: scannedMember,
       };
+    }
+
+    if (scannedMember.status === 'Frozen') {
+      return {
+        success: false,
+        message: 'ACCESS DENIED: Membership is currently frozen.',
+        member: scannedMember,
+      };
+    }
+
+    // Expiry check
+    const expiryStr = scannedMember.expiryDate || scannedMember.endDate;
+    if (expiryStr) {
+      const expDate = new Date(expiryStr);
+      expDate.setHours(23, 59, 59, 999);
+      if (expDate < new Date()) {
+        return {
+          success: false,
+          message: `ACCESS DENIED: Membership expired on ${expiryStr}. Please renew at reception.`,
+          member: scannedMember,
+        };
+      }
     }
 
     const now = new Date();
@@ -1153,24 +1259,24 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const dateStr = now.toISOString().split('T')[0];
 
     const newRecord: AttendanceRecord = {
-      id: `att-${Date.now()}`,
+      id: `att-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
       memberId: scannedMember.id,
       memberName: scannedMember.name,
       memberPhoto: scannedMember.photoUrl,
-      branchId: targetBranchId,
+      branchId: targetBranchId || scannedMember.branchId || 'branch-1',
       entryTime: timeStr,
       verificationMethod,
-      deviceInfo: `SmartRelay-Pro #${targetBranchId} (Main Gate)`,
+      deviceInfo: `SmartRelay-Pro #${targetBranchId || scannedMember.branchId || 'main'} (Main Gate)`,
       date: dateStr,
       status: 'Active In Gym',
     };
 
-    setAttendance(prev => [newRecord, ...prev]);
+    setAttendance((prev) => [newRecord, ...prev]);
     safeDbWrite(setDoc(doc(db, 'attendance', newRecord.id), newRecord));
 
     return {
       success: true,
-      message: `GATE UNLOCKED: Welcome back ${scannedMember.name}! Entry logged at ${timeStr}.`,
+      message: `GATE UNLOCKED: Welcome ${scannedMember.name}! Entry recorded at ${timeStr}.`,
       member: scannedMember,
     };
   };
@@ -1265,8 +1371,6 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         id: authUid,
         username,
         email: memberAuthEmail,
-        password: tempPassword,
-        tempPassword,
         role: 'Member',
         linkedId: memberId,
         linkedName: newMemberData.name,
@@ -1313,7 +1417,6 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       paymentStatus: newMemberData.pendingDues > 0 ? 'Partially Paid' : 'Paid',
       userId: options.createLogin ? authUid : undefined,
       username: options.createLogin ? username : undefined,
-      tempPassword: options.createLogin ? tempPassword : undefined,
       mustChangePassword: options.createLogin ? true : false,
       whatsappStatus: initialWhatsAppStatus,
       whatsappSentAt: initialWhatsAppStatus === 'SENT' ? new Date().toISOString() : undefined,
@@ -1417,13 +1520,11 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setEmployees((prev) => [newEmployee, ...prev]);
     safeDbWrite(setDoc(doc(db, 'employees', employeeId), newEmployee));
 
-    // 3. Build 1:1 UID User Document
+    // 3. Build 1:1 UID User Document (excluding plaintext credentials)
     const createdAppUser: AppUser = {
       id: userId,
       username,
       email: trainerEmail,
-      password: tempPassword,
-      tempPassword,
       role: newEmployee.role || 'Trainer',
       linkedId: employeeId,
       linkedName: newEmployee.name,
@@ -2673,8 +2774,9 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         console.warn('createIsolatedAuthUser notice in addAppUser (proceeding with user.id):', authErr);
       }
     }
+    const { password, tempPassword, ...sanitizedDoc } = finalUser;
     setAppUsers(prev => [finalUser, ...prev]);
-    safeDbWrite(setDoc(doc(db, 'users', finalUser.id), finalUser));
+    safeDbWrite(setDoc(doc(db, 'users', finalUser.id), sanitizedDoc));
   };
 
   const addEmployee = async (emp: Employee) => {

@@ -312,83 +312,19 @@ export const AppLogin: React.FC = () => {
         setLocalSessionUser(empAcc);
       }
     } catch (fbErr: any) {
-      const isMatchingLocalPassword =
-        (matchedUser && (matchedUser.password === cleanPass || matchedUser.tempPassword === cleanPass)) ||
-        (matchedEmployee && ((matchedEmployee as any).tempPassword === cleanPass)) ||
-        (matchedMember && (matchedMember.tempPassword === cleanPass));
-
-      if (isMatchingLocalPassword) {
-        try {
-          await createUserWithEmailAndPassword(auth, authEmail, cleanPass);
-        } catch (createErr: any) {
-          if (createErr.code === 'auth/email-already-in-use') {
-            try {
-              await signInWithEmailAndPassword(auth, authEmail, cleanPass);
-            } catch {}
-          }
-        }
-        if (matchedUser) {
-          setLocalSessionUser(matchedUser);
-        } else if (matchedEmployee) {
-          const empAcc: AppUser = {
-            id: matchedEmployee.id,
-            username: (matchedEmployee as any).username || cleanInput,
-            email: matchedEmployee.email || authEmail,
-            role: matchedEmployee.role,
-            linkedId: matchedEmployee.id,
-            linkedName: matchedEmployee.name,
-            branchId: matchedEmployee.branchId || 'branch-1',
-            createdAt: matchedEmployee.joiningDate || new Date().toISOString(),
-            createdByAdminId: 'system',
-            isActive: true,
-            mustChangePassword: false,
-            permissions: {
-              canViewDashboard: true,
-              canEditWorkouts: matchedEmployee.role === 'Trainer',
-              canEditDiets: matchedEmployee.role === 'Dietitian',
-              canViewMembers: true,
-              canManageFinance: matchedEmployee.role === 'Manager',
-              canAccessAdmin: matchedEmployee.role === 'Manager',
-            }
-          };
-          setLocalSessionUser(empAcc);
-        } else if (matchedMember) {
-          const mAcc: AppUser = {
-            id: matchedMember.userId || matchedMember.id,
-            username: matchedMember.username || cleanInput,
-            email: matchedMember.email || authEmail,
-            role: 'Member',
-            linkedId: matchedMember.id,
-            linkedName: matchedMember.name,
-            branchId: matchedMember.branchId || 'branch-1',
-            createdAt: matchedMember.startDate || new Date().toISOString(),
-            createdByAdminId: 'system',
-            isActive: true,
-            mustChangePassword: matchedMember.mustChangePassword ?? false,
-            permissions: {
-              canViewDashboard: true,
-              canEditWorkouts: false,
-              canEditDiets: false,
-              canViewMembers: false,
-              canManageFinance: false,
-              canAccessAdmin: false,
-            }
-          };
-          setLocalSessionUser(mAcc);
-        }
+      if (fbErr.code === 'auth/wrong-password' || fbErr.code === 'auth/invalid-credential') {
+        setError('Incorrect password. Please verify your temporary or personal password.');
+      } else if (fbErr.code === 'auth/user-not-found') {
+        setError('User not found. Please check your Username or Email.');
+      } else if (fbErr.code === 'auth/too-many-requests') {
+        setError('Access temporarily disabled due to multiple failed attempts. Please wait a few moments and try again.');
+      } else if (fbErr.code === 'auth/user-disabled') {
+        setError('This account has been deactivated. Please contact gym administration.');
       } else {
-        if (fbErr.code === 'auth/wrong-password' || fbErr.code === 'auth/invalid-credential') {
-          setError('Incorrect password. Please verify your temporary or personal password.');
-        } else if (fbErr.code === 'auth/user-not-found') {
-          setError('User not found. Please check your Username (e.g. MASTERADMIN, trainer username, or member ID) or Email.');
-        } else if (fbErr.code === 'auth/too-many-requests') {
-          setError('Access temporarily disabled due to many failed attempts. Please try again later.');
-        } else {
-          setError('Login failed. Please check your Username / Email and Password.');
-        }
-        setIsLoading(false);
-        return;
+        setError('Login failed. Please check your Username / Email and Password.');
       }
+      setIsLoading(false);
+      return;
     }
 
     // Check first login password change requirement
