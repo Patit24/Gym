@@ -29,6 +29,14 @@ export const MobileAppHeader: React.FC<MobileAppHeaderProps> = ({
   backTitle,
   accentColor = '#00D4FF'
 }) => {
+  const getTimeBasedGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour >= 4 && hour < 12) return 'Good Morning,';
+    if (hour >= 12 && hour < 17) return 'Good Afternoon,';
+    if (hour >= 17 && hour < 22) return 'Good Evening,';
+    return 'Good Night,';
+  };
+
   return (
     <header className="sticky top-0 z-40 bg-[#070A12]/80 backdrop-blur-2xl border-b border-white/[0.08] px-4 py-3 shrink-0 shadow-[0_8px_32px_rgba(0,0,0,0.4)] select-none">
       <div className="flex items-center justify-between gap-3 max-w-lg mx-auto">
@@ -76,7 +84,7 @@ export const MobileAppHeader: React.FC<MobileAppHeaderProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-slate-400">
-                  Good Morning,
+                  {getTimeBasedGreeting()}
                 </span>
                 <span
                   className="text-[9px] font-black px-2 py-0.5 rounded-full border uppercase tracking-wider"
