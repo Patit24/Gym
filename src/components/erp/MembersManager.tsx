@@ -251,10 +251,13 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
               <span className="text-[10px] text-cyan-400 uppercase font-bold">Paid Upfront</span>
               <div className="text-xl font-black text-cyan-300 mt-1">{paidMembers}</div>
             </div>
-            <div className="glass-card p-3.5 rounded-2xl border border-gym-border">
-              <span className="text-[10px] text-rose-400 uppercase font-bold">Pending Dues</span>
-              <div className="text-sm font-black text-rose-300 mt-1">₹{totalPendingDues.toLocaleString('en-IN')}</div>
-              <span className="text-[9px] text-gym-subtext">{unpaidMembers} unpaid</span>
+            <div 
+              onClick={() => setFilterCategory('UNPAID')}
+              className="glass-card p-3.5 rounded-2xl border border-gym-border cursor-pointer hover:border-amber-400/80 transition-all bg-gradient-to-br from-amber-950/20 to-transparent"
+            >
+              <span className="text-[10px] text-amber-400 uppercase font-bold">Pending Dues</span>
+              <div className="text-sm font-black text-amber-300 mt-1">₹{totalPendingDues.toLocaleString('en-IN')}</div>
+              <span className="text-[9px] text-amber-300/80 font-bold block mt-0.5">{unpaidMembers} due accounts →</span>
             </div>
           </div>
 

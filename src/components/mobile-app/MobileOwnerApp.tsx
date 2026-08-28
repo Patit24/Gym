@@ -49,7 +49,8 @@ import {
   EyeOff,
   Lock,
   Building2,
-  ChevronDown
+  ChevronDown,
+  AlertTriangle
 } from 'lucide-react';
 
 type OwnerScreen =
@@ -69,7 +70,8 @@ type OwnerScreen =
   | 'member-created-success'
   | 'add-branch'
   | 'trainer-created-success'
-  | 'fee-matrix';
+  | 'fee-matrix'
+  | 'due-members';
 
 export const MobileOwnerApp: React.FC = () => {
   const {
@@ -223,6 +225,95 @@ export const MobileOwnerApp: React.FC = () => {
   const [searchMember, setSearchMember] = useState('');
   const [goalFilter, setGoalFilter] = useState<string>('all');
 
+  // Due Members & Outstanding Collections State
+  const [searchDueMember, setSearchDueMember] = useState('');
+  const [dueCategoryFilter, setDueCategoryFilter] = useState<'all' | 'expired' | 'partial'>('all');
+  const [isCollectDueOpen, setIsCollectDueOpen] = useState(false);
+  const [collectDueMember, setCollectDueMember] = useState<Member | null>(null);
+  const [collectDueAmount, setCollectDueAmount] = useState<number>(1500);
+  const [collectDuePaymentMethod, setCollectDuePaymentMethod] = useState<'UPI' | 'Cash' | 'Card' | 'Bank Transfer'>('UPI');
+  const [isCollectingDue, setIsCollectingDue] = useState(false);
+  const [collectDueToast, setCollectDueToast] = useState<string | null>(null);
+
+  const dueMembers = useMemo(() => {
+    return (members || []).filter((m) => {
+      if (!m) return false;
+      const isExpired = m.status === 'Expired' || m.status === 'Renewal Due' || (m.endDate && new Date(m.endDate) < new Date());
+      const hasDues = (m.pendingDues || 0) > 0 || (m.balanceDue || 0) > 0 || m.paymentStatus === 'Pending' || m.paymentStatus === 'Partially Paid' || m.paymentStatus === 'Overdue';
+      return isExpired || hasDues;
+    });
+  }, [members]);
+
+  const totalOutstandingAmount = useMemo(() => {
+    return dueMembers.reduce((sum, m) => {
+      if ((m.pendingDues || 0) > 0) return sum + m.pendingDues;
+      if ((m.balanceDue || 0) > 0) return sum + (m.balanceDue || 0);
+      const plan = plans.find(p => p.id === m.planId) || plans[0];
+      return sum + (plan?.totalPrice || 1500);
+    }, 0);
+  }, [dueMembers, plans]);
+
+  const filteredDueMembers = useMemo(() => {
+    return dueMembers.filter((m) => {
+      const q = (searchDueMember || '').toLowerCase();
+      const nameMatch = (m.name || '').toLowerCase().includes(q) || (m.membershipNo || '').toLowerCase().includes(q) || (m.mobile || '').includes(q);
+      if (!nameMatch) return false;
+
+      if (dueCategoryFilter === 'expired') {
+        return m.status === 'Expired' || m.status === 'Renewal Due' || (m.endDate && new Date(m.endDate) < new Date());
+      }
+      if (dueCategoryFilter === 'partial') {
+        return (m.pendingDues || 0) > 0 || (m.balanceDue || 0) > 0 || m.paymentStatus === 'Partially Paid';
+      }
+      return true;
+    });
+  }, [dueMembers, searchDueMember, dueCategoryFilter]);
+
+  const handleSendDueWhatsApp = (m: Member) => {
+    const dueAmount = (m.pendingDues || 0) > 0 ? m.pendingDues : (plans.find(p => p.id === m.planId)?.totalPrice || 1500);
+    const phoneClean = (m.mobile || '').replace(/\D/g, '');
+    const normPhone = phoneClean.length === 10 ? `91${phoneClean}` : phoneClean;
+    const text = encodeURIComponent(
+      `Hi ${m.name},\n\nThis is a friendly reminder from Smart Gym (${currentBranch.name}).\nYour gym membership fee has a pending balance / renewal due of *₹${dueAmount.toLocaleString('en-IN')}*.\n\nPlease clear your dues at the gym counter or via UPI to maintain uninterrupted biometric and mobile workout access.\n\nThank you,\nSmart Gym Management`
+    );
+    window.open(`https://wa.me/${normPhone}?text=${text}`, '_blank');
+  };
+
+  const handleOpenCollectDue = (m: Member) => {
+    setCollectDueMember(m);
+    const amount = (m.pendingDues || 0) > 0 ? m.pendingDues : (plans.find(p => p.id === m.planId)?.totalPrice || 1500);
+    setCollectDueAmount(amount);
+    setCollectDuePaymentMethod('UPI');
+    setIsCollectDueOpen(true);
+  };
+
+  const handleCollectDueSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!collectDueMember) return;
+    setIsCollectingDue(true);
+    try {
+      await recordMemberPayment(
+        collectDueMember.id,
+        collectDueAmount,
+        collectDuePaymentMethod,
+        `Due collection cleared by admin via ${collectDuePaymentMethod}`
+      );
+      
+      collectDueMember.pendingDues = Math.max(0, (collectDueMember.pendingDues || 0) - collectDueAmount);
+      collectDueMember.paymentStatus = (collectDueMember.pendingDues === 0) ? 'Paid' : 'Partially Paid';
+      
+      setCollectDueToast(`Payment of ₹${collectDueAmount.toLocaleString('en-IN')} recorded successfully!`);
+      setTimeout(() => {
+        setCollectDueToast(null);
+        setIsCollectDueOpen(false);
+      }, 1500);
+    } catch (err: any) {
+      alert(err.message || 'Failed to record payment');
+    } finally {
+      setIsCollectingDue(false);
+    }
+  };
+
   // Add Member Form
   const [memName, setMemName] = useState('');
   const [memMobile, setMemMobile] = useState('');
@@ -372,6 +463,11 @@ export const MobileOwnerApp: React.FC = () => {
       nameStr.toLowerCase().includes(query) ||
       membershipNoStr.toLowerCase().includes(query) ||
       mobileStr.includes(query);
+    if (goalFilter === 'dues') {
+      const isExpired = m.status === 'Expired' || m.status === 'Renewal Due' || (m.endDate && new Date(m.endDate) < new Date());
+      const hasDues = (m.pendingDues || 0) > 0 || (m.balanceDue || 0) > 0 || m.paymentStatus === 'Pending' || m.paymentStatus === 'Partially Paid' || m.paymentStatus === 'Overdue';
+      return matchesSearch && (isExpired || hasDues);
+    }
     const matchesGoal = goalFilter === 'all' || m.goal === goalFilter;
     return matchesSearch && matchesGoal;
   });
@@ -615,7 +711,8 @@ export const MobileOwnerApp: React.FC = () => {
     'member-created-success',
     'add-branch',
     'trainer-created-success',
-    'fee-matrix'
+    'fee-matrix',
+    'due-members'
   ].includes(currentScreen);
 
   const bottomNavTabs: MobileNavTab[] = [
@@ -658,6 +755,7 @@ export const MobileOwnerApp: React.FC = () => {
           currentScreen === 'add-branch' ? 'New Branch' :
           currentScreen === 'trainer-created-success' ? 'Coach Created' :
           currentScreen === 'fee-matrix' ? 'Fee Matrix & Rates' :
+          currentScreen === 'due-members' ? 'Pending Dues & Defaulters' :
           currentScreen === 'member-created-success' ? 'Member Created' : 'Back'
         }
       />
@@ -745,6 +843,36 @@ export const MobileOwnerApp: React.FC = () => {
               </div>
             </div>
 
+            {/* Pending Dues & Defaulters Executive Alert Card */}
+            <div
+              onClick={() => navigateTo('due-members')}
+              className="p-4 bg-gradient-to-r from-amber-950/40 via-[#14121F] to-[#0E101A] rounded-[20px] border border-amber-500/40 hover:border-amber-400/60 shadow-xl cursor-pointer active:scale-[0.99] transition-all relative overflow-hidden group"
+            >
+              <div className="absolute right-0 top-0 bottom-0 w-32 bg-amber-500/5 blur-2xl pointer-events-none" />
+              <div className="flex items-center justify-between relative z-10">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/40 shadow-inner shrink-0 group-hover:scale-105 transition-transform">
+                    <AlertTriangle className="w-5 h-5 animate-pulse" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-xs font-black text-white">Pending Dues & Defaulters</h4>
+                      <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                        {dueMembers.length} Members
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      Total Outstanding: <strong className="text-amber-400 font-extrabold">₹{totalOutstandingAmount.toLocaleString('en-IN')}</strong>
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 text-amber-400 text-xs font-black group-hover:translate-x-0.5 transition-transform">
+                  <span>Manage</span>
+                  <ChevronRight className="w-4 h-4" />
+                </div>
+              </div>
+            </div>
+
             {/* 3-Column Key Stats Grid */}
             <div className="grid grid-cols-3 gap-2.5">
               <div
@@ -772,15 +900,15 @@ export const MobileOwnerApp: React.FC = () => {
               </div>
 
               <div
-                onClick={() => navigateTo('trainers')}
-                className="glass-card-premium hover:border-[#EC4899]/40 p-3.5 rounded-[20px] text-center cursor-pointer transition-all active:scale-95 shadow-lg group relative overflow-hidden"
+                onClick={() => navigateTo('due-members')}
+                className="glass-card-premium hover:border-amber-400/40 p-3.5 rounded-[20px] text-center cursor-pointer transition-all active:scale-95 shadow-lg group relative overflow-hidden"
               >
-                <div className="w-7 h-7 rounded-xl bg-[#EC4899]/15 text-[#EC4899] flex items-center justify-center mx-auto mb-1 border border-[#EC4899]/25 shadow-sm group-hover:scale-110 transition-transform">
-                  <Dumbbell className="w-3.5 h-3.5" />
+                <div className="w-7 h-7 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center mx-auto mb-1 border border-amber-500/25 shadow-sm group-hover:scale-110 transition-transform">
+                  <AlertTriangle className="w-3.5 h-3.5" />
                 </div>
-                <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Trainers</div>
-                <div className="text-xl font-black text-[#EC4899] mt-0.5">{trainers.length}</div>
-                <span className="text-[9px] text-[#EC4899] font-bold block mt-0.5">Coaches →</span>
+                <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Due Fees</div>
+                <div className="text-xl font-black text-amber-400 mt-0.5">{dueMembers.length}</div>
+                <span className="text-[9px] text-amber-300 font-bold block mt-0.5">₹{(totalOutstandingAmount/1000).toFixed(0)}k Dues →</span>
               </div>
             </div>
 
@@ -802,25 +930,14 @@ export const MobileOwnerApp: React.FC = () => {
                 </button>
 
                 <button
-                  onClick={() => navigateTo('add-trainer')}
-                  className="glass-card-premium hover:border-[#EC4899]/40 active:scale-95 p-4 rounded-[20px] text-left transition-all shadow-xl group cursor-pointer"
+                  onClick={() => navigateTo('due-members')}
+                  className="glass-card-premium hover:border-amber-400/50 active:scale-95 p-4 rounded-[20px] text-left transition-all shadow-xl group cursor-pointer border border-amber-500/30 bg-gradient-to-br from-amber-950/20 to-red-950/20"
                 >
-                  <div className="w-10 h-10 rounded-2xl bg-[#EC4899]/15 text-[#EC4899] flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform border border-[#EC4899]/30 shadow-md">
-                    <Award className="w-5 h-5" />
+                  <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform border border-amber-500/40 shadow-md">
+                    <AlertTriangle className="w-5 h-5" />
                   </div>
-                  <div className="font-black text-xs text-white">+ Add Coach</div>
-                  <div className="text-[10px] text-slate-400 font-medium mt-0.5">PT & trainer roster</div>
-                </button>
-
-                <button
-                  onClick={() => navigateTo('add-expense')}
-                  className="glass-card-premium hover:border-[#F87171]/40 active:scale-95 p-4 rounded-[20px] text-left transition-all shadow-xl group cursor-pointer"
-                >
-                  <div className="w-10 h-10 rounded-2xl bg-[#F87171]/15 text-[#F87171] flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform border border-[#F87171]/30 shadow-md">
-                    <DollarSign className="w-5 h-5" />
-                  </div>
-                  <div className="font-black text-xs text-white">+ Record Expense</div>
-                  <div className="text-[10px] text-slate-400 font-medium mt-0.5">Bills, rent & repairs</div>
+                  <div className="font-black text-xs text-white">Due Members ({dueMembers.length})</div>
+                  <div className="text-[10px] text-amber-300 font-medium mt-0.5">₹{totalOutstandingAmount.toLocaleString('en-IN')} pending</div>
                 </button>
 
                 <button
@@ -835,14 +952,14 @@ export const MobileOwnerApp: React.FC = () => {
                 </button>
 
                 <button
-                  onClick={() => navigateTo('broadcast')}
-                  className="glass-card-premium hover:border-[#F59E0B]/40 active:scale-95 p-4 rounded-[20px] text-left transition-all shadow-xl group cursor-pointer"
+                  onClick={() => navigateTo('add-expense')}
+                  className="glass-card-premium hover:border-[#F87171]/40 active:scale-95 p-4 rounded-[20px] text-left transition-all shadow-xl group cursor-pointer"
                 >
-                  <div className="w-10 h-10 rounded-2xl bg-[#F59E0B]/15 text-[#F59E0B] flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform border border-[#F59E0B]/30 shadow-md">
-                    <Send className="w-5 h-5" />
+                  <div className="w-10 h-10 rounded-2xl bg-[#F87171]/15 text-[#F87171] flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform border border-[#F87171]/30 shadow-md">
+                    <DollarSign className="w-5 h-5" />
                   </div>
-                  <div className="font-black text-xs text-white">Push Broadcast</div>
-                  <div className="text-[10px] text-slate-400 font-medium mt-0.5">Alert all members</div>
+                  <div className="font-black text-xs text-white">+ Record Expense</div>
+                  <div className="text-[10px] text-slate-400 font-medium mt-0.5">Bills, rent & repairs</div>
                 </button>
               </div>
             </div>
@@ -945,7 +1062,30 @@ export const MobileOwnerApp: React.FC = () => {
 
             {/* Goal Filter Chips */}
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-              {['all', 'Muscle Building', 'Weight Loss', 'Endurance', 'Flexibility'].map((g) => (
+              <button
+                onClick={() => setGoalFilter('all')}
+                className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase whitespace-nowrap transition-all ${
+                  goalFilter === 'all'
+                    ? 'bg-[#4F7CFF] text-white shadow-md'
+                    : 'bg-[#101422] text-slate-400 border border-white/10 hover:text-white'
+                }`}
+              >
+                All Members ({members.length})
+              </button>
+
+              <button
+                onClick={() => setGoalFilter('dues')}
+                className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase whitespace-nowrap transition-all flex items-center gap-1 ${
+                  goalFilter === 'dues'
+                    ? 'bg-amber-500 text-black font-black shadow-lg shadow-amber-500/20'
+                    : 'bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25'
+                }`}
+              >
+                <AlertTriangle className="w-3 h-3" />
+                <span>Pending Dues ({dueMembers.length})</span>
+              </button>
+
+              {['Muscle Building', 'Weight Loss', 'Endurance', 'Flexibility'].map((g) => (
                 <button
                   key={g}
                   onClick={() => setGoalFilter(g)}
@@ -955,7 +1095,7 @@ export const MobileOwnerApp: React.FC = () => {
                       : 'bg-[#101422] text-slate-400 border border-white/10 hover:text-white'
                   }`}
                 >
-                  {g === 'all' ? 'All Goals' : g}
+                  {g}
                 </button>
               ))}
             </div>
@@ -1095,6 +1235,25 @@ export const MobileOwnerApp: React.FC = () => {
 
             {/* Quick Management Links */}
             <div className="bg-[#101422] rounded-3xl border border-white/10 overflow-hidden shadow-xl divide-y divide-white/5">
+              <button
+                onClick={() => navigateTo('due-members')}
+                className="w-full p-4 flex items-center justify-between text-left hover:bg-[#151A2E] active:bg-[#1B2238] transition-all bg-gradient-to-r from-amber-950/30 to-transparent"
+              >
+                <div className="flex items-center gap-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-400" />
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-white block">Pending Dues & Defaulters</span>
+                      <span className="text-[9px] font-black px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                        {dueMembers.length}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-amber-300">₹{totalOutstandingAmount.toLocaleString('en-IN')} outstanding collections</span>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-amber-400" />
+              </button>
+
               <button
                 onClick={() => navigateTo('fee-matrix')}
                 className="w-full p-4 flex items-center justify-between text-left hover:bg-[#151A2E] active:bg-[#1B2238] transition-all bg-gradient-to-r from-cyan-950/20 to-transparent"
@@ -2858,6 +3017,191 @@ export const MobileOwnerApp: React.FC = () => {
           </div>
         )}
 
+        {/* ═══════════════════════════════════════════════════════════
+            SUBPAGE: PENDING DUES & DEFAULTERS DIRECTORY
+        ═══════════════════════════════════════════════════════════ */}
+        {currentScreen === 'due-members' && (
+          <div className="space-y-4 animate-in fade-in duration-200">
+            
+            {/* Header Hero Banner */}
+            <div className="p-5 bg-gradient-to-br from-amber-950/60 via-[#12101E] to-[#07090E] rounded-3xl border border-amber-500/40 shadow-2xl relative overflow-hidden space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/40 shadow-inner">
+                    <AlertTriangle className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-white">Pending Dues Ledger</h3>
+                    <p className="text-[10px] text-amber-300/80">{currentBranch.name} • Defaulters & Renewals</p>
+                  </div>
+                </div>
+                <span className="text-[9px] font-black uppercase px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                  {dueMembers.length} Accounts Due
+                </span>
+              </div>
+
+              <div className="p-3.5 bg-black/40 rounded-2xl border border-amber-500/20 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Outstanding Amount</span>
+                  <div className="text-2xl font-black text-amber-400">
+                    ₹{totalOutstandingAmount.toLocaleString('en-IN')}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] text-slate-400 block">Pending / Expired</span>
+                  <span className="text-xs font-black text-white">{dueMembers.length} Members</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Search Input */}
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search due member, mobile, username..."
+                value={searchDueMember}
+                onChange={(e) => setSearchDueMember(e.target.value)}
+                className="w-full pl-10 pr-3.5 py-2.5 bg-[#101422] rounded-2xl border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+              />
+            </div>
+
+            {/* Category Filter Chips */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+              <button
+                onClick={() => setDueCategoryFilter('all')}
+                className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase whitespace-nowrap transition-all ${
+                  dueCategoryFilter === 'all'
+                    ? 'bg-amber-500 text-black shadow-md'
+                    : 'bg-[#101422] text-slate-400 border border-white/10 hover:text-white'
+                }`}
+              >
+                All Dues ({dueMembers.length})
+              </button>
+              <button
+                onClick={() => setDueCategoryFilter('expired')}
+                className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase whitespace-nowrap transition-all ${
+                  dueCategoryFilter === 'expired'
+                    ? 'bg-amber-500 text-black shadow-md'
+                    : 'bg-[#101422] text-slate-400 border border-white/10 hover:text-white'
+                }`}
+              >
+                Expired Pass ({dueMembers.filter(m => m.status === 'Expired' || m.status === 'Renewal Due' || (m.endDate && new Date(m.endDate) < new Date())).length})
+              </button>
+              <button
+                onClick={() => setDueCategoryFilter('partial')}
+                className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase whitespace-nowrap transition-all ${
+                  dueCategoryFilter === 'partial'
+                    ? 'bg-amber-500 text-black shadow-md'
+                    : 'bg-[#101422] text-slate-400 border border-white/10 hover:text-white'
+                }`}
+              >
+                Partial Balance ({dueMembers.filter(m => (m.pendingDues || 0) > 0 || (m.balanceDue || 0) > 0).length})
+              </button>
+            </div>
+
+            {/* Due Members List */}
+            <div className="space-y-3">
+              {filteredDueMembers.map((m) => {
+                const memberDueAmount = (m.pendingDues || 0) > 0 ? m.pendingDues : (m.balanceDue || 0) > 0 ? m.balanceDue : (plans.find(p => p.id === m.planId)?.totalPrice || 1500);
+                const isPassExpired = m.status === 'Expired' || m.status === 'Renewal Due' || (m.endDate && new Date(m.endDate) < new Date());
+
+                return (
+                  <div
+                    key={m.id}
+                    className="p-4 bg-[#101422] rounded-3xl border border-amber-500/30 hover:border-amber-500/60 shadow-xl space-y-3 transition-all"
+                  >
+                    {/* Top Row: Photo, Name & Due Badge */}
+                    <div className="flex items-center justify-between gap-3">
+                      <div 
+                        onClick={() => {
+                          setSelectedMember(m);
+                          navigateTo('member-profile');
+                        }}
+                        className="flex items-center gap-3 cursor-pointer flex-1 min-w-0"
+                      >
+                        <img
+                          src={m.photoUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&fit=crop&q=80'}
+                          alt={m.name}
+                          className="w-11 h-11 rounded-2xl object-cover border border-amber-500/40 shadow-inner shrink-0"
+                        />
+                        <div className="min-w-0">
+                          <h4 className="text-xs font-black text-white truncate flex items-center gap-1.5">
+                            <span>{m.name}</span>
+                            <span className="text-[9px] font-mono text-slate-400">({m.membershipNo})</span>
+                          </h4>
+                          <p className="text-[10px] text-slate-400 truncate mt-0.5">
+                            {m.planName || 'Standard Membership'} • {m.mobile}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <div className="px-2.5 py-1 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 font-black text-xs">
+                          ₹{(memberDueAmount || 0).toLocaleString('en-IN')} Due
+                        </div>
+                        <span className="text-[9px] font-bold text-rose-400 block mt-0.5">
+                          {isPassExpired ? 'Pass Expired' : 'Balance Overdue'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Expiry Date & Details */}
+                    <div className="p-2.5 rounded-xl bg-[#080C14] border border-white/5 flex items-center justify-between text-[11px] text-slate-400">
+                      <div>
+                        <span>Validity End: </span>
+                        <strong className="text-white">{m.endDate || m.expiryDate || 'N/A'}</strong>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-amber-400" />
+                        <span className="text-amber-300 font-semibold">
+                          {isPassExpired ? 'Renewal Required' : 'Payment Overdue'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons: Collect Due, WhatsApp, Call */}
+                    <div className="grid grid-cols-3 gap-2 pt-1">
+                      <button
+                        onClick={() => handleOpenCollectDue(m)}
+                        className="py-2.5 px-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-black text-[11px] flex items-center justify-center gap-1 shadow-md cursor-pointer active:scale-95 transition-all"
+                      >
+                        <CreditCard className="w-3.5 h-3.5" />
+                        <span>Collect Due</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleSendDueWhatsApp(m)}
+                        className="py-2.5 px-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-black text-[11px] flex items-center justify-center gap-1 shadow-sm cursor-pointer active:scale-95 transition-all"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        <span>WhatsApp</span>
+                      </button>
+
+                      <a
+                        href={`tel:${m.mobile}`}
+                        className="py-2.5 px-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold text-[11px] flex items-center justify-center gap-1 cursor-pointer active:scale-95 transition-all"
+                      >
+                        <Phone className="w-3.5 h-3.5 text-blue-400" />
+                        <span>Call</span>
+                      </a>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {filteredDueMembers.length === 0 && (
+                <div className="p-8 text-center bg-[#101422] rounded-3xl border border-white/10 space-y-2">
+                  <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto" />
+                  <h4 className="text-sm font-black text-white">No Outstanding Dues Found! 🎉</h4>
+                  <p className="text-xs text-slate-400">All member fee collections are up to date for this branch.</p>
+                </div>
+              )}
+            </div>
+
+          </div>
+        )}
+
       </main>
 
       {/* ── 2.5. RENEW MEMBER SUBSCRIPTION MODAL ── */}
@@ -2983,6 +3327,115 @@ export const MobileOwnerApp: React.FC = () => {
               >
                 <Check className="w-4 h-4" />
                 <span>{isMobileRenewing ? 'Processing Renewal...' : 'Confirm & Renew Pass'}</span>
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── 2.6. COLLECT DUE PAYMENT MODAL ── */}
+      {isCollectDueOpen && collectDueMember && (
+        <div 
+          onClick={() => setIsCollectDueOpen(false)}
+          className="fixed inset-0 z-[85] flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-md p-0 sm:p-4 animate-in fade-in duration-200"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md bg-[#0E121E] border-t sm:border border-amber-500/40 rounded-t-[32px] sm:rounded-[32px] p-5 pb-12 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom duration-300 text-xs"
+          >
+            <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto" />
+
+            <div className="flex items-center justify-between pb-2 border-b border-white/10">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/40">
+                  <CreditCard className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white">Collect Outstanding Fee</h3>
+                  <p className="text-[10px] text-slate-400">{collectDueMember.name} • {collectDueMember.membershipNo}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsCollectDueOpen(false)}
+                className="w-8 h-8 rounded-full bg-white/10 text-slate-400 hover:text-white flex items-center justify-center text-sm font-bold active:scale-90 transition-all cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {collectDueToast && (
+              <div className="p-3 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2 animate-in fade-in">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{collectDueToast}</span>
+              </div>
+            )}
+
+            {/* Member Due Summary Preview */}
+            <div className="p-3.5 rounded-2xl bg-[#080C14] border border-amber-500/20 space-y-2 text-[11px]">
+              <div className="flex justify-between text-slate-400">
+                <span>Enrolled Package:</span>
+                <strong className="text-white font-bold">{collectDueMember.planName || 'Membership Pass'}</strong>
+              </div>
+              <div className="flex justify-between text-slate-400">
+                <span>Total Outstanding Balance:</span>
+                <strong className="text-amber-400 font-extrabold text-sm">
+                  ₹{((collectDueMember.pendingDues || 0) > 0 ? (collectDueMember.pendingDues || 0) : (collectDueMember.balanceDue || 0) > 0 ? (collectDueMember.balanceDue || 0) : (plans.find(p => p.id === collectDueMember.planId)?.totalPrice || 1500)).toLocaleString('en-IN')}
+                </strong>
+              </div>
+              <div className="flex justify-between text-slate-400">
+                <span>Member Mobile:</span>
+                <span className="text-slate-300 font-mono">{collectDueMember.mobile}</span>
+              </div>
+            </div>
+
+            {/* Payment Collection Form */}
+            <form onSubmit={handleCollectDueSubmit} className="space-y-3 pt-1">
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                  Amount to Collect (₹) *
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-black text-sm">₹</span>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={collectDueAmount}
+                    onChange={(e) => setCollectDueAmount(Number(e.target.value))}
+                    className="w-full pl-8 pr-3.5 py-3 bg-[#080C14] border border-white/10 rounded-2xl text-xs text-white font-extrabold outline-none focus:border-amber-400"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                  Payment Mode *
+                </label>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {(['UPI', 'Cash', 'Card', 'Bank Transfer'] as const).map((m) => (
+                    <button
+                      type="button"
+                      key={m}
+                      onClick={() => setCollectDuePaymentMethod(m)}
+                      className={`py-2.5 rounded-xl text-[10px] font-bold border transition-all cursor-pointer ${
+                        collectDuePaymentMethod === m
+                          ? 'bg-amber-500/25 border-amber-500 text-amber-300 shadow-md font-black'
+                          : 'bg-[#080C14] border-white/10 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isCollectingDue}
+                className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 text-black font-black text-xs flex items-center justify-center gap-2 shadow-2xl shadow-amber-500/30 active:scale-95 transition-all cursor-pointer disabled:opacity-50 mt-3"
+              >
+                <Check className="w-4 h-4" />
+                <span>{isCollectingDue ? 'Recording Payment...' : `Confirm & Collect ₹${collectDueAmount.toLocaleString('en-IN')}`}</span>
               </button>
             </form>
           </div>
