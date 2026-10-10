@@ -112,10 +112,10 @@ export const TrainerCollectPaymentModal: React.FC<TrainerCollectPaymentModalProp
     const matchingPlan = plans.find((p) => p.durationMonths === months);
     if (matchingPlan) {
       setSelectedPlanId(matchingPlan.id);
-      setAmount(matchingPlan.totalPrice || matchingPlan.basePrice || months * 1250);
+      setAmount(matchingPlan.totalPrice || matchingPlan.basePrice || months * 500);
     } else {
-      // Default ₹1,250 - ₹1,500/mo calculation
-      setAmount(months * 1250);
+      const baseMonthly = plans.find(p => p.durationMonths === 1)?.basePrice || 500;
+      setAmount(months * baseMonthly);
     }
   };
 
@@ -422,7 +422,7 @@ export const TrainerCollectPaymentModal: React.FC<TrainerCollectPaymentModalProp
 
               {/* Quick Duration Buttons */}
               <div className="grid grid-cols-5 gap-1.5 mb-2">
-                {[1, 2, 3, 6, 12].map((m) => {
+                {[1, 2, 3, 5, 12].map((m) => {
                   const isSelected = durationMonths === m;
                   return (
                     <button
@@ -435,7 +435,7 @@ export const TrainerCollectPaymentModal: React.FC<TrainerCollectPaymentModalProp
                           : 'bg-[#101422] text-slate-300 border-white/10 hover:bg-white/5'
                       }`}
                     >
-                      {m}M {m === 2 ? '⭐' : ''}
+                      {m}M {m === 3 ? '⭐' : ''}
                     </button>
                   );
                 })}

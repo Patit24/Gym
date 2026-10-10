@@ -136,9 +136,9 @@ export const MobileOwnerApp: React.FC = () => {
   const yearlyPlanItem = plans.find(p => p.durationMonths === 12 || p.duration === 'Yearly');
 
   const [feeReg, setFeeReg] = useState<number>(monthlyPlanItem?.joiningFee || 500);
-  const [feeMonthly, setFeeMonthly] = useState<number>(monthlyPlanItem?.basePrice || 1500);
-  const [feeQuarterly, setFeeQuarterly] = useState<number>(quarterlyPlanItem?.basePrice || 4000);
-  const [feeYearly, setFeeYearly] = useState<number>(yearlyPlanItem?.basePrice || 12000);
+  const [feeMonthly, setFeeMonthly] = useState<number>(monthlyPlanItem?.basePrice || 500);
+  const [feeQuarterly, setFeeQuarterly] = useState<number>(quarterlyPlanItem?.basePrice || 1000);
+  const [feeYearly, setFeeYearly] = useState<number>(yearlyPlanItem?.basePrice || 4000);
   const [isSavingFeeMatrix, setIsSavingFeeMatrix] = useState(false);
   const [feeMatrixToast, setFeeMatrixToast] = useState<string | null>(null);
 

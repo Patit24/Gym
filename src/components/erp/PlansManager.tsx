@@ -49,9 +49,9 @@ export const PlansManager: React.FC = () => {
   const yearlyPlan = plans.find(p => p.durationMonths === 12 || p.duration === 'Yearly');
 
   const [regFee, setRegFee] = useState<number>(monthlyPlan?.joiningFee || 500);
-  const [monthlyFee, setMonthlyFee] = useState<number>(monthlyPlan?.basePrice || 1500);
-  const [quarterlyFee, setQuarterlyFee] = useState<number>(quarterlyPlan?.basePrice || 4000);
-  const [yearlyFee, setYearlyFee] = useState<number>(yearlyPlan?.basePrice || 12000);
+  const [monthlyFee, setMonthlyFee] = useState<number>(monthlyPlan?.basePrice || 500);
+  const [quarterlyFee, setQuarterlyFee] = useState<number>(quarterlyPlan?.basePrice || 1000);
+  const [yearlyFee, setYearlyFee] = useState<number>(yearlyPlan?.basePrice || 4000);
   const [isSavingStandardFees, setIsSavingStandardFees] = useState(false);
   const [standardFeeSuccess, setStandardFeeSuccess] = useState(false);
 
