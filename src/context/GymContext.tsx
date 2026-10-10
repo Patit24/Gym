@@ -761,6 +761,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const authUid = firebaseUser.uid;
     const rawEmail = (firebaseUser.email || '').toLowerCase().trim();
     const emailPrefix = rawEmail.includes('@') ? rawEmail.split('@')[0] : rawEmail;
+    const cleanPhoneDigits = rawEmail.replace(/\D/g, '');
 
     const resolveAuthProfile = async () => {
       // 1. Master Administrator Direct Bootstrap Resolution
@@ -843,19 +844,31 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         console.warn('Direct user document fetch notice:', docErr);
       }
 
-      // 3. Check memory store `appUsers` for matching UID
-      const foundInAppUsers = (appUsers || []).find((u) => u.id === authUid || (u as any).uid === authUid);
+      // 3. Check memory store `appUsers` for matching UID, email, username, or linkedId
+      const foundInAppUsers = (appUsers || []).find(
+        (u) =>
+          u.id === authUid ||
+          (u as any).uid === authUid ||
+          (u.email && u.email.toLowerCase() === rawEmail) ||
+          (u.username && u.username.toLowerCase() === emailPrefix) ||
+          (u.linkedId && u.linkedId.toLowerCase() === authUid.toLowerCase())
+      );
       if (foundInAppUsers) {
-        setAppUserAccount(foundInAppUsers);
-        setCurrentRole(foundInAppUsers.role);
-        setSelectedBranchId(foundInAppUsers.branchId || branches[0]?.id || 'all');
-        localStorage.setItem('gym_app_user_account', JSON.stringify(foundInAppUsers));
-        if (foundInAppUsers.role === 'Member') {
-          setActiveMemberIdState(foundInAppUsers.linkedId || authUid);
+        const verifiedUser: AppUser = {
+          ...foundInAppUsers,
+          id: authUid,
+        };
+        setAppUserAccount(verifiedUser);
+        setCurrentRole(verifiedUser.role);
+        setSelectedBranchId(verifiedUser.branchId || branches[0]?.id || 'all');
+        localStorage.setItem('gym_app_user_account', JSON.stringify(verifiedUser));
+        if (verifiedUser.role === 'Member') {
+          setActiveMemberIdState(verifiedUser.linkedId || authUid);
         } else {
           setActiveMemberIdState('');
         }
         setSubscriptionStatus('active');
+        safeDbWrite(setDoc(doc(db, 'users', authUid), verifiedUser));
         return;
       }
 
@@ -864,7 +877,8 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         (e) =>
           e.id === authUid ||
           (e.email && e.email.toLowerCase() === rawEmail) ||
-          ((e as any).username && (e as any).username.toLowerCase() === emailPrefix)
+          ((e as any).username && (e as any).username.toLowerCase() === emailPrefix) ||
+          (cleanPhoneDigits.length >= 7 && (e.mobile || e.phone) && (e.mobile || e.phone)!.replace(/\D/g, '').endsWith(cleanPhoneDigits.slice(-7)))
       );
 
       if (matchingEmployee) {
@@ -909,7 +923,8 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           m.userId === authUid ||
           m.id === authUid ||
           (m.email && m.email.toLowerCase() === rawEmail) ||
-          (m.username && m.username.toLowerCase() === emailPrefix)
+          (m.username && m.username.toLowerCase() === emailPrefix) ||
+          (cleanPhoneDigits.length >= 7 && m.mobile && m.mobile.replace(/\D/g, '').endsWith(cleanPhoneDigits.slice(-7)))
       );
 
       if (matchingMember) {
@@ -947,7 +962,22 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return;
       }
 
-      // 6. Fail-closed: If profile is unverified or unregistered, do not assign a fake role
+      // 6. Preserve existing valid staff session from local storage to prevent unwanted role demotion
+      try {
+        const saved = localStorage.getItem('gym_app_user_account');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && parsed.role && parsed.role !== 'Member') {
+            setAppUserAccount(parsed);
+            setCurrentRole(parsed.role);
+            setSelectedBranchId(parsed.branchId || branches[0]?.id || 'all');
+            setActiveMemberIdState('');
+            setSubscriptionStatus('active');
+            return;
+          }
+        }
+      } catch {}
+
       console.warn('Unverified identity profile for UID:', authUid);
     };
 
@@ -1742,7 +1772,8 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...empData,
       id: employeeId,
       email: trainerEmail,
-    };
+      username,
+    } as any;
 
     setEmployees((prev) => [newEmployee, ...prev]);
     safeDbWrite(setDoc(doc(db, 'employees', employeeId), newEmployee));
