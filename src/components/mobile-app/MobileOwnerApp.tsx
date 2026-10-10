@@ -56,7 +56,10 @@ import {
   Camera,
   Image as ImageIcon,
   CalendarRange,
-  Hash
+  Hash,
+  Edit3,
+  X,
+  Save
 } from 'lucide-react';
 
 type OwnerScreen =
@@ -101,6 +104,7 @@ export const MobileOwnerApp: React.FC = () => {
     resendMemberCredentials,
     addBranch,
     addEmployee,
+    updateEmployee,
     sendBulkNotification,
     renewSubscription,
     addMembershipPlan,
@@ -428,6 +432,181 @@ export const MobileOwnerApp: React.FC = () => {
   const [searchTrainer, setSearchTrainer] = useState('');
   const [trainerRoleFilter, setTrainerRoleFilter] = useState<'all' | 'Trainer' | 'Dietitian'>('all');
   const [showTrainerPasswordMap, setShowTrainerPasswordMap] = useState<Record<string, boolean>>({});
+
+  // ── EDIT MEMBER MODAL STATE ──
+  const [isEditMemberModalOpen, setIsEditMemberModalOpen] = useState(false);
+  const [editMemData, setEditMemData] = useState<{
+    name: string;
+    mobile: string;
+    email: string;
+    dob: string;
+    gender: Gender;
+    goal: GoalType;
+    heightCm: number;
+    weightKg: number;
+    targetWeightKg: number;
+    bloodGroup: string;
+    emergencyContactName: string;
+    emergencyMobile: string;
+    address: string;
+    medicalHistory: string;
+    planId: string;
+    assignedTrainerId: string;
+    status: Member['status'];
+  }>({
+    name: '',
+    mobile: '',
+    email: '',
+    dob: '1998-01-01',
+    gender: 'Male',
+    goal: 'Muscle Building',
+    heightCm: 175,
+    weightKg: 70,
+    targetWeightKg: 70,
+    bloodGroup: 'O+',
+    emergencyContactName: '',
+    emergencyMobile: '',
+    address: '',
+    medicalHistory: '',
+    planId: '',
+    assignedTrainerId: '',
+    status: 'Active',
+  });
+  const [isSavingMemberEdit, setIsSavingMemberEdit] = useState(false);
+  const [memberEditToast, setMemberEditToast] = useState<string | null>(null);
+
+  const openEditMemberModal = (member: Member) => {
+    setEditMemData({
+      name: member.name || '',
+      mobile: member.mobile || '',
+      email: member.email || '',
+      dob: member.dob || '1998-01-01',
+      gender: member.gender || 'Male',
+      goal: member.goal || 'Muscle Building',
+      heightCm: member.heightCm || 175,
+      weightKg: member.weightKg || 70,
+      targetWeightKg: member.targetWeightKg || member.weightKg || 70,
+      bloodGroup: member.bloodGroup || 'O+',
+      emergencyContactName: member.emergencyContactName || '',
+      emergencyMobile: member.emergencyMobile || '',
+      address: member.address || '',
+      medicalHistory: member.medicalHistory || '',
+      planId: member.planId || '',
+      assignedTrainerId: member.assignedTrainerId || '',
+      status: member.status || 'Active',
+    });
+    setIsEditMemberModalOpen(true);
+  };
+
+  const handleSaveMemberEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedMember) return;
+    setIsSavingMemberEdit(true);
+    try {
+      const selectedPlan = plans.find(p => p.id === editMemData.planId);
+      const updates: Partial<Member> = {
+        name: editMemData.name.trim(),
+        mobile: editMemData.mobile.trim(),
+        email: editMemData.email.trim(),
+        dob: editMemData.dob,
+        gender: editMemData.gender,
+        goal: editMemData.goal,
+        heightCm: Number(editMemData.heightCm) || 175,
+        weightKg: Number(editMemData.weightKg) || 70,
+        targetWeightKg: Number(editMemData.targetWeightKg) || Number(editMemData.weightKg) || 70,
+        bloodGroup: editMemData.bloodGroup,
+        emergencyContactName: editMemData.emergencyContactName.trim(),
+        emergencyMobile: editMemData.emergencyMobile.trim(),
+        address: editMemData.address.trim(),
+        medicalHistory: editMemData.medicalHistory.trim(),
+        planId: editMemData.planId,
+        planName: selectedPlan?.name || selectedMember.planName,
+        assignedTrainerId: editMemData.assignedTrainerId || undefined,
+        status: editMemData.status,
+      };
+      await updateMember(selectedMember.id, updates);
+      setSelectedMember(prev => prev ? { ...prev, ...updates } : null);
+      setMemberEditToast('Member profile updated successfully!');
+      setTimeout(() => setMemberEditToast(null), 3000);
+      setIsEditMemberModalOpen(false);
+    } catch (err: any) {
+      console.error('Error updating member:', err);
+      alert('Failed to update member profile: ' + (err?.message || 'Unknown error'));
+    } finally {
+      setIsSavingMemberEdit(false);
+    }
+  };
+
+  // ── EDIT TRAINER MODAL STATE ──
+  const [isEditTrainerModalOpen, setIsEditTrainerModalOpen] = useState(false);
+  const [editTrData, setEditTrData] = useState<{
+    name: string;
+    mobile: string;
+    email: string;
+    specialization: string;
+    baseSalary: number;
+    ptCommissionRate: number;
+    shift: string;
+    role: Employee['role'];
+    branchId: BranchId;
+  }>({
+    name: '',
+    mobile: '',
+    email: '',
+    specialization: 'Strength & Conditioning',
+    baseSalary: 35000,
+    ptCommissionRate: 15,
+    shift: 'Morning 6AM - 2PM',
+    role: 'Trainer',
+    branchId: selectedBranchId,
+  });
+  const [isSavingTrainerEdit, setIsSavingTrainerEdit] = useState(false);
+  const [trainerEditToast, setTrainerEditToast] = useState<string | null>(null);
+
+  const openEditTrainerModal = (trainer: Employee) => {
+    setEditTrData({
+      name: trainer.name || '',
+      mobile: trainer.phone || trainer.mobile || '',
+      email: trainer.email || '',
+      specialization: trainer.specialization || 'Strength & Conditioning',
+      baseSalary: trainer.baseSalary || 35000,
+      ptCommissionRate: trainer.ptCommissionRate || 15,
+      shift: trainer.shift || 'Morning 6AM - 2PM',
+      role: trainer.role || 'Trainer',
+      branchId: trainer.branchId || selectedBranchId,
+    });
+    setIsEditTrainerModalOpen(true);
+  };
+
+  const handleSaveTrainerEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTrainer) return;
+    setIsSavingTrainerEdit(true);
+    try {
+      const updates: Partial<Employee> = {
+        name: editTrData.name.trim(),
+        phone: editTrData.mobile.trim(),
+        mobile: editTrData.mobile.trim(),
+        email: editTrData.email.trim(),
+        specialization: editTrData.specialization.trim(),
+        baseSalary: Number(editTrData.baseSalary) || 0,
+        ptCommissionRate: Number(editTrData.ptCommissionRate) || 0,
+        shift: editTrData.shift,
+        role: editTrData.role,
+        branchId: editTrData.branchId,
+      };
+      await updateEmployee(selectedTrainer.id, updates);
+      setSelectedTrainer(prev => prev ? { ...prev, ...updates } : null);
+      setTrainerEditToast('Coach profile updated successfully!');
+      setTimeout(() => setTrainerEditToast(null), 3000);
+      setIsEditTrainerModalOpen(false);
+    } catch (err: any) {
+      console.error('Error updating trainer:', err);
+      alert('Failed to update coach profile: ' + (err?.message || 'Unknown error'));
+    } finally {
+      setIsSavingTrainerEdit(false);
+    }
+  };
 
   // Comprehensive Trainers & Coaches list
   const trainers = useMemo(() => {
@@ -2010,11 +2189,17 @@ export const MobileOwnerApp: React.FC = () => {
         ═══════════════════════════════════════════════════════════ */}
         {currentScreen === 'member-profile' && selectedMember && (
           <div className="space-y-4 animate-in fade-in duration-200">
+            {memberEditToast && (
+              <div className="p-3 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2 animate-in fade-in">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{memberEditToast}</span>
+              </div>
+            )}
             
-            {/* Header Avatar & Info with 1-Tap Photo Update */}
+            {/* Header Avatar & Info with 1-Tap Photo Update & Edit Profile */}
             <div className="p-4 bg-[#101422] rounded-3xl border border-white/10 shadow-xl flex items-center justify-between gap-3.5">
-              <div className="flex items-center gap-3.5">
-                <div className="relative group">
+              <div className="flex items-center gap-3.5 flex-1 min-w-0">
+                <div className="relative group shrink-0">
                   <img
                     src={selectedMember.photoUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&fit=crop&q=80'}
                     alt={selectedMember.name}
@@ -2061,10 +2246,10 @@ export const MobileOwnerApp: React.FC = () => {
                     />
                   </label>
                 </div>
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-black text-white">{selectedMember.name}</h3>
-                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                    <h3 className="text-sm font-black text-white truncate">{selectedMember.name}</h3>
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase shrink-0 ${
                       selectedMember.status === 'Active'
                         ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
                         : 'bg-red-500/15 text-red-400 border border-red-500/30'
@@ -2072,12 +2257,22 @@ export const MobileOwnerApp: React.FC = () => {
                       {selectedMember.status}
                     </span>
                   </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">
+                  <div className="text-[10px] text-slate-400 mt-0.5 truncate">
                     ID: {selectedMember.membershipNo} • {selectedMember.mobile}
                   </div>
-                  <div className="text-[10px] text-[#4F7CFF] font-bold mt-0.5">Goal: {selectedMember.goal}</div>
+                  <div className="text-[10px] text-[#4F7CFF] font-bold mt-0.5 truncate">Goal: {selectedMember.goal}</div>
                 </div>
               </div>
+
+              <button
+                type="button"
+                onClick={() => openEditMemberModal(selectedMember)}
+                className="px-3 py-2 rounded-2xl bg-[#4F7CFF]/15 hover:bg-[#4F7CFF]/25 border border-[#4F7CFF]/30 text-[#4F7CFF] flex items-center gap-1.5 active:scale-95 transition-all shrink-0 cursor-pointer shadow-sm"
+                title="Edit Member Profile"
+              >
+                <Edit3 className="w-4 h-4" />
+                <span className="text-xs font-black">Edit</span>
+              </button>
             </div>
 
             {/* Obsidian Gold Card */}
@@ -2983,30 +3178,49 @@ export const MobileOwnerApp: React.FC = () => {
 
           return (
             <div className="space-y-4 animate-in fade-in duration-200">
+              {trainerEditToast && (
+                <div className="p-3 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2 animate-in fade-in">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>{trainerEditToast}</span>
+                </div>
+              )}
+
               {/* Profile Card */}
               <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 shadow-xl space-y-3">
-                <div className="flex items-center gap-3.5">
-                  <img
-                    src={selectedTrainer.photoUrl || 'https://images.unsplash.com/photo-1568602471122-7832951cc4c5?w=400&fit=crop&q=80'}
-                    alt={selectedTrainer.name}
-                    className="w-16 h-16 rounded-2xl object-cover border-2 border-purple-500 shadow-md shrink-0"
-                  />
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-base font-black text-white truncate">{selectedTrainer.name}</h3>
-                      <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 shrink-0">
-                        {selectedTrainer.role}
-                      </span>
-                    </div>
-                    <p className="text-xs text-purple-300 font-semibold truncate mt-0.5">
-                      {selectedTrainer.specialization || 'Strength & Conditioning'}
-                    </p>
-                    <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-1">
-                      <span>ID: {selectedTrainer.id}</span>
-                      <span>•</span>
-                      <span>Shift: {selectedTrainer.shift || 'Morning'}</span>
+                <div className="flex items-center justify-between gap-3.5">
+                  <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                    <img
+                      src={selectedTrainer.photoUrl || 'https://images.unsplash.com/photo-1568602471122-7832951cc4c5?w=400&fit=crop&q=80'}
+                      alt={selectedTrainer.name}
+                      className="w-16 h-16 rounded-2xl object-cover border-2 border-purple-500 shadow-md shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-base font-black text-white truncate">{selectedTrainer.name}</h3>
+                        <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 shrink-0">
+                          {selectedTrainer.role}
+                        </span>
+                      </div>
+                      <p className="text-xs text-purple-300 font-semibold truncate mt-0.5">
+                        {selectedTrainer.specialization || 'Strength & Conditioning'}
+                      </p>
+                      <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-1">
+                        <span>ID: {selectedTrainer.id}</span>
+                        <span>•</span>
+                        <span>Shift: {selectedTrainer.shift || 'Morning'}</span>
+                      </div>
                     </div>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => openEditTrainerModal(selectedTrainer)}
+                    className="px-3 py-2 rounded-2xl bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 text-purple-300 flex items-center gap-1.5 active:scale-95 transition-all shrink-0 cursor-pointer shadow-sm"
+                    title="Edit Coach Profile"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                    <span className="text-xs font-black">Edit</span>
+                  </button>
                 </div>
 
                 {/* Details Grid */}
@@ -3922,6 +4136,555 @@ export const MobileOwnerApp: React.FC = () => {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── 3.5. EDIT MEMBER PROFILE MODAL ── */}
+      {isEditMemberModalOpen && selectedMember && (
+        <div 
+          onClick={() => setIsEditMemberModalOpen(false)}
+          className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-md p-0 sm:p-4 animate-in fade-in duration-200"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg bg-[#0E121E] border-t sm:border border-[#4F7CFF]/40 rounded-t-[32px] sm:rounded-[32px] p-5 pb-10 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto animate-in slide-in-from-bottom duration-300 text-xs"
+          >
+            <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto" />
+
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-[#4F7CFF]/20 text-[#4F7CFF] flex items-center justify-center border border-[#4F7CFF]/40">
+                  <Edit3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white">Edit Member Profile</h3>
+                  <p className="text-[10px] text-slate-400">ID: {selectedMember.membershipNo} • All Details Editable</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditMemberModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-white/10 text-slate-400 hover:text-white flex items-center justify-center text-sm font-bold active:scale-90 transition-all cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveMemberEdit} className="space-y-3.5 pt-1">
+              {/* Full Name */}
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                  Full Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editMemData.name}
+                  onChange={(e) => setEditMemData(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white font-semibold outline-none focus:border-[#4F7CFF]"
+                />
+              </div>
+
+              {/* Mobile & Email */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    WhatsApp Mobile *
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    value={editMemData.mobile}
+                    onChange={(e) => setEditMemData(prev => ({ ...prev, mobile: e.target.value }))}
+                    className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white font-semibold outline-none focus:border-[#4F7CFF]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={editMemData.email}
+                    onChange={(e) => setEditMemData(prev => ({ ...prev, email: e.target.value }))}
+                    className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white font-semibold outline-none focus:border-[#4F7CFF]"
+                  />
+                </div>
+              </div>
+
+              {/* DOB, Gender & Blood Group */}
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Birth Date
+                  </label>
+                  <input
+                    type="date"
+                    value={editMemData.dob}
+                    onChange={(e) => setEditMemData(prev => ({ ...prev, dob: e.target.value }))}
+                    className="w-full p-2 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white outline-none focus:border-[#4F7CFF]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Gender
+                  </label>
+                  <select
+                    value={editMemData.gender}
+                    onChange={(e) => setEditMemData(prev => ({ ...prev, gender: e.target.value as Gender }))}
+                    className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white outline-none focus:border-[#4F7CFF]"
+                  >
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Blood Group
+                  </label>
+                  <select
+                    value={editMemData.bloodGroup}
+                    onChange={(e) => setEditMemData(prev => ({ ...prev, bloodGroup: e.target.value }))}
+                    className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white outline-none focus:border-[#4F7CFF]"
+                  >
+                    <option value="O+">O+</option>
+                    <option value="O-">O-</option>
+                    <option value="A+">A+</option>
+                    <option value="A-">A-</option>
+                    <option value="B+">B+</option>
+                    <option value="B-">B-</option>
+                    <option value="AB+">AB+</option>
+                    <option value="AB-">AB-</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Fitness Goal */}
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                  Primary Fitness Target
+                </label>
+                <select
+                  value={editMemData.goal}
+                  onChange={(e) => setEditMemData(prev => ({ ...prev, goal: e.target.value as GoalType }))}
+                  className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white font-bold outline-none focus:border-[#4F7CFF]"
+                >
+                  <option value="Muscle Building">Muscle Building</option>
+                  <option value="Weight Loss">Weight Loss</option>
+                  <option value="Body Recomposition">Body Recomposition</option>
+                  <option value="Endurance & Cardio">Endurance & Cardio</option>
+                  <option value="Rehab & Mobility">Rehab & Mobility</option>
+                </select>
+              </div>
+
+              {/* Height, Current Weight & Target Weight */}
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Height (cm)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={editMemData.heightCm || ''}
+                      onChange={(e) => setEditMemData(prev => ({ ...prev, heightCm: e.target.value === '' ? 0 : Number(e.target.value) }))}
+                      className="w-full p-2.5 pr-6 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white font-bold outline-none focus:border-[#4F7CFF]"
+                    />
+                    {editMemData.heightCm > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setEditMemData(prev => ({ ...prev, heightCm: 0 }))}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white/10 text-slate-300 hover:text-white flex items-center justify-center text-[10px] cursor-pointer"
+                        title="Clear"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Weight (kg)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={editMemData.weightKg || ''}
+                      onChange={(e) => setEditMemData(prev => ({ ...prev, weightKg: e.target.value === '' ? 0 : Number(e.target.value) }))}
+                      className="w-full p-2.5 pr-6 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white font-bold outline-none focus:border-[#4F7CFF]"
+                    />
+                    {editMemData.weightKg > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setEditMemData(prev => ({ ...prev, weightKg: 0 }))}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white/10 text-slate-300 hover:text-white flex items-center justify-center text-[10px] cursor-pointer"
+                        title="Clear"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Target (kg)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={editMemData.targetWeightKg || ''}
+                      onChange={(e) => setEditMemData(prev => ({ ...prev, targetWeightKg: e.target.value === '' ? 0 : Number(e.target.value) }))}
+                      className="w-full p-2.5 pr-6 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white font-bold outline-none focus:border-[#4F7CFF]"
+                    />
+                    {editMemData.targetWeightKg > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setEditMemData(prev => ({ ...prev, targetWeightKg: 0 }))}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white/10 text-slate-300 hover:text-white flex items-center justify-center text-[10px] cursor-pointer"
+                        title="Clear"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Package Plan & Assigned Coach */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Membership Plan
+                  </label>
+                  <select
+                    value={editMemData.planId}
+                    onChange={(e) => setEditMemData(prev => ({ ...prev, planId: e.target.value }))}
+                    className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white font-bold outline-none focus:border-[#4F7CFF]"
+                  >
+                    {plans.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} (₹{p.basePrice || p.totalPrice || 1500})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Assigned Coach
+                  </label>
+                  <select
+                    value={editMemData.assignedTrainerId}
+                    onChange={(e) => setEditMemData(prev => ({ ...prev, assignedTrainerId: e.target.value }))}
+                    className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white font-bold outline-none focus:border-[#4F7CFF]"
+                  >
+                    <option value="">Unassigned</option>
+                    {trainers.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} ({t.specialization || t.role})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Status */}
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                  Membership Status
+                </label>
+                <select
+                  value={editMemData.status}
+                  onChange={(e) => setEditMemData(prev => ({ ...prev, status: e.target.value as Member['status'] }))}
+                  className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white font-bold outline-none focus:border-[#4F7CFF]"
+                >
+                  <option value="Active">Active</option>
+                  <option value="Renewal Due">Renewal Due</option>
+                  <option value="Expiring Soon">Expiring Soon</option>
+                  <option value="Expired">Expired</option>
+                  <option value="Suspended">Suspended</option>
+                  <option value="Pending Payment">Pending Payment</option>
+                  <option value="Frozen">Frozen</option>
+                  <option value="Cancelled">Cancelled</option>
+                </select>
+              </div>
+
+              {/* Emergency Contacts */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Emergency Contact Name
+                  </label>
+                  <input
+                    type="text"
+                    value={editMemData.emergencyContactName}
+                    onChange={(e) => setEditMemData(prev => ({ ...prev, emergencyContactName: e.target.value }))}
+                    placeholder="e.g. Suresh Roy"
+                    className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white outline-none focus:border-[#4F7CFF]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Emergency Phone
+                  </label>
+                  <input
+                    type="tel"
+                    value={editMemData.emergencyMobile}
+                    onChange={(e) => setEditMemData(prev => ({ ...prev, emergencyMobile: e.target.value }))}
+                    placeholder="+91 98765 00000"
+                    className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white outline-none focus:border-[#4F7CFF]"
+                  />
+                </div>
+              </div>
+
+              {/* Address */}
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                  Residential Address
+                </label>
+                <input
+                  type="text"
+                  value={editMemData.address}
+                  onChange={(e) => setEditMemData(prev => ({ ...prev, address: e.target.value }))}
+                  placeholder="Street, City, Pin Code"
+                  className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white outline-none focus:border-[#4F7CFF]"
+                />
+              </div>
+
+              {/* Medical History */}
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                  Medical History / Health Conditions
+                </label>
+                <textarea
+                  rows={2}
+                  value={editMemData.medicalHistory}
+                  onChange={(e) => setEditMemData(prev => ({ ...prev, medicalHistory: e.target.value }))}
+                  placeholder="e.g. Asthma, Knee surgery, None"
+                  className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white outline-none focus:border-[#4F7CFF]"
+                />
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={isSavingMemberEdit}
+                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#4F7CFF] to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-black text-xs flex items-center justify-center gap-2 shadow-xl shadow-[#4F7CFF]/25 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{isSavingMemberEdit ? 'Saving Updates...' : 'Save Member Profile'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── 3.6. EDIT COACH / TRAINER PROFILE MODAL ── */}
+      {isEditTrainerModalOpen && selectedTrainer && (
+        <div 
+          onClick={() => setIsEditTrainerModalOpen(false)}
+          className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-md p-0 sm:p-4 animate-in fade-in duration-200"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg bg-[#0E121E] border-t sm:border border-purple-500/40 rounded-t-[32px] sm:rounded-[32px] p-5 pb-10 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto animate-in slide-in-from-bottom duration-300 text-xs"
+          >
+            <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto" />
+
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center border border-purple-500/40">
+                  <Edit3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white">Edit Coach Profile</h3>
+                  <p className="text-[10px] text-slate-400">ID: {selectedTrainer.id} • All Details Editable</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditTrainerModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-white/10 text-slate-400 hover:text-white flex items-center justify-center text-sm font-bold active:scale-90 transition-all cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveTrainerEdit} className="space-y-3.5 pt-1">
+              {/* Coach Full Name */}
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                  Coach Full Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editTrData.name}
+                  onChange={(e) => setEditTrData(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white font-semibold outline-none focus:border-purple-400"
+                />
+              </div>
+
+              {/* Mobile & Email */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Mobile Phone *
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    value={editTrData.mobile}
+                    onChange={(e) => setEditTrData(prev => ({ ...prev, mobile: e.target.value }))}
+                    className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white font-semibold outline-none focus:border-purple-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={editTrData.email}
+                    onChange={(e) => setEditTrData(prev => ({ ...prev, email: e.target.value }))}
+                    className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white font-semibold outline-none focus:border-purple-400"
+                  />
+                </div>
+              </div>
+
+              {/* Specialization & Role */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Specialization
+                  </label>
+                  <select
+                    value={editTrData.specialization}
+                    onChange={(e) => setEditTrData(prev => ({ ...prev, specialization: e.target.value }))}
+                    className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white outline-none focus:border-purple-400 font-bold"
+                  >
+                    <option value="Strength & Conditioning">Strength & Conditioning</option>
+                    <option value="Weight Loss & HIIT">Weight Loss & HIIT</option>
+                    <option value="Bodybuilding & Hypertrophy">Bodybuilding & Hypertrophy</option>
+                    <option value="Functional & Rehab">Functional & Rehab</option>
+                    <option value="Yoga & Mobility">Yoga & Mobility</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Staff Role
+                  </label>
+                  <select
+                    value={editTrData.role}
+                    onChange={(e) => setEditTrData(prev => ({ ...prev, role: e.target.value as Employee['role'] }))}
+                    className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white outline-none focus:border-purple-400 font-bold"
+                  >
+                    <option value="Trainer">Trainer</option>
+                    <option value="Dietitian">Dietitian</option>
+                    <option value="Manager">Manager</option>
+                    <option value="Receptionist">Receptionist</option>
+                    <option value="Accountant">Accountant</option>
+                    <option value="Cleaner">Cleaner</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Monthly Salary & PT Commission */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Monthly Base Salary (₹)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={editTrData.baseSalary || ''}
+                      onChange={(e) => setEditTrData(prev => ({ ...prev, baseSalary: e.target.value === '' ? 0 : Number(e.target.value) }))}
+                      className="w-full p-2.5 pr-6 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white font-bold outline-none focus:border-purple-400"
+                    />
+                    {editTrData.baseSalary > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setEditTrData(prev => ({ ...prev, baseSalary: 0 }))}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white/10 text-slate-300 hover:text-white flex items-center justify-center text-[10px] cursor-pointer"
+                        title="Clear"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    PT Commission Rate (%)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={editTrData.ptCommissionRate || ''}
+                      onChange={(e) => setEditTrData(prev => ({ ...prev, ptCommissionRate: e.target.value === '' ? 0 : Number(e.target.value) }))}
+                      className="w-full p-2.5 pr-6 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white font-bold outline-none focus:border-purple-400"
+                    />
+                    {editTrData.ptCommissionRate > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setEditTrData(prev => ({ ...prev, ptCommissionRate: 0 }))}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white/10 text-slate-300 hover:text-white flex items-center justify-center text-[10px] cursor-pointer"
+                        title="Clear"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Shift & Branch */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Shift Timing
+                  </label>
+                  <select
+                    value={editTrData.shift}
+                    onChange={(e) => setEditTrData(prev => ({ ...prev, shift: e.target.value }))}
+                    className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white outline-none focus:border-purple-400 font-bold"
+                  >
+                    <option value="Morning 6AM - 2PM">Morning 6AM - 2PM</option>
+                    <option value="Evening 2PM - 10PM">Evening 2PM - 10PM</option>
+                    <option value="General 9AM - 6PM">General 9AM - 6PM</option>
+                    <option value="Full Day (Flexible)">Full Day (Flexible)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Assigned Branch
+                  </label>
+                  <select
+                    value={editTrData.branchId}
+                    onChange={(e) => setEditTrData(prev => ({ ...prev, branchId: e.target.value as BranchId }))}
+                    className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white outline-none focus:border-purple-400 font-bold"
+                  >
+                    {branches.map(b => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={isSavingTrainerEdit}
+                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black text-xs flex items-center justify-center gap-2 shadow-xl shadow-purple-600/25 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{isSavingTrainerEdit ? 'Saving Updates...' : 'Save Coach Profile'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useGym } from '../../context/GymContext';
-import { Member } from '../../types/gym';
+import { Member, GoalType } from '../../types/gym';
 import { PrivilegePassCard } from '../shared/PrivilegePassCard';
 import { compressImage } from '../../utils/imageUtils';
 import {
@@ -31,7 +31,9 @@ import {
   Bell,
   Printer,
   ChevronDown,
-  Camera
+  Camera,
+  Edit3,
+  X
 } from 'lucide-react';
 
 interface MembersManagerProps {
@@ -41,6 +43,7 @@ interface MembersManagerProps {
 export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberModal }) => {
   const {
     members,
+    employees,
     selectedBranchId,
     setActiveMemberId,
     activeMember,
@@ -86,6 +89,110 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
 
   // Profile Tab state
   const [profileTab, setProfileTab] = useState<'overview' | 'payments' | 'membership' | 'workout' | 'diet' | 'attendance'>('overview');
+
+  // Edit Member Modal State
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editFormData, setEditFormData] = useState<{
+    name: string;
+    mobile: string;
+    email: string;
+    dob: string;
+    gender: 'Male' | 'Female' | 'Other';
+    goal: GoalType;
+    heightCm: number;
+    weightKg: number;
+    targetWeightKg: number;
+    bloodGroup: string;
+    emergencyContactName: string;
+    emergencyMobile: string;
+    address: string;
+    medicalHistory: string;
+    planId: string;
+    assignedTrainerId: string;
+    status: Member['status'];
+  }>({
+    name: '',
+    mobile: '',
+    email: '',
+    dob: '1998-01-01',
+    gender: 'Male',
+    goal: 'Muscle Building',
+    heightCm: 175,
+    weightKg: 70,
+    targetWeightKg: 70,
+    bloodGroup: 'O+',
+    emergencyContactName: '',
+    emergencyMobile: '',
+    address: '',
+    medicalHistory: '',
+    planId: '',
+    assignedTrainerId: '',
+    status: 'Active',
+  });
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editToast, setEditToast] = useState<string | null>(null);
+
+  const openEditModal = (member: Member) => {
+    setEditFormData({
+      name: member.name || '',
+      mobile: member.mobile || '',
+      email: member.email || '',
+      dob: member.dob || '1998-01-01',
+      gender: member.gender || 'Male',
+      goal: member.goal || 'Muscle Building',
+      heightCm: member.heightCm || 175,
+      weightKg: member.weightKg || 70,
+      targetWeightKg: member.targetWeightKg || member.weightKg || 70,
+      bloodGroup: member.bloodGroup || 'O+',
+      emergencyContactName: member.emergencyContactName || '',
+      emergencyMobile: member.emergencyMobile || '',
+      address: member.address || '',
+      medicalHistory: member.medicalHistory || '',
+      planId: member.planId || '',
+      assignedTrainerId: member.assignedTrainerId || '',
+      status: member.status || 'Active',
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveMemberEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedMember) return;
+    setIsSavingEdit(true);
+    try {
+      const selectedPlan = plans.find(p => p.id === editFormData.planId);
+      const updates: Partial<Member> = {
+        name: editFormData.name.trim(),
+        mobile: editFormData.mobile.trim(),
+        email: editFormData.email.trim(),
+        dob: editFormData.dob,
+        gender: editFormData.gender,
+        goal: editFormData.goal,
+        heightCm: Number(editFormData.heightCm) || 175,
+        weightKg: Number(editFormData.weightKg) || 70,
+        targetWeightKg: Number(editFormData.targetWeightKg) || Number(editFormData.weightKg) || 70,
+        bloodGroup: editFormData.bloodGroup,
+        emergencyContactName: editFormData.emergencyContactName.trim(),
+        emergencyMobile: editFormData.emergencyMobile.trim(),
+        address: editFormData.address.trim(),
+        medicalHistory: editFormData.medicalHistory.trim(),
+        planId: editFormData.planId,
+        planName: selectedPlan?.name || selectedMember.planName,
+        assignedTrainerId: editFormData.assignedTrainerId || undefined,
+        status: editFormData.status,
+      };
+      await updateMember(selectedMember.id, updates);
+      setSelectedMember(prev => prev ? { ...prev, ...updates } : null);
+      setEditToast('Member profile updated successfully!');
+      setTimeout(() => setEditToast(null), 3000);
+      setIsEditModalOpen(false);
+    } catch (err: any) {
+      console.error('Failed to update member:', err);
+      alert('Failed to update member: ' + (err?.message || 'Unknown error'));
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
 
   const branchMembers = members.filter((m) => m.branchId === selectedBranchId);
 
@@ -530,41 +637,60 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
               
               {/* Personal Details Panel */}
               <div className="glass-card rounded-3xl p-6 space-y-4 border border-gym-border">
+                {editToast && (
+                  <div className="p-3 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2 animate-in fade-in">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>{editToast}</span>
+                  </div>
+                )}
+
                 {/* Member Profile Photo Management */}
-                <div className="flex items-center gap-4 p-3.5 rounded-2xl bg-[#0B0D12] border border-gym-border/80">
-                  <div className="relative group shrink-0">
-                    <img
-                      src={selectedMember.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedMember.id}`}
-                      alt={selectedMember.name}
-                      className="w-16 h-16 rounded-2xl object-cover border-2 border-cyan-400 bg-[#141722] shadow-md"
-                    />
-                    <label className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-cyan-500 hover:bg-cyan-400 text-black flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer transition-all" title="Upload New Profile Picture">
-                      <Camera className="w-3.5 h-3.5" />
-                      <input
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        className="hidden"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            try {
-                              const dataUrl = await compressImage(file);
-                              await updateMember(selectedMember.id, { photoUrl: dataUrl, faceEnrolled: true });
-                              setSelectedMember(prev => prev ? { ...prev, photoUrl: dataUrl, faceEnrolled: true } : null);
-                            } catch (err) {
-                              console.warn('Failed to update member image:', err);
-                            }
-                          }
-                        }}
+                <div className="flex items-center justify-between gap-4 p-3.5 rounded-2xl bg-[#0B0D12] border border-gym-border/80">
+                  <div className="flex items-center gap-4 flex-1 min-w-0">
+                    <div className="relative group shrink-0">
+                      <img
+                        src={selectedMember.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedMember.id}`}
+                        alt={selectedMember.name}
+                        className="w-16 h-16 rounded-2xl object-cover border-2 border-cyan-400 bg-[#141722] shadow-md"
                       />
-                    </label>
+                      <label className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-cyan-500 hover:bg-cyan-400 text-black flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer transition-all" title="Upload New Profile Picture">
+                        <Camera className="w-3.5 h-3.5" />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              try {
+                                const dataUrl = await compressImage(file);
+                                await updateMember(selectedMember.id, { photoUrl: dataUrl, faceEnrolled: true });
+                                setSelectedMember(prev => prev ? { ...prev, photoUrl: dataUrl, faceEnrolled: true } : null);
+                              } catch (err) {
+                                console.warn('Failed to update member image:', err);
+                              }
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm font-black text-white truncate">{selectedMember.name}</h4>
+                      <span className="text-[10px] text-cyan-400 font-mono block">Membership: {selectedMember.membershipNo}</span>
+                      <span className="text-[10px] text-slate-400 block mt-0.5">Click camera icon to change profile photo for digital card</span>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-black text-white truncate">{selectedMember.name}</h4>
-                    <span className="text-[10px] text-cyan-400 font-mono block">Membership: {selectedMember.membershipNo}</span>
-                    <span className="text-[10px] text-slate-400 block mt-0.5">Click camera icon to change profile photo for digital card</span>
-                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => openEditModal(selectedMember)}
+                    className="px-3.5 py-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-400 flex items-center gap-1.5 active:scale-95 transition-all text-xs font-bold cursor-pointer shrink-0 shadow-sm"
+                    title="Edit Member Profile"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>Edit Profile</span>
+                  </button>
                 </div>
 
                 <h3 className="text-sm font-black text-white flex items-center gap-2 pb-2 border-b border-gym-border">
@@ -1176,6 +1302,352 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
                 >
                   <Check className="w-4 h-4" />
                   <span>{isRenewing ? 'Renewing...' : 'Confirm & Renew Membership'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── EDIT MEMBER PROFILE MODAL ── */}
+      {isEditModalOpen && selectedMember && (
+        <div 
+          onClick={() => setIsEditModalOpen(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto overscroll-contain animate-in fade-in duration-200"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#14171F] border border-cyan-500/30 rounded-3xl max-w-xl w-full p-5 sm:p-6 shadow-2xl space-y-4 text-slate-200 my-auto max-h-[92vh] overflow-y-auto overscroll-contain text-xs"
+          >
+            <div className="flex items-center justify-between border-b border-gym-border pb-3 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center border border-cyan-500/40">
+                  <Edit3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-white text-base">Edit Member Profile</h3>
+                  <p className="text-[10px] text-slate-400 font-mono">ID: {selectedMember.membershipNo} • All Fields Editable</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setIsEditModalOpen(false)} 
+                className="p-1.5 rounded-lg bg-[#1E2330] text-slate-300 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveMemberEdit} className="space-y-3.5 pt-1">
+              {/* Full Name */}
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                  Full Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editFormData.name}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full p-2.5 bg-[#0B0D12] border border-gym-border rounded-xl text-xs text-white font-semibold outline-none focus:border-cyan-400"
+                />
+              </div>
+
+              {/* Mobile & Email */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Mobile Phone *
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    value={editFormData.mobile}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, mobile: e.target.value }))}
+                    className="w-full p-2.5 bg-[#0B0D12] border border-gym-border rounded-xl text-xs text-white font-semibold outline-none focus:border-cyan-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={editFormData.email}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, email: e.target.value }))}
+                    className="w-full p-2.5 bg-[#0B0D12] border border-gym-border rounded-xl text-xs text-white font-semibold outline-none focus:border-cyan-400"
+                  />
+                </div>
+              </div>
+
+              {/* DOB, Gender & Blood Group */}
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Birth Date
+                  </label>
+                  <input
+                    type="date"
+                    value={editFormData.dob}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, dob: e.target.value }))}
+                    className="w-full p-2 bg-[#0B0D12] border border-gym-border rounded-xl text-xs text-white outline-none focus:border-cyan-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Gender
+                  </label>
+                  <select
+                    value={editFormData.gender}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, gender: e.target.value as any }))}
+                    className="w-full p-2.5 bg-[#0B0D12] border border-gym-border rounded-xl text-xs text-white outline-none focus:border-cyan-400"
+                  >
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Blood Group
+                  </label>
+                  <select
+                    value={editFormData.bloodGroup}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, bloodGroup: e.target.value }))}
+                    className="w-full p-2.5 bg-[#0B0D12] border border-gym-border rounded-xl text-xs text-white outline-none focus:border-cyan-400"
+                  >
+                    <option value="O+">O+</option>
+                    <option value="O-">O-</option>
+                    <option value="A+">A+</option>
+                    <option value="A-">A-</option>
+                    <option value="B+">B+</option>
+                    <option value="B-">B-</option>
+                    <option value="AB+">AB+</option>
+                    <option value="AB-">AB-</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Fitness Goal */}
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                  Primary Fitness Target
+                </label>
+                <select
+                  value={editFormData.goal}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, goal: e.target.value as GoalType }))}
+                  className="w-full p-2.5 bg-[#0B0D12] border border-gym-border rounded-xl text-xs text-white font-bold outline-none focus:border-cyan-400"
+                >
+                  <option value="Muscle Building">Muscle Building</option>
+                  <option value="Weight Loss">Weight Loss</option>
+                  <option value="Body Recomposition">Body Recomposition</option>
+                  <option value="Endurance & Cardio">Endurance & Cardio</option>
+                  <option value="Rehab & Mobility">Rehab & Mobility</option>
+                </select>
+              </div>
+
+              {/* Height, Weight & Target Weight */}
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Height (cm)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={editFormData.heightCm || ''}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, heightCm: e.target.value === '' ? 0 : Number(e.target.value) }))}
+                      className="w-full p-2.5 pr-6 bg-[#0B0D12] border border-gym-border rounded-xl text-xs text-white font-bold outline-none focus:border-cyan-400"
+                    />
+                    {editFormData.heightCm > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setEditFormData(prev => ({ ...prev, heightCm: 0 }))}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white/10 text-slate-300 hover:text-white flex items-center justify-center text-[10px] cursor-pointer"
+                        title="Clear"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Weight (kg)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={editFormData.weightKg || ''}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, weightKg: e.target.value === '' ? 0 : Number(e.target.value) }))}
+                      className="w-full p-2.5 pr-6 bg-[#0B0D12] border border-gym-border rounded-xl text-xs text-white font-bold outline-none focus:border-cyan-400"
+                    />
+                    {editFormData.weightKg > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setEditFormData(prev => ({ ...prev, weightKg: 0 }))}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white/10 text-slate-300 hover:text-white flex items-center justify-center text-[10px] cursor-pointer"
+                        title="Clear"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Target (kg)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={editFormData.targetWeightKg || ''}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, targetWeightKg: e.target.value === '' ? 0 : Number(e.target.value) }))}
+                      className="w-full p-2.5 pr-6 bg-[#0B0D12] border border-gym-border rounded-xl text-xs text-white font-bold outline-none focus:border-cyan-400"
+                    />
+                    {editFormData.targetWeightKg > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setEditFormData(prev => ({ ...prev, targetWeightKg: 0 }))}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white/10 text-slate-300 hover:text-white flex items-center justify-center text-[10px] cursor-pointer"
+                        title="Clear"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Package Plan & Assigned Coach */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Membership Plan
+                  </label>
+                  <select
+                    value={editFormData.planId}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, planId: e.target.value }))}
+                    className="w-full p-2.5 bg-[#0B0D12] border border-gym-border rounded-xl text-xs text-white font-bold outline-none focus:border-cyan-400"
+                  >
+                    {plans.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} (₹{p.basePrice || p.totalPrice || 1500})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Assigned Trainer
+                  </label>
+                  <select
+                    value={editFormData.assignedTrainerId}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, assignedTrainerId: e.target.value }))}
+                    className="w-full p-2.5 bg-[#0B0D12] border border-gym-border rounded-xl text-xs text-white font-bold outline-none focus:border-cyan-400"
+                  >
+                    <option value="">Unassigned</option>
+                    {(employees || []).filter(e => e.role === 'Trainer' || e.role === 'Dietitian').map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} ({t.specialization || t.role})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Status */}
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                  Membership Status
+                </label>
+                <select
+                  value={editFormData.status}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, status: e.target.value as Member['status'] }))}
+                  className="w-full p-2.5 bg-[#0B0D12] border border-gym-border rounded-xl text-xs text-white font-bold outline-none focus:border-cyan-400"
+                >
+                  <option value="Active">Active</option>
+                  <option value="Renewal Due">Renewal Due</option>
+                  <option value="Expiring Soon">Expiring Soon</option>
+                  <option value="Expired">Expired</option>
+                  <option value="Suspended">Suspended</option>
+                  <option value="Pending Payment">Pending Payment</option>
+                  <option value="Frozen">Frozen</option>
+                  <option value="Cancelled">Cancelled</option>
+                </select>
+              </div>
+
+              {/* Emergency Contacts */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Emergency Contact Name
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormData.emergencyContactName}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, emergencyContactName: e.target.value }))}
+                    placeholder="e.g. Suresh Roy"
+                    className="w-full p-2.5 bg-[#0B0D12] border border-gym-border rounded-xl text-xs text-white outline-none focus:border-cyan-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Emergency Phone
+                  </label>
+                  <input
+                    type="tel"
+                    value={editFormData.emergencyMobile}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, emergencyMobile: e.target.value }))}
+                    placeholder="+91 98765 00000"
+                    className="w-full p-2.5 bg-[#0B0D12] border border-gym-border rounded-xl text-xs text-white outline-none focus:border-cyan-400"
+                  />
+                </div>
+              </div>
+
+              {/* Address */}
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                  Residential Address
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.address}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, address: e.target.value }))}
+                  placeholder="Street, City, Pin Code"
+                  className="w-full p-2.5 bg-[#0B0D12] border border-gym-border rounded-xl text-xs text-white outline-none focus:border-cyan-400"
+                />
+              </div>
+
+              {/* Medical History */}
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                  Medical History / Injuries / Health Notes
+                </label>
+                <textarea
+                  rows={2}
+                  value={editFormData.medicalHistory}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, medicalHistory: e.target.value }))}
+                  placeholder="e.g. Asthma, Knee surgery, None"
+                  className="w-full p-2.5 bg-[#0B0D12] border border-gym-border rounded-xl text-xs text-white outline-none focus:border-cyan-400"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl bg-[#1E2330] text-slate-300 font-bold hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingEdit}
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-black font-black shadow-lg shadow-cyan-500/25 flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{isSavingEdit ? 'Saving...' : 'Save Profile Changes'}</span>
                 </button>
               </div>
             </form>

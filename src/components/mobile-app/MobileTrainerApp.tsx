@@ -44,7 +44,9 @@ import {
   CalendarRange,
   Hash,
   Camera,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Edit3,
+  X
 } from 'lucide-react';
 
 type Gender = 'Male' | 'Female' | 'Other';
@@ -122,6 +124,100 @@ export const MobileTrainerApp: React.FC = () => {
   const [selectedClient, setSelectedClient] = useState<Member | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [goalFilter, setGoalFilter] = useState<string>('all');
+
+  // ── EDIT CLIENT MODAL STATE ──
+  const [isEditClientModalOpen, setIsEditClientModalOpen] = useState(false);
+  const [editClientData, setEditClientData] = useState<{
+    name: string;
+    mobile: string;
+    email: string;
+    dob: string;
+    gender: Gender;
+    goal: GoalType;
+    heightCm: number;
+    weightKg: number;
+    targetWeightKg: number;
+    bloodGroup: string;
+    emergencyContactName: string;
+    emergencyMobile: string;
+    address: string;
+    medicalHistory: string;
+    status: Member['status'];
+  }>({
+    name: '',
+    mobile: '',
+    email: '',
+    dob: '1998-01-01',
+    gender: 'Male',
+    goal: 'Muscle Building',
+    heightCm: 175,
+    weightKg: 70,
+    targetWeightKg: 70,
+    bloodGroup: 'O+',
+    emergencyContactName: '',
+    emergencyMobile: '',
+    address: '',
+    medicalHistory: '',
+    status: 'Active',
+  });
+  const [isSavingClientEdit, setIsSavingClientEdit] = useState(false);
+  const [clientEditToast, setClientEditToast] = useState<string | null>(null);
+
+  const openEditClientModal = (client: Member) => {
+    setEditClientData({
+      name: client.name || '',
+      mobile: client.mobile || '',
+      email: client.email || '',
+      dob: client.dob || '1998-01-01',
+      gender: client.gender || 'Male',
+      goal: client.goal || 'Muscle Building',
+      heightCm: client.heightCm || 175,
+      weightKg: client.weightKg || 70,
+      targetWeightKg: client.targetWeightKg || client.weightKg || 70,
+      bloodGroup: client.bloodGroup || 'O+',
+      emergencyContactName: client.emergencyContactName || '',
+      emergencyMobile: client.emergencyMobile || '',
+      address: client.address || '',
+      medicalHistory: client.medicalHistory || '',
+      status: client.status || 'Active',
+    });
+    setIsEditClientModalOpen(true);
+  };
+
+  const handleSaveClientEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedClient) return;
+    setIsSavingClientEdit(true);
+    try {
+      const updates: Partial<Member> = {
+        name: editClientData.name.trim(),
+        mobile: editClientData.mobile.trim(),
+        email: editClientData.email.trim(),
+        dob: editClientData.dob,
+        gender: editClientData.gender,
+        goal: editClientData.goal,
+        heightCm: Number(editClientData.heightCm) || 175,
+        weightKg: Number(editClientData.weightKg) || 70,
+        targetWeightKg: Number(editClientData.targetWeightKg) || Number(editClientData.weightKg) || 70,
+        bloodGroup: editClientData.bloodGroup,
+        emergencyContactName: editClientData.emergencyContactName.trim(),
+        emergencyMobile: editClientData.emergencyMobile.trim(),
+        address: editClientData.address.trim(),
+        medicalHistory: editClientData.medicalHistory.trim(),
+        status: editClientData.status,
+      };
+      await updateMember(selectedClient.id, updates);
+      setSelectedClient(prev => prev ? { ...prev, ...updates } : null);
+      setClientEditToast('Client profile updated successfully!');
+      setTimeout(() => setClientEditToast(null), 3000);
+      setIsEditClientModalOpen(false);
+    } catch (err: any) {
+      console.error('Error updating client:', err);
+      alert('Failed to update client profile: ' + (err?.message || 'Unknown error'));
+    } finally {
+      setIsSavingClientEdit(false);
+    }
+  };
 
   // Active Plan Tab in Screen 3
   const [planSubTab, setPlanSubTab] = useState<'workout' | 'diet'>('workout');
@@ -2106,45 +2202,64 @@ export const MobileTrainerApp: React.FC = () => {
         ═══════════════════════════════════════════════════════════ */}
         {currentScreen === 'client-profile' && selectedClient && (
           <div className="space-y-4 animate-in fade-in duration-200">
-            <div className="p-4 bg-[#101422] rounded-3xl border border-white/10 shadow-xl flex items-center gap-3.5">
-              <div className="relative group shrink-0">
-                <img
-                  src={selectedClient.photoUrl}
-                  alt={selectedClient.name}
-                  className="w-14 h-14 rounded-2xl object-cover border-2 border-[#4F7CFF] shadow-lg"
-                />
-                <label className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#4F7CFF] text-white flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer hover:bg-blue-400 transition-all" title="Update Client Photo">
-                  <Camera className="w-3.5 h-3.5" />
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    className="hidden"
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        try {
-                          const dataUrl = await compressImage(file);
-                          await updateMember(selectedClient.id, { photoUrl: dataUrl, faceEnrolled: true });
-                          setSelectedClient(prev => prev ? { ...prev, photoUrl: dataUrl, faceEnrolled: true } : null);
-                        } catch (err: any) {
-                          console.warn('Failed to update photo:', err);
-                        }
-                      }
-                    }}
+            {clientEditToast && (
+              <div className="p-3 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2 animate-in fade-in">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{clientEditToast}</span>
+              </div>
+            )}
+
+            <div className="p-4 bg-[#101422] rounded-3xl border border-white/10 shadow-xl flex items-center justify-between gap-3.5">
+              <div className="flex items-center gap-3.5 flex-1 min-w-0">
+                <div className="relative group shrink-0">
+                  <img
+                    src={selectedClient.photoUrl}
+                    alt={selectedClient.name}
+                    className="w-14 h-14 rounded-2xl object-cover border-2 border-[#4F7CFF] shadow-lg"
                   />
-                </label>
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-black text-white">{selectedClient.name}</h3>
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[9px] font-black uppercase">
-                    {selectedClient.status}
-                  </span>
+                  <label className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#4F7CFF] text-white flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer hover:bg-blue-400 transition-all" title="Update Client Photo">
+                    <Camera className="w-3.5 h-3.5" />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          try {
+                            const dataUrl = await compressImage(file);
+                            await updateMember(selectedClient.id, { photoUrl: dataUrl, faceEnrolled: true });
+                            setSelectedClient(prev => prev ? { ...prev, photoUrl: dataUrl, faceEnrolled: true } : null);
+                          } catch (err: any) {
+                            console.warn('Failed to update photo:', err);
+                          }
+                        }
+                      }}
+                    />
+                  </label>
                 </div>
-                <div className="text-[10px] text-slate-400 mt-0.5">ID: {selectedClient.membershipNo} • {selectedClient.mobile}</div>
-                <div className="text-[10px] text-[#4F7CFF] font-bold mt-0.5">Target: {selectedClient.goal}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-black text-white truncate">{selectedClient.name}</h3>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[9px] font-black uppercase shrink-0">
+                      {selectedClient.status}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5 truncate">ID: {selectedClient.membershipNo} • {selectedClient.mobile}</div>
+                  <div className="text-[10px] text-[#4F7CFF] font-bold mt-0.5 truncate">Target: {selectedClient.goal}</div>
+                </div>
               </div>
+
+              <button
+                type="button"
+                onClick={() => openEditClientModal(selectedClient)}
+                className="px-3 py-2 rounded-2xl bg-[#4F7CFF]/15 hover:bg-[#4F7CFF]/25 border border-[#4F7CFF]/30 text-[#4F7CFF] flex items-center gap-1.5 active:scale-95 transition-all shrink-0 cursor-pointer shadow-sm"
+                title="Edit Client Profile"
+              >
+                <Edit3 className="w-4 h-4" />
+                <span className="text-xs font-black">Edit</span>
+              </button>
             </div>
 
             <div className="w-full max-w-sm mx-auto">
@@ -2818,6 +2933,310 @@ export const MobileTrainerApp: React.FC = () => {
         onClose={() => setIsAddExpenseOpen(false)}
         trainerName={currentTrainer?.name}
       />
+
+      {/* ── 6. EDIT CLIENT PROFILE MODAL ── */}
+      {isEditClientModalOpen && selectedClient && (
+        <div 
+          onClick={() => setIsEditClientModalOpen(false)}
+          className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-md p-0 sm:p-4 animate-in fade-in duration-200"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg bg-[#0E121E] border-t sm:border border-[#4F7CFF]/40 rounded-t-[32px] sm:rounded-[32px] p-5 pb-10 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto animate-in slide-in-from-bottom duration-300 text-xs"
+          >
+            <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto" />
+
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-[#4F7CFF]/20 text-[#4F7CFF] flex items-center justify-center border border-[#4F7CFF]/40">
+                  <Edit3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white">Edit Client Profile</h3>
+                  <p className="text-[10px] text-slate-400">ID: {selectedClient.membershipNo} • All Details Editable</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditClientModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-white/10 text-slate-400 hover:text-white flex items-center justify-center text-sm font-bold active:scale-90 transition-all cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveClientEdit} className="space-y-3.5 pt-1">
+              {/* Full Name */}
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                  Client Full Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editClientData.name}
+                  onChange={(e) => setEditClientData(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white font-semibold outline-none focus:border-[#4F7CFF]"
+                />
+              </div>
+
+              {/* Mobile & Email */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    WhatsApp Phone *
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    value={editClientData.mobile}
+                    onChange={(e) => setEditClientData(prev => ({ ...prev, mobile: e.target.value }))}
+                    className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white font-semibold outline-none focus:border-[#4F7CFF]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={editClientData.email}
+                    onChange={(e) => setEditClientData(prev => ({ ...prev, email: e.target.value }))}
+                    className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white font-semibold outline-none focus:border-[#4F7CFF]"
+                  />
+                </div>
+              </div>
+
+              {/* DOB, Gender & Blood Group */}
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Birth Date
+                  </label>
+                  <input
+                    type="date"
+                    value={editClientData.dob}
+                    onChange={(e) => setEditClientData(prev => ({ ...prev, dob: e.target.value }))}
+                    className="w-full p-2 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white outline-none focus:border-[#4F7CFF]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Gender
+                  </label>
+                  <select
+                    value={editClientData.gender}
+                    onChange={(e) => setEditClientData(prev => ({ ...prev, gender: e.target.value as Gender }))}
+                    className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white outline-none focus:border-[#4F7CFF]"
+                  >
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Blood Group
+                  </label>
+                  <select
+                    value={editClientData.bloodGroup}
+                    onChange={(e) => setEditClientData(prev => ({ ...prev, bloodGroup: e.target.value }))}
+                    className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white outline-none focus:border-[#4F7CFF]"
+                  >
+                    <option value="O+">O+</option>
+                    <option value="O-">O-</option>
+                    <option value="A+">A+</option>
+                    <option value="A-">A-</option>
+                    <option value="B+">B+</option>
+                    <option value="B-">B-</option>
+                    <option value="AB+">AB+</option>
+                    <option value="AB-">AB-</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Fitness Goal */}
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                  Primary Fitness Target
+                </label>
+                <select
+                  value={editClientData.goal}
+                  onChange={(e) => setEditClientData(prev => ({ ...prev, goal: e.target.value as GoalType }))}
+                  className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white font-bold outline-none focus:border-[#4F7CFF]"
+                >
+                  <option value="Muscle Building">Muscle Building</option>
+                  <option value="Weight Loss">Weight Loss</option>
+                  <option value="Body Recomposition">Body Recomposition</option>
+                  <option value="Endurance & Cardio">Endurance & Cardio</option>
+                  <option value="Rehab & Mobility">Rehab & Mobility</option>
+                </select>
+              </div>
+
+              {/* Height, Weight & Target Weight */}
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Height (cm)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={editClientData.heightCm || ''}
+                      onChange={(e) => setEditClientData(prev => ({ ...prev, heightCm: e.target.value === '' ? 0 : Number(e.target.value) }))}
+                      className="w-full p-2.5 pr-6 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white font-bold outline-none focus:border-[#4F7CFF]"
+                    />
+                    {editClientData.heightCm > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setEditClientData(prev => ({ ...prev, heightCm: 0 }))}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white/10 text-slate-300 hover:text-white flex items-center justify-center text-[10px] cursor-pointer"
+                        title="Clear"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Weight (kg)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={editClientData.weightKg || ''}
+                      onChange={(e) => setEditClientData(prev => ({ ...prev, weightKg: e.target.value === '' ? 0 : Number(e.target.value) }))}
+                      className="w-full p-2.5 pr-6 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white font-bold outline-none focus:border-[#4F7CFF]"
+                    />
+                    {editClientData.weightKg > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setEditClientData(prev => ({ ...prev, weightKg: 0 }))}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white/10 text-slate-300 hover:text-white flex items-center justify-center text-[10px] cursor-pointer"
+                        title="Clear"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Target (kg)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={editClientData.targetWeightKg || ''}
+                      onChange={(e) => setEditClientData(prev => ({ ...prev, targetWeightKg: e.target.value === '' ? 0 : Number(e.target.value) }))}
+                      className="w-full p-2.5 pr-6 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white font-bold outline-none focus:border-[#4F7CFF]"
+                    />
+                    {editClientData.targetWeightKg > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setEditClientData(prev => ({ ...prev, targetWeightKg: 0 }))}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white/10 text-slate-300 hover:text-white flex items-center justify-center text-[10px] cursor-pointer"
+                        title="Clear"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Status */}
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                  Membership Status
+                </label>
+                <select
+                  value={editClientData.status}
+                  onChange={(e) => setEditClientData(prev => ({ ...prev, status: e.target.value as Member['status'] }))}
+                  className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white font-bold outline-none focus:border-[#4F7CFF]"
+                >
+                  <option value="Active">Active</option>
+                  <option value="Renewal Due">Renewal Due</option>
+                  <option value="Expiring Soon">Expiring Soon</option>
+                  <option value="Expired">Expired</option>
+                  <option value="Suspended">Suspended</option>
+                  <option value="Pending Payment">Pending Payment</option>
+                  <option value="Frozen">Frozen</option>
+                  <option value="Cancelled">Cancelled</option>
+                </select>
+              </div>
+
+              {/* Emergency Contacts */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Emergency Contact Name
+                  </label>
+                  <input
+                    type="text"
+                    value={editClientData.emergencyContactName}
+                    onChange={(e) => setEditClientData(prev => ({ ...prev, emergencyContactName: e.target.value }))}
+                    placeholder="e.g. Family member"
+                    className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white outline-none focus:border-[#4F7CFF]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Emergency Phone
+                  </label>
+                  <input
+                    type="tel"
+                    value={editClientData.emergencyMobile}
+                    onChange={(e) => setEditClientData(prev => ({ ...prev, emergencyMobile: e.target.value }))}
+                    placeholder="+91 98765 00000"
+                    className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white outline-none focus:border-[#4F7CFF]"
+                  />
+                </div>
+              </div>
+
+              {/* Address */}
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                  Residential Address
+                </label>
+                <input
+                  type="text"
+                  value={editClientData.address}
+                  onChange={(e) => setEditClientData(prev => ({ ...prev, address: e.target.value }))}
+                  placeholder="Street, City, Pin Code"
+                  className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white outline-none focus:border-[#4F7CFF]"
+                />
+              </div>
+
+              {/* Medical History */}
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                  Medical History / Injuries / Health Notes
+                </label>
+                <textarea
+                  rows={2}
+                  value={editClientData.medicalHistory}
+                  onChange={(e) => setEditClientData(prev => ({ ...prev, medicalHistory: e.target.value }))}
+                  placeholder="e.g. Knee pain during squats, Hypertension, None"
+                  className="w-full p-2.5 bg-[#080C14] border border-white/10 rounded-xl text-xs text-white outline-none focus:border-[#4F7CFF]"
+                />
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={isSavingClientEdit}
+                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#4F7CFF] to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-black text-xs flex items-center justify-center gap-2 shadow-xl shadow-[#4F7CFF]/25 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{isSavingClientEdit ? 'Saving Updates...' : 'Save Client Profile'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

@@ -234,6 +234,7 @@ interface GymContextType {
   
   addAppUser: (user: AppUser) => Promise<void>;
   addEmployee: (emp: Employee) => Promise<void>;
+  updateEmployee: (id: string, updatedData: Partial<Employee>) => Promise<void>;
 }
 
 const GymContext = createContext<GymContextType | undefined>(undefined);
@@ -2119,19 +2120,28 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateMember = async (id: string, updatedData: Partial<Member>) => {
     setMembers(prev => prev.map(m => m.id === id ? { ...m, ...updatedData } : m));
-    safeDbWrite(updateDoc(doc(db, 'members', id), updatedData));
+    safeDbWrite(updateDoc(doc(db, 'members', id), removeUndefined(updatedData)));
 
-    // Synchronize current appUserAccount session and users collection in Firestore
+    // Synchronize users collection in Firestore if linked
+    const linkedUser = appUsers.find(u => u.linkedId === id || u.id === id);
+    if (linkedUser) {
+      const userUpdates: Partial<AppUser> = {};
+      if (updatedData.name !== undefined) userUpdates.linkedName = updatedData.name;
+      if (updatedData.email !== undefined) userUpdates.email = updatedData.email;
+      if (updatedData.photoUrl !== undefined) userUpdates.photoUrl = updatedData.photoUrl;
+      if (Object.keys(userUpdates).length > 0) {
+        setAppUsers(prev => prev.map(u => u.id === linkedUser.id ? { ...u, ...userUpdates } : u));
+        safeDbWrite(updateDoc(doc(db, 'users', linkedUser.id), removeUndefined(userUpdates)));
+      }
+    }
+
+    // Synchronize current appUserAccount session
     if (appUserAccount && (appUserAccount.linkedId === id || appUserAccount.id === id)) {
       setAppUserAccount(prev => prev ? {
         ...prev,
         photoUrl: updatedData.photoUrl !== undefined ? updatedData.photoUrl : prev.photoUrl,
         linkedName: updatedData.name !== undefined ? updatedData.name : prev.linkedName,
       } : null);
-
-      if (updatedData.photoUrl !== undefined) {
-        safeDbWrite(updateDoc(doc(db, 'users', appUserAccount.id), { photoUrl: updatedData.photoUrl }));
-      }
     }
   };
 
@@ -3353,6 +3363,34 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     safeDbWrite(setDoc(doc(db, 'employees', emp.id), emp));
   };
 
+  const updateEmployee = async (id: string, updatedData: Partial<Employee>) => {
+    setEmployees(prev => prev.map(e => e.id === id ? { ...e, ...updatedData } : e));
+    safeDbWrite(updateDoc(doc(db, 'employees', id), removeUndefined(updatedData)));
+
+    // Synchronize linked appUser if exists
+    const linkedUser = appUsers.find(u => u.linkedId === id || u.id === id);
+    if (linkedUser) {
+      const userUpdates: Partial<AppUser> = {};
+      if (updatedData.name !== undefined) userUpdates.linkedName = updatedData.name;
+      if (updatedData.email !== undefined) userUpdates.email = updatedData.email;
+      if (updatedData.role !== undefined) userUpdates.role = updatedData.role as Role;
+      if (updatedData.photoUrl !== undefined) userUpdates.photoUrl = updatedData.photoUrl;
+      if (Object.keys(userUpdates).length > 0) {
+        setAppUsers(prev => prev.map(u => u.id === linkedUser.id ? { ...u, ...userUpdates } : u));
+        safeDbWrite(updateDoc(doc(db, 'users', linkedUser.id), removeUndefined(userUpdates)));
+      }
+    }
+
+    // Synchronize current appUserAccount session if the logged in user is this employee
+    if (appUserAccount && (appUserAccount.linkedId === id || appUserAccount.id === id)) {
+      setAppUserAccount(prev => prev ? {
+        ...prev,
+        photoUrl: updatedData.photoUrl !== undefined ? updatedData.photoUrl : prev.photoUrl,
+        linkedName: updatedData.name !== undefined ? updatedData.name : prev.linkedName,
+      } : null);
+    }
+  };
+
   return (
     <GymContext.Provider
       value={{
@@ -3472,6 +3510,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteMembershipPlan,
         addAppUser,
         addEmployee,
+        updateEmployee,
       }}
     >
       {children}
