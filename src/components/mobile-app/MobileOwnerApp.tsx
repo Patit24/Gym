@@ -54,6 +54,7 @@ import {
   ChevronDown,
   AlertTriangle,
   Camera,
+  Image as ImageIcon,
   CalendarRange,
   Hash
 } from 'lucide-react';
@@ -1424,38 +1425,83 @@ export const MobileOwnerApp: React.FC = () => {
                     alt="Member Preview"
                     className="w-14 h-14 rounded-2xl object-cover border-2 border-[#4F7CFF] bg-[#141722]"
                   />
-                  <label className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#4F7CFF] text-white flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer hover:bg-blue-400 transition-all" title="Upload Member Photo">
-                    <Camera className="w-3.5 h-3.5" />
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          try {
-                            const dataUrl = await compressImage(file);
-                            setMemPhotoUrl(dataUrl);
-                          } catch (err: any) {
-                            console.warn('Image processing error:', err);
+                  <div className="absolute -bottom-1 -right-1 flex gap-1">
+                    <label className="w-6 h-6 rounded-full bg-[#4F7CFF] text-white flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer hover:bg-blue-400 transition-all" title="Direct Camera Capture">
+                      <Camera className="w-3.5 h-3.5" />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            try {
+                              const dataUrl = await compressImage(file);
+                              setMemPhotoUrl(dataUrl);
+                            } catch (err: any) {
+                              console.warn('Image processing error:', err);
+                            }
                           }
-                        }
-                      }}
-                    />
-                  </label>
+                        }}
+                      />
+                    </label>
+                  </div>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <span className="text-xs font-black text-white block">Upload Member Photo</span>
-                  <span className="text-[10px] text-slate-400 block mt-0.5">Click camera icon to pick photo / selfie for digital membership pass</span>
-                  {memPhotoUrl && (
-                    <button
-                      type="button"
-                      onClick={() => setMemPhotoUrl('')}
-                      className="text-[10px] text-red-400 font-bold hover:underline mt-1 cursor-pointer"
-                    >
-                      Remove photo
-                    </button>
-                  )}
+                  <span className="text-xs font-black text-white block">Member Profile Picture</span>
+                  <div className="flex items-center gap-2 mt-1">
+                    <label className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#4F7CFF]/20 border border-[#4F7CFF]/40 text-[#4F7CFF] text-[10px] font-bold cursor-pointer active:scale-95 hover:bg-[#4F7CFF]/30 transition-all">
+                      <Camera className="w-3 h-3" />
+                      <span>Take Photo</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            try {
+                              const dataUrl = await compressImage(file);
+                              setMemPhotoUrl(dataUrl);
+                            } catch (err: any) {
+                              console.warn('Image processing error:', err);
+                            }
+                          }
+                        }}
+                      />
+                    </label>
+                    <label className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-slate-300 text-[10px] font-bold cursor-pointer active:scale-95 hover:bg-white/10 transition-all">
+                      <ImageIcon className="w-3 h-3 text-slate-400" />
+                      <span>Gallery</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            try {
+                              const dataUrl = await compressImage(file);
+                              setMemPhotoUrl(dataUrl);
+                            } catch (err: any) {
+                              console.warn('Image processing error:', err);
+                            }
+                          }
+                        }}
+                      />
+                    </label>
+                    {memPhotoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setMemPhotoUrl('')}
+                        className="text-[10px] text-red-400 font-bold hover:underline cursor-pointer ml-1"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1588,17 +1634,41 @@ export const MobileOwnerApp: React.FC = () => {
 
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">
-                          Months Count *
-                        </label>
-                        <input
-                          type="number"
-                          min={1}
-                          max={36}
-                          value={memCustomMonths}
-                          onChange={(e) => setMemCustomMonths(Math.max(1, parseInt(e.target.value) || 1))}
-                          className="w-full p-2 bg-[#07090E] rounded-xl border border-orange-500/40 text-xs text-orange-300 font-bold outline-none focus:border-orange-400"
-                        />
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-[9px] font-bold text-slate-400 uppercase">
+                            Months Count *
+                          </label>
+                          {memCustomMonths > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setMemCustomMonths(1)}
+                              className="text-[9px] text-orange-400/80 hover:text-orange-300 font-bold cursor-pointer"
+                              title="Reset months"
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min={1}
+                            max={36}
+                            value={memCustomMonths || ''}
+                            onChange={(e) => setMemCustomMonths(e.target.value === '' ? 0 : Math.max(0, parseInt(e.target.value) || 0))}
+                            className="w-full p-2 pr-7 bg-[#07090E] rounded-xl border border-orange-500/40 text-xs text-orange-300 font-bold outline-none focus:border-orange-400"
+                          />
+                          {memCustomMonths > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setMemCustomMonths(1)}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center text-[10px] cursor-pointer"
+                              title="Clear"
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <div>
                         <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">
@@ -1955,6 +2025,7 @@ export const MobileOwnerApp: React.FC = () => {
                     <input
                       type="file"
                       accept="image/*"
+                      capture="environment"
                       className="hidden"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
@@ -2423,14 +2494,26 @@ export const MobileOwnerApp: React.FC = () => {
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
                   Amount (₹) *
                 </label>
-                <input
-                  type="number"
-                  placeholder="e.g. 5000"
-                  value={expAmount}
-                  onChange={(e) => setExpAmount(Number(e.target.value))}
-                  required
-                  className="w-full p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white focus:outline-none focus:border-rose-400"
-                />
+                <div className="relative">
+                  <input
+                    type="number"
+                    placeholder="e.g. 5000"
+                    value={expAmount || ''}
+                    onChange={(e) => setExpAmount(Number(e.target.value) || 0)}
+                    required
+                    className="w-full p-2.5 pr-8 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white focus:outline-none focus:border-rose-400"
+                  />
+                  {expAmount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setExpAmount(0)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center text-[10px] cursor-pointer"
+                      title="Clear"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="pt-2">
@@ -3190,11 +3273,21 @@ export const MobileOwnerApp: React.FC = () => {
                   <input
                     type="number"
                     min="0"
-                    value={feeReg}
-                    onChange={(e) => setFeeReg(Number(e.target.value))}
-                    className="w-full pl-8 pr-3 py-2.5 bg-[#07090E] rounded-2xl border border-white/10 text-white font-extrabold text-sm focus:border-cyan-400 focus:outline-none"
+                    value={feeReg || ''}
+                    onChange={(e) => setFeeReg(Number(e.target.value) || 0)}
+                    className="w-full pl-8 pr-8 py-2.5 bg-[#07090E] rounded-2xl border border-white/10 text-white font-extrabold text-sm focus:border-cyan-400 focus:outline-none"
                     placeholder="500"
                   />
+                  {feeReg > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setFeeReg(0)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center text-xs cursor-pointer"
+                      title="Clear"
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
                 <p className="text-[10px] text-slate-400">One-time joining fee charged at first admission</p>
               </div>
@@ -3215,11 +3308,21 @@ export const MobileOwnerApp: React.FC = () => {
                   <input
                     type="number"
                     min="0"
-                    value={feeMonthly}
-                    onChange={(e) => setFeeMonthly(Number(e.target.value))}
-                    className="w-full pl-8 pr-3 py-2.5 bg-[#07090E] rounded-2xl border border-white/10 text-white font-extrabold text-sm focus:border-cyan-400 focus:outline-none"
+                    value={feeMonthly || ''}
+                    onChange={(e) => setFeeMonthly(Number(e.target.value) || 0)}
+                    className="w-full pl-8 pr-8 py-2.5 bg-[#07090E] rounded-2xl border border-white/10 text-white font-extrabold text-sm focus:border-cyan-400 focus:outline-none"
                     placeholder="1500"
                   />
+                  {feeMonthly > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setFeeMonthly(0)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center text-xs cursor-pointer"
+                      title="Clear"
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
                 <p className="text-[10px] text-slate-400">Recurring 1-month gym floor pass rate</p>
               </div>
@@ -3240,11 +3343,21 @@ export const MobileOwnerApp: React.FC = () => {
                   <input
                     type="number"
                     min="0"
-                    value={feeQuarterly}
-                    onChange={(e) => setFeeQuarterly(Number(e.target.value))}
-                    className="w-full pl-8 pr-3 py-2.5 bg-[#07090E] rounded-2xl border border-white/10 text-white font-extrabold text-sm focus:border-cyan-400 focus:outline-none"
+                    value={feeQuarterly || ''}
+                    onChange={(e) => setFeeQuarterly(Number(e.target.value) || 0)}
+                    className="w-full pl-8 pr-8 py-2.5 bg-[#07090E] rounded-2xl border border-white/10 text-white font-extrabold text-sm focus:border-cyan-400 focus:outline-none"
                     placeholder="4000"
                   />
+                  {feeQuarterly > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setFeeQuarterly(0)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center text-xs cursor-pointer"
+                      title="Clear"
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
                 <p className="text-[10px] text-slate-400">Quarterly transformation package rate</p>
               </div>
@@ -3265,11 +3378,21 @@ export const MobileOwnerApp: React.FC = () => {
                   <input
                     type="number"
                     min="0"
-                    value={feeYearly}
-                    onChange={(e) => setFeeYearly(Number(e.target.value))}
-                    className="w-full pl-8 pr-3 py-2.5 bg-[#07090E] rounded-2xl border border-white/10 text-white font-extrabold text-sm focus:border-cyan-400 focus:outline-none"
+                    value={feeYearly || ''}
+                    onChange={(e) => setFeeYearly(Number(e.target.value) || 0)}
+                    className="w-full pl-8 pr-8 py-2.5 bg-[#07090E] rounded-2xl border border-white/10 text-white font-extrabold text-sm focus:border-cyan-400 focus:outline-none"
                     placeholder="12000"
                   />
+                  {feeYearly > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setFeeYearly(0)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center text-xs cursor-pointer"
+                      title="Clear"
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
                 <p className="text-[10px] text-slate-400">Full 12-month unlimited membership rate</p>
               </div>
@@ -3692,10 +3815,20 @@ export const MobileOwnerApp: React.FC = () => {
                     type="number"
                     min="1"
                     required
-                    value={collectDueAmount}
-                    onChange={(e) => setCollectDueAmount(Number(e.target.value))}
-                    className="w-full pl-8 pr-3.5 py-3 bg-[#080C14] border border-white/10 rounded-2xl text-xs text-white font-extrabold outline-none focus:border-amber-400"
+                    value={collectDueAmount || ''}
+                    onChange={(e) => setCollectDueAmount(Number(e.target.value) || 0)}
+                    className="w-full pl-8 pr-8 py-3 bg-[#080C14] border border-white/10 rounded-2xl text-xs text-white font-extrabold outline-none focus:border-amber-400"
                   />
+                  {collectDueAmount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setCollectDueAmount(0)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center text-xs cursor-pointer"
+                      title="Clear"
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
               </div>
 

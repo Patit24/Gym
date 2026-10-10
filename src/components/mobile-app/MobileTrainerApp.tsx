@@ -43,7 +43,8 @@ import {
   DollarSign,
   CalendarRange,
   Hash,
-  Camera
+  Camera,
+  Image as ImageIcon
 } from 'lucide-react';
 
 type Gender = 'Male' | 'Female' | 'Other';
@@ -1772,11 +1773,12 @@ export const MobileTrainerApp: React.FC = () => {
                     alt="Client Preview"
                     className="w-14 h-14 rounded-2xl object-cover border-2 border-[#4F7CFF] bg-[#141722]"
                   />
-                  <label className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#4F7CFF] text-white flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer hover:bg-blue-400 transition-all" title="Upload Client Photo">
+                  <label className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#4F7CFF] text-white flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer hover:bg-blue-400 transition-all" title="Direct Camera Capture">
                     <Camera className="w-3.5 h-3.5" />
                     <input
                       type="file"
                       accept="image/*"
+                      capture="environment"
                       className="hidden"
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
@@ -1794,16 +1796,58 @@ export const MobileTrainerApp: React.FC = () => {
                 </div>
                 <div className="flex-1 min-w-0">
                   <span className="text-xs font-black text-white block">Client Profile Picture</span>
-                  <span className="text-[10px] text-slate-400 block mt-0.5">Click camera icon to add client photo / selfie for smart pass</span>
-                  {clPhotoUrl && (
-                    <button
-                      type="button"
-                      onClick={() => setClPhotoUrl('')}
-                      className="text-[10px] text-red-400 font-bold hover:underline mt-1 cursor-pointer"
-                    >
-                      Remove photo
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2 mt-1">
+                    <label className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#4F7CFF]/20 border border-[#4F7CFF]/40 text-[#4F7CFF] text-[10px] font-bold cursor-pointer active:scale-95 hover:bg-[#4F7CFF]/30 transition-all">
+                      <Camera className="w-3 h-3" />
+                      <span>Take Photo</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            try {
+                              const dataUrl = await compressImage(file);
+                              setClPhotoUrl(dataUrl);
+                            } catch (err: any) {
+                              console.warn('Image processing error:', err);
+                            }
+                          }
+                        }}
+                      />
+                    </label>
+                    <label className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-slate-300 text-[10px] font-bold cursor-pointer active:scale-95 hover:bg-white/10 transition-all">
+                      <ImageIcon className="w-3 h-3 text-slate-400" />
+                      <span>Gallery</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            try {
+                              const dataUrl = await compressImage(file);
+                              setClPhotoUrl(dataUrl);
+                            } catch (err: any) {
+                              console.warn('Image processing error:', err);
+                            }
+                          }
+                        }}
+                      />
+                    </label>
+                    {clPhotoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setClPhotoUrl('')}
+                        className="text-[10px] text-red-400 font-bold hover:underline cursor-pointer ml-1"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1907,17 +1951,41 @@ export const MobileTrainerApp: React.FC = () => {
 
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">
-                          Months Count *
-                        </label>
-                        <input
-                          type="number"
-                          min={1}
-                          max={36}
-                          value={clCustomMonths}
-                          onChange={(e) => setClCustomMonths(Math.max(1, parseInt(e.target.value) || 1))}
-                          className="w-full p-2 bg-[#07090E] rounded-xl border border-orange-500/40 text-xs text-orange-300 font-bold outline-none focus:border-orange-400"
-                        />
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-[9px] font-bold text-slate-400 uppercase">
+                            Months Count *
+                          </label>
+                          {clCustomMonths > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setClCustomMonths(1)}
+                              className="text-[9px] text-orange-400/80 hover:text-orange-300 font-bold cursor-pointer"
+                              title="Reset months"
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min={1}
+                            max={36}
+                            value={clCustomMonths || ''}
+                            onChange={(e) => setClCustomMonths(e.target.value === '' ? 0 : Math.max(0, parseInt(e.target.value) || 0))}
+                            className="w-full p-2 pr-7 bg-[#07090E] rounded-xl border border-orange-500/40 text-xs text-orange-300 font-bold outline-none focus:border-orange-400"
+                          />
+                          {clCustomMonths > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setClCustomMonths(1)}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center text-[10px] cursor-pointer"
+                              title="Clear"
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <div>
                         <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">
@@ -2050,6 +2118,7 @@ export const MobileTrainerApp: React.FC = () => {
                   <input
                     type="file"
                     accept="image/*"
+                    capture="environment"
                     className="hidden"
                     onChange={async (e) => {
                       const file = e.target.files?.[0];

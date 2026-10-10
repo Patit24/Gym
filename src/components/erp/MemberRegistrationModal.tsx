@@ -10,6 +10,7 @@ import {
   CalendarRange,
   Hash,
   Camera,
+  Image as ImageIcon,
 } from 'lucide-react';
 
 interface MemberRegistrationModalProps {
@@ -51,6 +52,8 @@ export const MemberRegistrationModal: React.FC<MemberRegistrationModalProps> = (
   );
 
   const [createdMember, setCreatedMember] = useState<Member | null>(null);
+  const [submitError, setSubmitError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -87,60 +90,69 @@ export const MemberRegistrationModal: React.FC<MemberRegistrationModalProps> = (
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError('');
+    setIsSubmitting(true);
 
-    // Auto-calculate BMI
-    const heightInM = Math.max(1, formData.heightCm) / 100;
-    const bmiVal = Number((formData.weightKg / (heightInM * heightInM)).toFixed(1));
+    try {
+      // Auto-calculate BMI
+      const heightInM = Math.max(1, formData.heightCm) / 100;
+      const bmiVal = Number((formData.weightKg / (heightInM * heightInM)).toFixed(1));
 
-    const { startStr, endStr } = getEffectiveDates();
-    const effectivePrice = getEffectivePrice();
-    const effectiveMonths = isCustomDuration ? customMonths : (selectedPlan?.durationMonths || 12);
+      const { startStr, endStr } = getEffectiveDates();
+      const effectivePrice = getEffectivePrice();
+      const effectiveMonths = isCustomDuration ? customMonths : (selectedPlan?.durationMonths || 12);
 
-    const customPlanName = isCustomDuration
-      ? `${selectedPlan?.name || 'Custom'} (${effectiveMonths} Months)`
-      : selectedPlan?.name || 'Standard Plan';
+      const customPlanName = isCustomDuration
+        ? `${selectedPlan?.name || 'Custom'} (${effectiveMonths} Months)`
+        : selectedPlan?.name || 'Standard Plan';
 
-    const newMem = await addMember({
-      name: formData.name.trim() || 'New Member',
-      photoUrl: photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(formData.name || 'Member')}`,
-      faceEnrolled: !!photoUrl,
-      mobile: formData.mobile.trim(),
-      email: formData.email.trim(),
-      dob: formData.dob,
-      gender: formData.gender,
-      heightCm: Number(formData.heightCm) || 170,
-      weightKg: Number(formData.weightKg) || 70,
-      startWeightKg: Number(formData.weightKg) || 70,
-      bmi: bmiVal,
-      chestCm: Number(formData.chestCm) || 95,
-      waistCm: 0,
-      armsCm: 0,
-      thighsCm: 0,
-      bloodGroup: '',
-      emergencyContactName: '',
-      emergencyMobile: '',
-      address: '',
-      medicalHistory: 'None',
-      goal: 'Muscle Building',
-      referralSource: 'Direct',
-      branchId: formData.branchId,
-      planId: isCustomDuration ? `${formData.planId}-custom-${effectiveMonths}m` : formData.planId,
-      planName: customPlanName,
-      startDate: startStr,
-      endDate: endStr,
-      expiryDate: endStr,
-      paidAmount: effectivePrice,
-      totalPlanAmount: effectivePrice,
-      assignedTrainerId: formData.assignedTrainerId,
-      assignedDietitianId: formData.assignedDietitianId,
-      pendingDues: 0,
-    });
+      const newMem = await addMember({
+        name: formData.name.trim() || 'New Member',
+        photoUrl: photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(formData.name || 'Member')}`,
+        faceEnrolled: !!photoUrl,
+        mobile: formData.mobile.trim(),
+        email: formData.email.trim(),
+        dob: formData.dob,
+        gender: formData.gender,
+        heightCm: Number(formData.heightCm) || 170,
+        weightKg: Number(formData.weightKg) || 70,
+        startWeightKg: Number(formData.weightKg) || 70,
+        bmi: bmiVal,
+        chestCm: Number(formData.chestCm) || 95,
+        waistCm: 0,
+        armsCm: 0,
+        thighsCm: 0,
+        bloodGroup: '',
+        emergencyContactName: '',
+        emergencyMobile: '',
+        address: '',
+        medicalHistory: 'None',
+        goal: 'Muscle Building',
+        referralSource: 'Direct',
+        branchId: formData.branchId,
+        planId: isCustomDuration ? `${formData.planId}-custom-${effectiveMonths}m` : formData.planId,
+        planName: customPlanName,
+        startDate: startStr,
+        endDate: endStr,
+        expiryDate: endStr,
+        paidAmount: effectivePrice,
+        totalPlanAmount: effectivePrice,
+        assignedTrainerId: formData.assignedTrainerId,
+        assignedDietitianId: formData.assignedDietitianId,
+        pendingDues: 0,
+      });
 
-    setCreatedMember(newMem);
+      setCreatedMember(newMem);
+    } catch (err: any) {
+      setSubmitError(err?.message || 'Failed to create member. Please check the details and try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleReset = () => {
     setCreatedMember(null);
+    setSubmitError('');
     setPhotoUrl('');
     onClose();
   };
@@ -239,11 +251,12 @@ export const MemberRegistrationModal: React.FC<MemberRegistrationModalProps> = (
                     alt="Member Preview"
                     className="w-14 h-14 rounded-2xl object-cover border-2 border-[#27D980] bg-[#141722]"
                   />
-                  <label className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#27D980] text-black flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer hover:bg-emerald-400 transition-all" title="Upload Member Photo">
+                  <label className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#27D980] text-black flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer hover:bg-emerald-400 transition-all" title="Direct Camera Capture">
                     <Camera className="w-3.5 h-3.5" />
                     <input
                       type="file"
                       accept="image/*"
+                      capture="environment"
                       className="hidden"
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
@@ -260,17 +273,59 @@ export const MemberRegistrationModal: React.FC<MemberRegistrationModalProps> = (
                   </label>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <span className="text-xs font-black text-white block">Upload Member Profile Photo</span>
-                  <span className="text-[10px] text-slate-400 block mt-0.5">Click camera icon to upload photo for member digital pass &amp; access card</span>
-                  {photoUrl && (
-                    <button
-                      type="button"
-                      onClick={() => setPhotoUrl('')}
-                      className="text-[10px] text-red-400 font-bold hover:underline mt-1 cursor-pointer"
-                    >
-                      Remove photo
-                    </button>
-                  )}
+                  <span className="text-xs font-black text-white block">Member Profile Photo</span>
+                  <div className="flex items-center gap-2 mt-1">
+                    <label className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#27D980]/20 border border-[#27D980]/40 text-[#27D980] text-[10px] font-bold cursor-pointer active:scale-95 hover:bg-[#27D980]/30 transition-all">
+                      <Camera className="w-3 h-3" />
+                      <span>Take Photo</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            try {
+                              const dataUrl = await compressImage(file);
+                              setPhotoUrl(dataUrl);
+                            } catch (err: any) {
+                              console.warn('Image compression failed:', err);
+                            }
+                          }
+                        }}
+                      />
+                    </label>
+                    <label className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-slate-300 text-[10px] font-bold cursor-pointer active:scale-95 hover:bg-white/10 transition-all">
+                      <ImageIcon className="w-3 h-3 text-slate-400" />
+                      <span>Gallery</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            try {
+                              const dataUrl = await compressImage(file);
+                              setPhotoUrl(dataUrl);
+                            } catch (err: any) {
+                              console.warn('Image compression failed:', err);
+                            }
+                          }
+                        }}
+                      />
+                    </label>
+                    {photoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setPhotoUrl('')}
+                        className="text-[10px] text-red-400 font-bold hover:underline cursor-pointer ml-1"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -349,39 +404,75 @@ export const MemberRegistrationModal: React.FC<MemberRegistrationModalProps> = (
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block text-[10px] text-gym-subtext mb-1 font-bold">Weight (kg) *</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    required
-                    placeholder="e.g. 72.5"
-                    value={formData.weightKg}
-                    onChange={(e) => setFormData({ ...formData, weightKg: Number(e.target.value) })}
-                    className="w-full bg-[#0B0D12] border border-gym-border rounded-xl px-3 py-2 text-white font-bold text-[#27D980] outline-none focus:border-[#4F7CFF]"
-                  />
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.1"
+                      required
+                      placeholder="e.g. 72.5"
+                      value={formData.weightKg || ''}
+                      onChange={(e) => setFormData({ ...formData, weightKg: Number(e.target.value) || 0 })}
+                      className="w-full bg-[#0B0D12] border border-gym-border rounded-xl px-3 pr-7 py-2 text-white font-bold text-[#27D980] outline-none focus:border-[#4F7CFF]"
+                    />
+                    {formData.weightKg > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, weightKg: 0 })}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center text-[10px] cursor-pointer"
+                        title="Clear"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div>
                   <label className="block text-[10px] text-gym-subtext mb-1 font-bold">Height (cm) *</label>
-                  <input
-                    type="number"
-                    required
-                    placeholder="e.g. 175"
-                    value={formData.heightCm}
-                    onChange={(e) => setFormData({ ...formData, heightCm: Number(e.target.value) })}
-                    className="w-full bg-[#0B0D12] border border-gym-border rounded-xl px-3 py-2 text-white font-bold outline-none focus:border-[#4F7CFF]"
-                  />
+                  <div className="relative">
+                    <input
+                      type="number"
+                      required
+                      placeholder="e.g. 175"
+                      value={formData.heightCm || ''}
+                      onChange={(e) => setFormData({ ...formData, heightCm: Number(e.target.value) || 0 })}
+                      className="w-full bg-[#0B0D12] border border-gym-border rounded-xl px-3 pr-7 py-2 text-white font-bold outline-none focus:border-[#4F7CFF]"
+                    />
+                    {formData.heightCm > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, heightCm: 0 })}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center text-[10px] cursor-pointer"
+                        title="Clear"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div>
                   <label className="block text-[10px] text-gym-subtext mb-1 font-bold">Chest (cm) *</label>
-                  <input
-                    type="number"
-                    required
-                    placeholder="e.g. 100"
-                    value={formData.chestCm}
-                    onChange={(e) => setFormData({ ...formData, chestCm: Number(e.target.value) })}
-                    className="w-full bg-[#0B0D12] border border-gym-border rounded-xl px-3 py-2 text-white font-bold outline-none focus:border-[#4F7CFF]"
-                  />
+                  <div className="relative">
+                    <input
+                      type="number"
+                      required
+                      placeholder="e.g. 100"
+                      value={formData.chestCm || ''}
+                      onChange={(e) => setFormData({ ...formData, chestCm: Number(e.target.value) || 0 })}
+                      className="w-full bg-[#0B0D12] border border-gym-border rounded-xl px-3 pr-7 py-2 text-white font-bold outline-none focus:border-[#4F7CFF]"
+                    />
+                    {formData.chestCm > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, chestCm: 0 })}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center text-[10px] cursor-pointer"
+                        title="Clear"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -468,16 +559,40 @@ export const MemberRegistrationModal: React.FC<MemberRegistrationModalProps> = (
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-[10px] text-slate-400 mb-1">Number of Months *</label>
-                      <input
-                        type="number"
-                        min={1}
-                        max={36}
-                        required
-                        value={customMonths}
-                        onChange={(e) => setCustomMonths(Math.max(1, parseInt(e.target.value) || 1))}
-                        className="w-full bg-[#0B0D12] border border-orange-500/40 rounded-xl px-3 py-2 text-white font-bold text-orange-300 outline-none focus:border-orange-400"
-                      />
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-[10px] text-slate-400">Number of Months *</label>
+                        {customMonths > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setCustomMonths(1)}
+                            className="text-[9px] text-orange-400/80 hover:text-orange-300 font-bold cursor-pointer"
+                            title="Reset months"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min={1}
+                          max={36}
+                          required
+                          value={customMonths || ''}
+                          onChange={(e) => setCustomMonths(e.target.value === '' ? 0 : Math.max(0, parseInt(e.target.value) || 0))}
+                          className="w-full bg-[#0B0D12] border border-orange-500/40 rounded-xl px-3 pr-7 py-2 text-white font-bold text-orange-300 outline-none focus:border-orange-400"
+                        />
+                        {customMonths > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setCustomMonths(1)}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center text-[10px] cursor-pointer"
+                            title="Clear"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div>
                       <label className="block text-[10px] text-slate-400 mb-1">Start Date *</label>

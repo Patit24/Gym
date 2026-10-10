@@ -238,6 +238,20 @@ interface GymContextType {
 
 const GymContext = createContext<GymContextType | undefined>(undefined);
 
+// Helper to clean undefined fields before saving to Firestore to prevent Firestore serialization errors
+const removeUndefined = <T extends Record<string, any>>(obj: T): Partial<T> => {
+  if (!obj || typeof obj !== 'object') return obj;
+  const cleaned: Record<string, any> = {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (val !== undefined) {
+      cleaned[key] = val !== null && typeof val === 'object' && !Array.isArray(val)
+        ? removeUndefined(val)
+        : val;
+    }
+  }
+  return cleaned as Partial<T>;
+};
+
 // Safe background write wrapper with 15s timeout so cloud latency never triggers false local-mode warnings
 const safeDbWrite = (promise: Promise<any>, timeoutMs = 15000) => {
   const timeoutPromise = new Promise((_, reject) =>
@@ -1682,7 +1696,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
 
       setAppUsers((prev) => [createdAppUser!, ...prev]);
-      safeDbWrite(setDoc(doc(db, 'users', authUid), createdAppUser));
+      safeDbWrite(setDoc(doc(db, 'users', authUid), removeUndefined(createdAppUser!)));
 
       await recordAuditLog(
         'ACCOUNT_PROVISIONED',
@@ -1714,7 +1728,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setMembers((prev) => [newMember, ...prev]);
-    safeDbWrite(setDoc(doc(db, 'members', memberId), newMember));
+    safeDbWrite(setDoc(doc(db, 'members', memberId), removeUndefined(newMember)));
 
     // 7. Record Member Creation Audit
     await recordAuditLog(
@@ -1810,7 +1824,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } as any;
 
     setEmployees((prev) => [newEmployee, ...prev]);
-    safeDbWrite(setDoc(doc(db, 'employees', employeeId), newEmployee));
+    safeDbWrite(setDoc(doc(db, 'employees', employeeId), removeUndefined(newEmployee)));
 
     // 3. Build 1:1 UID User Document
     const createdAppUser: AppUser = {
@@ -1840,7 +1854,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setAppUsers((prev) => [createdAppUser, ...prev]);
-    safeDbWrite(setDoc(doc(db, 'users', userId), createdAppUser));
+    safeDbWrite(setDoc(doc(db, 'users', userId), removeUndefined(createdAppUser)));
 
     await recordAuditLog(
       'ACCOUNT_PROVISIONED',
