@@ -1747,11 +1747,13 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setEmployees((prev) => [newEmployee, ...prev]);
     safeDbWrite(setDoc(doc(db, 'employees', employeeId), newEmployee));
 
-    // 3. Build 1:1 UID User Document (excluding plaintext credentials)
+    // 3. Build 1:1 UID User Document
     const createdAppUser: AppUser = {
       id: userId,
       username,
       email: trainerEmail,
+      password: tempPassword,      // stored so local login verification works
+      tempPassword,                // shown on credential screen; cleared after first-login change
       role: newEmployee.role || 'Trainer',
       linkedId: employeeId,
       linkedName: newEmployee.name,
