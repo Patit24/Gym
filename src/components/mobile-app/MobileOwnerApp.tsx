@@ -7,6 +7,7 @@ import { MobileAppHeader } from './MobileAppHeader';
 import { MobileBottomNav, MobileNavTab } from './MobileBottomNav';
 import { PrivilegePassCard } from '../shared/PrivilegePassCard';
 import { MobileFinanceScreen } from '../mobile/MobileFinanceScreen';
+import { compressImage } from '../../utils/imageUtils';
 import {
   Home,
   Users,
@@ -14,6 +15,7 @@ import {
   Calendar,
   Layers,
   UserPlus,
+  UserX,
   TrendingUp,
   Search,
   CheckCircle2,
@@ -106,7 +108,8 @@ export const MobileOwnerApp: React.FC = () => {
     notifications,
     markNotificationRead,
     recordMemberPayment,
-    updateMember
+    updateMember,
+    revokeTrainerAccess
   } = useGym();
 
   const [currentScreen, setCurrentScreen] = useState<OwnerScreen>('home');
@@ -338,6 +341,7 @@ export const MobileOwnerApp: React.FC = () => {
 
   // Add Member Form
   const [memName, setMemName] = useState('');
+  const [memPhotoUrl, setMemPhotoUrl] = useState('');
   const [memMobile, setMemMobile] = useState('');
   const [memEmail, setMemEmail] = useState('');
   const [memGender, setMemGender] = useState<Gender>('Male');
@@ -546,7 +550,7 @@ export const MobileOwnerApp: React.FC = () => {
         name: memName.trim(),
         mobile: memMobile.trim(),
         email: memEmail.trim() || `${memName.toLowerCase().replace(/\s+/g, '')}@gmail.com`,
-        photoUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(memName)}`,
+        photoUrl: memPhotoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(memName)}`,
         gender: memGender,
         dob: '2000-01-01',
         heightCm: memHeight,
@@ -576,7 +580,7 @@ export const MobileOwnerApp: React.FC = () => {
         pendingDues: 0,
         paidAmount: totalAdmissionAmount,
         totalPlanAmount: totalAdmissionAmount,
-        faceEnrolled: false,
+        faceEnrolled: !!memPhotoUrl,
         lockerNumber: `L-${Math.floor(10 + Math.random() * 90)}`,
       }, {
         createLogin: autoCreateLogin,
@@ -596,6 +600,7 @@ export const MobileOwnerApp: React.FC = () => {
       setNewlyCreatedWhatsAppStatus(res.whatsappStatus);
 
       setMemName('');
+      setMemPhotoUrl('');
       setMemMobile('');
       setMemEmail('');
       setCurrentScreen('member-created-success');
@@ -1411,6 +1416,49 @@ export const MobileOwnerApp: React.FC = () => {
             </h3>
 
             <form onSubmit={handleCreateMember} className="space-y-3.5 text-xs">
+              {/* Profile Photo Upload Field */}
+              <div className="flex items-center gap-3.5 p-3 bg-[#0B0E17] rounded-2xl border border-white/10">
+                <div className="relative group shrink-0">
+                  <img
+                    src={memPhotoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(memName || 'NewMember')}`}
+                    alt="Member Preview"
+                    className="w-14 h-14 rounded-2xl object-cover border-2 border-[#4F7CFF] bg-[#141722]"
+                  />
+                  <label className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#4F7CFF] text-white flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer hover:bg-blue-400 transition-all" title="Upload Member Photo">
+                    <Camera className="w-3.5 h-3.5" />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          try {
+                            const dataUrl = await compressImage(file);
+                            setMemPhotoUrl(dataUrl);
+                          } catch (err: any) {
+                            console.warn('Image processing error:', err);
+                          }
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="text-xs font-black text-white block">Upload Member Photo</span>
+                  <span className="text-[10px] text-slate-400 block mt-0.5">Click camera icon to pick photo / selfie for digital membership pass</span>
+                  {memPhotoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setMemPhotoUrl('')}
+                      className="text-[10px] text-red-400 font-bold hover:underline mt-1 cursor-pointer"
+                    >
+                      Remove photo
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <div>
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
                   Full Name *
@@ -2185,13 +2233,13 @@ export const MobileOwnerApp: React.FC = () => {
                 <span>Notify Member</span>
               </button>
 
-              <button
-                onClick={() => alert(`Calling ${selectedMember.mobile}`)}
-                className="py-3 rounded-2xl bg-[#101422] hover:bg-[#151A2E] active:scale-95 border border-white/10 text-white font-bold text-xs flex items-center justify-center gap-2"
+              <a
+                href={selectedMember.mobile ? `tel:${selectedMember.mobile.replace(/[^0-9+]/g, '')}` : '#'}
+                className="py-3 rounded-2xl bg-[#101422] hover:bg-[#151A2E] active:scale-95 border border-white/10 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Phone className="w-4 h-4 text-emerald-400" />
                 <span>Call Client</span>
-              </button>
+              </a>
             </div>
           </div>
         )}
@@ -2960,6 +3008,59 @@ export const MobileOwnerApp: React.FC = () => {
                   <span>Send Credentials via WhatsApp</span>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </button>
+              </div>
+
+              {/* Coach Access & Permission Revocation Card */}
+              <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 shadow-xl space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert className="w-4 h-4 text-amber-400" />
+                    <span className="text-xs font-black text-white">Coach Access & App Security</span>
+                  </div>
+                  <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${
+                    (selectedTrainer as any).status === 'Inactive' || trainerUser?.isActive === false
+                      ? 'bg-red-500/20 text-red-300 border border-red-500/40'
+                      : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                  }`}>
+                    {(selectedTrainer as any).status === 'Inactive' || trainerUser?.isActive === false ? 'Access Revoked' : 'Access Active'}
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-slate-400">
+                  {(selectedTrainer as any).status === 'Inactive' || trainerUser?.isActive === false
+                    ? 'This trainer account is deactivated. Portal access is blocked and active mobile sessions are automatically kicked out.'
+                    : 'If revoked, any active trainer session in this app will immediately terminate and log out automatically in real time.'}
+                </p>
+
+                {(selectedTrainer as any).status === 'Inactive' || trainerUser?.isActive === false ? (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (window.confirm(`Restore coach portal access for ${selectedTrainer.name}?`)) {
+                        await revokeTrainerAccess(selectedTrainer.id, false);
+                        setSelectedTrainer(prev => prev ? { ...prev, status: 'Active' as any } : null);
+                      }
+                    }}
+                    className="w-full py-2.5 rounded-2xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-black text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Restore Coach Access & Re-activate</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (window.confirm(`Are you sure you want to REVOKE access for ${selectedTrainer.name}? This will immediately log out their active app session.`)) {
+                        await revokeTrainerAccess(selectedTrainer.id, true);
+                        setSelectedTrainer(prev => prev ? { ...prev, status: 'Inactive' as any } : null);
+                      }
+                    }}
+                    className="w-full py-2.5 rounded-2xl bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-300 font-black text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+                  >
+                    <UserX className="w-4 h-4" />
+                    <span>Revoke Coach Access (Auto Log Out)</span>
+                  </button>
+                )}
               </div>
 
               {/* 1:1 Identity & Auth Diagnostic Card */}

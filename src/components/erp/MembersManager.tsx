@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useGym } from '../../context/GymContext';
 import { Member } from '../../types/gym';
 import { PrivilegePassCard } from '../shared/PrivilegePassCard';
+import { compressImage } from '../../utils/imageUtils';
 import {
   Search,
   UserPlus,
@@ -29,7 +30,8 @@ import {
   Utensils,
   Bell,
   Printer,
-  ChevronDown
+  ChevronDown,
+  Camera
 } from 'lucide-react';
 
 interface MembersManagerProps {
@@ -49,7 +51,8 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
     plans,
     workout,
     diet,
-    attendance
+    attendance,
+    updateMember
   } = useGym();
 
   // Navigation State: 'list' = complete members directory; 'profile' = selected member's detailed view
@@ -399,9 +402,13 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
                         </div>
 
                         <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
-                          <span className="flex items-center gap-1">
+                          <a
+                            href={m.mobile ? `tel:${m.mobile.replace(/[^0-9+]/g, '')}` : '#'}
+                            className="flex items-center gap-1 hover:text-cyan-400 cursor-pointer"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             <Phone className="w-3 h-3 text-cyan-400" /> {m.mobile}
-                          </span>
+                          </a>
                           <span className="text-[10px] text-gym-subtext">{m.gender} • {m.goal}</span>
                         </div>
                       </div>
@@ -523,6 +530,42 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
               
               {/* Personal Details Panel */}
               <div className="glass-card rounded-3xl p-6 space-y-4 border border-gym-border">
+                {/* Member Profile Photo Management */}
+                <div className="flex items-center gap-4 p-3.5 rounded-2xl bg-[#0B0D12] border border-gym-border/80">
+                  <div className="relative group shrink-0">
+                    <img
+                      src={selectedMember.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedMember.id}`}
+                      alt={selectedMember.name}
+                      className="w-16 h-16 rounded-2xl object-cover border-2 border-cyan-400 bg-[#141722] shadow-md"
+                    />
+                    <label className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-cyan-500 hover:bg-cyan-400 text-black flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer transition-all" title="Upload New Profile Picture">
+                      <Camera className="w-3.5 h-3.5" />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            try {
+                              const dataUrl = await compressImage(file);
+                              await updateMember(selectedMember.id, { photoUrl: dataUrl, faceEnrolled: true });
+                              setSelectedMember(prev => prev ? { ...prev, photoUrl: dataUrl, faceEnrolled: true } : null);
+                            } catch (err) {
+                              console.warn('Failed to update member image:', err);
+                            }
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-black text-white truncate">{selectedMember.name}</h4>
+                    <span className="text-[10px] text-cyan-400 font-mono block">Membership: {selectedMember.membershipNo}</span>
+                    <span className="text-[10px] text-slate-400 block mt-0.5">Click camera icon to change profile photo for digital card</span>
+                  </div>
+                </div>
+
                 <h3 className="text-sm font-black text-white flex items-center gap-2 pb-2 border-b border-gym-border">
                   <User className="w-4 h-4 text-cyan-400" />
                   Personal Information & Contacts
@@ -530,7 +573,13 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
                 <div className="grid grid-cols-2 gap-3 text-xs">
                   <div>
                     <span className="text-[10px] text-gym-subtext uppercase font-bold block">Mobile Number</span>
-                    <span className="font-semibold text-white">{selectedMember.mobile}</span>
+                    <a
+                      href={selectedMember.mobile ? `tel:${selectedMember.mobile.replace(/[^0-9+]/g, '')}` : '#'}
+                      className="font-semibold text-cyan-400 hover:underline flex items-center gap-1 mt-0.5 cursor-pointer"
+                    >
+                      <Phone className="w-3 h-3 text-cyan-400" />
+                      <span>{selectedMember.mobile}</span>
+                    </a>
                   </div>
                   <div>
                     <span className="text-[10px] text-gym-subtext uppercase font-bold block">Email</span>
@@ -554,7 +603,17 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
                   </div>
                   <div>
                     <span className="text-[10px] text-gym-subtext uppercase font-bold block">Emergency Phone</span>
-                    <span className="font-semibold text-white">{selectedMember.emergencyMobile || 'N/A'}</span>
+                    {selectedMember.emergencyMobile ? (
+                      <a
+                        href={`tel:${selectedMember.emergencyMobile.replace(/[^0-9+]/g, '')}`}
+                        className="font-semibold text-rose-400 hover:underline flex items-center gap-1 mt-0.5 cursor-pointer"
+                      >
+                        <Phone className="w-3 h-3 text-rose-400" />
+                        <span>{selectedMember.emergencyMobile}</span>
+                      </a>
+                    ) : (
+                      <span className="font-semibold text-white">N/A</span>
+                    )}
                   </div>
                 </div>
               </div>

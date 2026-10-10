@@ -6,6 +6,7 @@ import { MobileBottomNav, MobileNavTab } from './MobileBottomNav';
 import { PrivilegePassCard } from '../shared/PrivilegePassCard';
 import { TrainerCollectPaymentModal } from '../trainer/TrainerCollectPaymentModal';
 import { TrainerAddExpenseModal } from '../trainer/TrainerAddExpenseModal';
+import { compressImage } from '../../utils/imageUtils';
 import {
   Home,
   Users,
@@ -41,7 +42,8 @@ import {
   Receipt,
   DollarSign,
   CalendarRange,
-  Hash
+  Hash,
+  Camera
 } from 'lucide-react';
 
 type Gender = 'Male' | 'Female' | 'Other';
@@ -68,6 +70,7 @@ export const MobileTrainerApp: React.FC = () => {
     addWeeklyWorkout,
     addMonthlyDiet,
     addMember,
+    updateMember,
     sendBulkNotification,
     signOutApp,
     notifications,
@@ -196,6 +199,7 @@ export const MobileTrainerApp: React.FC = () => {
 
   // Enroll Client Form
   const [clName, setClName] = useState('');
+  const [clPhotoUrl, setClPhotoUrl] = useState('');
   const [clMobile, setClMobile] = useState('');
   const [clEmail, setClEmail] = useState('');
   const [clGender, setClGender] = useState<Gender>('Male');
@@ -577,7 +581,7 @@ export const MobileTrainerApp: React.FC = () => {
         name: clName.trim(),
         mobile: clMobile.trim(),
         email: clEmail.trim() || `${clName.toLowerCase().replace(/\s+/g, '')}@gmail.com`,
-        photoUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(clName)}`,
+        photoUrl: clPhotoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(clName)}`,
         gender: clGender,
         dob: '2001-01-01',
         heightCm: 175,
@@ -606,13 +610,14 @@ export const MobileTrainerApp: React.FC = () => {
         pendingDues: 0,
         paidAmount: totalAdmissionAmount,
         totalPlanAmount: totalAdmissionAmount,
-        faceEnrolled: false,
+        faceEnrolled: !!clPhotoUrl,
         lockerNumber: `L-${Math.floor(10 + Math.random() * 90)}`,
       });
 
       setSelectedClient(created);
       setTargetMemberId(created.id);
       setClName('');
+      setClPhotoUrl('');
       setClMobile('');
       setClEmail('');
       setCurrentScreen('client-profile');
@@ -1759,6 +1764,49 @@ export const MobileTrainerApp: React.FC = () => {
             </h3>
 
             <form onSubmit={handleEnrollClient} className="space-y-3 text-xs">
+              {/* Profile Photo Upload Field */}
+              <div className="flex items-center gap-3.5 p-3 bg-[#0B0E17] rounded-2xl border border-white/10">
+                <div className="relative group shrink-0">
+                  <img
+                    src={clPhotoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(clName || 'NewClient')}`}
+                    alt="Client Preview"
+                    className="w-14 h-14 rounded-2xl object-cover border-2 border-[#4F7CFF] bg-[#141722]"
+                  />
+                  <label className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#4F7CFF] text-white flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer hover:bg-blue-400 transition-all" title="Upload Client Photo">
+                    <Camera className="w-3.5 h-3.5" />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          try {
+                            const dataUrl = await compressImage(file);
+                            setClPhotoUrl(dataUrl);
+                          } catch (err: any) {
+                            console.warn('Image processing error:', err);
+                          }
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="text-xs font-black text-white block">Client Profile Picture</span>
+                  <span className="text-[10px] text-slate-400 block mt-0.5">Click camera icon to add client photo / selfie for smart pass</span>
+                  {clPhotoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setClPhotoUrl('')}
+                      className="text-[10px] text-red-400 font-bold hover:underline mt-1 cursor-pointer"
+                    >
+                      Remove photo
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <div>
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
                   Client Full Name *
@@ -1991,11 +2039,33 @@ export const MobileTrainerApp: React.FC = () => {
         {currentScreen === 'client-profile' && selectedClient && (
           <div className="space-y-4 animate-in fade-in duration-200">
             <div className="p-4 bg-[#101422] rounded-3xl border border-white/10 shadow-xl flex items-center gap-3.5">
-              <img
-                src={selectedClient.photoUrl}
-                alt={selectedClient.name}
-                className="w-14 h-14 rounded-2xl object-cover border-2 border-[#4F7CFF] shadow-lg"
-              />
+              <div className="relative group shrink-0">
+                <img
+                  src={selectedClient.photoUrl}
+                  alt={selectedClient.name}
+                  className="w-14 h-14 rounded-2xl object-cover border-2 border-[#4F7CFF] shadow-lg"
+                />
+                <label className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#4F7CFF] text-white flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer hover:bg-blue-400 transition-all" title="Update Client Photo">
+                  <Camera className="w-3.5 h-3.5" />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        try {
+                          const dataUrl = await compressImage(file);
+                          await updateMember(selectedClient.id, { photoUrl: dataUrl, faceEnrolled: true });
+                          setSelectedClient(prev => prev ? { ...prev, photoUrl: dataUrl, faceEnrolled: true } : null);
+                        } catch (err: any) {
+                          console.warn('Failed to update photo:', err);
+                        }
+                      }
+                    }}
+                  />
+                </label>
+              </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2">
                   <h3 className="text-sm font-black text-white">{selectedClient.name}</h3>
@@ -2053,13 +2123,13 @@ export const MobileTrainerApp: React.FC = () => {
                 </button>
               </div>
 
-              <button
-                onClick={() => alert(`Calling ${selectedClient.mobile}`)}
-                className="w-full py-3 rounded-2xl bg-[#101422] hover:bg-[#151A2E] text-white font-bold text-xs flex items-center justify-center gap-2 border border-white/10"
+              <a
+                href={selectedClient.mobile ? `tel:${selectedClient.mobile.replace(/[^0-9+]/g, '')}` : '#'}
+                className="w-full py-3 rounded-2xl bg-[#101422] hover:bg-[#151A2E] text-white font-bold text-xs flex items-center justify-center gap-2 border border-white/10 cursor-pointer"
               >
                 <Phone className="w-4 h-4 text-emerald-400" />
                 <span>Call Client ({selectedClient.mobile})</span>
-              </button>
+              </a>
             </div>
           </div>
         )}

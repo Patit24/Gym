@@ -157,6 +157,7 @@ interface GymContextType {
   resetMemberPassword: (memberId: string) => Promise<{ newTempPassword: string; whatsappDirectUrl?: string }>;
   updateAccountStatus: (memberId: string, isActive: boolean) => Promise<void>;
   updateUserStatus: (userId: string, isActive: boolean) => Promise<void>;
+  revokeTrainerAccess: (trainerId: string, revoke?: boolean) => Promise<void>;
   forceUserPasswordChange: (userId: string) => Promise<void>;
   updateUserRoleAndBranch: (userId: string, role: Role, branchId: string) => Promise<void>;
   deleteUserAccount: (userId: string) => Promise<void>;
@@ -720,6 +721,34 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubReferrals();
     };
   }, []);
+
+  // ── REAL-TIME ACCESS GUARDIAN: INSTANT AUTO-LOGOUT ON ACCESS REVOCATION ──
+  useEffect(() => {
+    if (!appUserAccount) return;
+    // Master Administrator account is immune
+    if (appUserAccount.username === 'MASTERADMIN' || appUserAccount.role === 'Super Admin') return;
+
+    // 1. Check if user account was suspended in Firestore
+    const liveUser = appUsers.find(
+      u => u.id === appUserAccount.id || (u.username && u.username.toLowerCase() === appUserAccount.username.toLowerCase())
+    );
+    const isUserSuspended = liveUser && liveUser.isActive === false;
+
+    // 2. Check if trainer/employee was marked inactive in Firestore
+    let isTrainerSuspended = false;
+    if (appUserAccount.role === 'Trainer' || appUserAccount.role === 'Dietitian') {
+      const liveEmp = employees.find(e => e.id === appUserAccount.linkedId || e.id === appUserAccount.id);
+      if (liveEmp && ((liveEmp as any).status === 'Inactive' || (liveEmp as any).isActive === false)) {
+        isTrainerSuspended = true;
+      }
+    }
+
+    if (isUserSuspended || isTrainerSuspended) {
+      console.warn('Real-time Access Guardian: Account access has been revoked by administration. Logging out now.');
+      alert('Access Revoked: Your account access has been revoked or deactivated by gym administration. Logging out.');
+      signOutApp();
+    }
+  }, [appUsers, employees, appUserAccount]);
 
   useEffect(() => {
     if (!authResolved) return;
@@ -3169,6 +3198,44 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     safeDbWrite(setDoc(doc(db, 'audit_logs', auditRecord.id), auditRecord));
   };
 
+  const revokeTrainerAccess = async (trainerId: string, revoke: boolean = true) => {
+    const targetEmp = employees.find(e => e.id === trainerId);
+    const newStatus = revoke ? 'Inactive' : 'Active';
+    const isActive = !revoke;
+
+    // 1. Update Employee in state & Firestore
+    if (targetEmp) {
+      setEmployees(prev => prev.map(e => e.id === trainerId ? { ...e, status: newStatus as any } : e));
+      safeDbWrite(updateDoc(doc(db, 'employees', trainerId), { status: newStatus }));
+    }
+
+    // 2. Find and update corresponding User Account
+    const targetUser = appUsers.find(
+      u => u.linkedId === trainerId || u.id === trainerId || (targetEmp && u.email && u.email.toLowerCase() === targetEmp.email?.toLowerCase())
+    );
+
+    if (targetUser) {
+      setAppUsers(prev => prev.map(u => u.id === targetUser.id ? { ...u, isActive } : u));
+      safeDbWrite(updateDoc(doc(db, 'users', targetUser.id), { isActive }));
+    }
+
+    // 3. Log Audit Event
+    const auditRecord: AuditLog = {
+      id: `audit-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      timestamp: new Date().toISOString(),
+      eventType: revoke ? 'ACCOUNT_SUSPENDED' : 'ACCOUNT_ACTIVATED',
+      actorId: appUserAccount?.id || 'system',
+      actorName: appUserAccount?.linkedName || 'Master Admin',
+      actorRole: appUserAccount?.role || 'Super Admin',
+      targetId: trainerId,
+      targetType: 'Employee',
+      details: `Trainer ${targetEmp?.name || trainerId} access ${revoke ? 'REVOKED (Inactive)' : 'RESTORED (Active)'} by Admin.`,
+      status: 'SUCCESS'
+    };
+    setAuditLogs(prev => [auditRecord, ...prev]);
+    safeDbWrite(setDoc(doc(db, 'audit_logs', auditRecord.id), auditRecord));
+  };
+
   const forceUserPasswordChange = async (userId: string) => {
     setAppUsers(prev => prev.map(u => (u.id === userId || u.username === userId) ? { ...u, mustChangePassword: true } : u));
     safeDbWrite(updateDoc(doc(db, 'users', userId), { mustChangePassword: true }));
@@ -3344,6 +3411,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         resetMemberPassword,
         updateAccountStatus,
         updateUserStatus,
+        revokeTrainerAccess,
         forceUserPasswordChange,
         updateUserRoleAndBranch,
         deleteUserAccount,

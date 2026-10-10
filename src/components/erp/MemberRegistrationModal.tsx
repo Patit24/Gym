@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useGym } from '../../context/GymContext';
 import { Member, BranchId } from '../../types/gym';
+import { compressImage } from '../../utils/imageUtils';
 import {
   X,
   UserCheck,
@@ -8,6 +9,7 @@ import {
   Dumbbell,
   CalendarRange,
   Hash,
+  Camera,
 } from 'lucide-react';
 
 interface MemberRegistrationModalProps {
@@ -38,6 +40,8 @@ export const MemberRegistrationModal: React.FC<MemberRegistrationModalProps> = (
     assignedTrainerId: trainers[0]?.id || '',
     assignedDietitianId: dietitians[0]?.id || '',
   });
+
+  const [photoUrl, setPhotoUrl] = useState('');
 
   // Custom duration state
   const [isCustomDuration, setIsCustomDuration] = useState(false);
@@ -98,8 +102,8 @@ export const MemberRegistrationModal: React.FC<MemberRegistrationModalProps> = (
 
     const newMem = await addMember({
       name: formData.name.trim() || 'New Member',
-      photoUrl: '',
-      faceEnrolled: false,
+      photoUrl: photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(formData.name || 'Member')}`,
+      faceEnrolled: !!photoUrl,
       mobile: formData.mobile.trim(),
       email: formData.email.trim(),
       dob: formData.dob,
@@ -137,6 +141,7 @@ export const MemberRegistrationModal: React.FC<MemberRegistrationModalProps> = (
 
   const handleReset = () => {
     setCreatedMember(null);
+    setPhotoUrl('');
     onClose();
   };
 
@@ -225,6 +230,49 @@ export const MemberRegistrationModal: React.FC<MemberRegistrationModalProps> = (
               <h4 className="text-xs font-extrabold text-[#27D980] uppercase tracking-wider border-b border-gym-border/60 pb-1">
                 1. Member Personal &amp; Contact Information
               </h4>
+
+              {/* Photo Upload Avatar */}
+              <div className="flex items-center gap-3.5 p-3 bg-[#0B0D12] rounded-2xl border border-gym-border/80">
+                <div className="relative group shrink-0">
+                  <img
+                    src={photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(formData.name || 'Member')}`}
+                    alt="Member Preview"
+                    className="w-14 h-14 rounded-2xl object-cover border-2 border-[#27D980] bg-[#141722]"
+                  />
+                  <label className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#27D980] text-black flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer hover:bg-emerald-400 transition-all" title="Upload Member Photo">
+                    <Camera className="w-3.5 h-3.5" />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          try {
+                            const dataUrl = await compressImage(file);
+                            setPhotoUrl(dataUrl);
+                          } catch (err: any) {
+                            console.warn('Image compression failed:', err);
+                          }
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="text-xs font-black text-white block">Upload Member Profile Photo</span>
+                  <span className="text-[10px] text-slate-400 block mt-0.5">Click camera icon to upload photo for member digital pass &amp; access card</span>
+                  {photoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setPhotoUrl('')}
+                      className="text-[10px] text-red-400 font-bold hover:underline mt-1 cursor-pointer"
+                    >
+                      Remove photo
+                    </button>
+                  )}
+                </div>
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>

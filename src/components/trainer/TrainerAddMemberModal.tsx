@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useGym } from '../../context/GymContext';
+import { compressImage } from '../../utils/imageUtils';
 import {
   UserPlus,
   X,
@@ -13,6 +14,7 @@ import {
   ShieldCheck,
   CalendarRange,
   Hash,
+  Camera,
 } from 'lucide-react';
 
 interface TrainerAddMemberModalProps {
@@ -31,6 +33,7 @@ export const TrainerAddMemberModal: React.FC<TrainerAddMemberModalProps> = ({ is
   ) || employees.find(e => e.role === 'Trainer') || employees[0];
 
   const [name, setName] = useState('');
+  const [photoUrl, setPhotoUrl] = useState('');
   const [email, setEmail] = useState('');
   const [mobile, setMobile] = useState('');
   const [goal, setGoal] = useState<'Weight Loss' | 'Muscle Building' | 'Body Recomposition' | 'Endurance & Cardio' | 'Rehab & Mobility'>('Muscle Building');
@@ -121,8 +124,8 @@ export const TrainerAddMemberModal: React.FC<TrainerAddMemberModalProps> = ({ is
         expiryDate: endStr,
         paidAmount: effectivePrice,
         totalPlanAmount: effectivePrice,
-        faceEnrolled: false,
-        photoUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}`,
+        faceEnrolled: !!photoUrl,
+        photoUrl: photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}`,
         pendingDues: 0,
         assignedTrainerId: currentTrainer?.id,
       });
@@ -194,6 +197,49 @@ export const TrainerAddMemberModal: React.FC<TrainerAddMemberModalProps> = ({ is
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
+
+            {/* Profile Photo Upload Field */}
+            <div className="flex items-center gap-3.5 p-3 bg-[#0A0D15] rounded-2xl border border-white/10">
+              <div className="relative group shrink-0">
+                <img
+                  src={photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name || 'Client')}`}
+                  alt="Client Preview"
+                  className="w-14 h-14 rounded-2xl object-cover border-2 border-[#4F7CFF] bg-[#141722]"
+                />
+                <label className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#4F7CFF] text-white flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer hover:bg-blue-400 transition-all" title="Upload Client Photo">
+                  <Camera className="w-3.5 h-3.5" />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        try {
+                          const dataUrl = await compressImage(file);
+                          setPhotoUrl(dataUrl);
+                        } catch (err: any) {
+                          console.warn('Image compression error:', err);
+                        }
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="text-xs font-black text-white block">Client Profile Picture</span>
+                <span className="text-[10px] text-slate-400 block mt-0.5">Click camera icon to upload selfie/photo for gym pass</span>
+                {photoUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setPhotoUrl('')}
+                    className="text-[10px] text-red-400 font-bold hover:underline mt-1 cursor-pointer"
+                  >
+                    Remove photo
+                  </button>
+                )}
+              </div>
+            </div>
 
             <div className="space-y-1">
               <label className="block text-[10px] font-black text-slate-300 uppercase">Client Full Name</label>
