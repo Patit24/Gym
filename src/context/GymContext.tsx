@@ -485,7 +485,12 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const unsubPlans = onSnapshot(collection(db, 'plans'), (snap) => {
       if (!snap.empty) {
         const list: MembershipPlan[] = [];
-        snap.forEach(doc => list.push(doc.data() as MembershipPlan));
+        snap.forEach(doc => {
+          const p = doc.data() as MembershipPlan;
+          if (p && p.durationMonths !== 6 && p.duration !== 'Half-Yearly') {
+            list.push(p);
+          }
+        });
         setPlans(list);
       }
     });

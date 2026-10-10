@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useGym } from '../../context/GymContext';
 import { Member, GoalType, Exercise, DailyWorkoutSplit, MealItem, MonthlyDietPlan, Employee, BranchId } from '../../types/gym';
 import { MobileAppHeader } from './MobileAppHeader';
@@ -39,7 +39,9 @@ import {
   Cookie,
   CreditCard,
   Receipt,
-  DollarSign
+  DollarSign,
+  CalendarRange,
+  Hash
 } from 'lucide-react';
 
 type Gender = 'Male' | 'Female' | 'Other';
@@ -199,7 +201,20 @@ export const MobileTrainerApp: React.FC = () => {
   const [clGender, setClGender] = useState<Gender>('Male');
   const [clGoal, setClGoal] = useState<GoalType>('Muscle Building');
   const [clPlanId, setClPlanId] = useState(plans[0]?.id || 'plan-annual-vip');
+  const [isClCustomDuration, setIsClCustomDuration] = useState(false);
+  const [clCustomMonths, setClCustomMonths] = useState(5);
+  const [clCustomStartDate, setClCustomStartDate] = useState(
+    () => new Date().toISOString().split('T')[0]
+  );
   const [isSubmittingClient, setIsSubmittingClient] = useState(false);
+
+  // Sync selected plan with available plans (filter out 6-month preset)
+  useEffect(() => {
+    const validPlans = plans.filter(p => p.durationMonths !== 6 && p.duration !== 'Half-Yearly');
+    if (validPlans.length > 0 && (!clPlanId || !validPlans.some(p => p.id === clPlanId))) {
+      setClPlanId(validPlans[0].id);
+    }
+  }, [plans, clPlanId]);
 
   // Notification Broadcast
   const [notifTitle, setNotifTitle] = useState('');
@@ -537,9 +552,23 @@ export const MobileTrainerApp: React.FC = () => {
 
     try {
       const selectedPlan = plans.find((p) => p.id === clPlanId) || plans[0];
-      const today = new Date();
-      const expiry = new Date();
-      expiry.setDate(today.getDate() + (selectedPlan?.durationDays || (selectedPlan?.durationMonths ? selectedPlan.durationMonths * 30 : 30)));
+      const planMonths = selectedPlan?.durationMonths || 1;
+      const effectiveMonths = isClCustomDuration ? clCustomMonths : planMonths;
+
+      const basePerMonth = (selectedPlan?.basePrice || selectedPlan?.totalPrice || 1500) / planMonths;
+      const packagePrice = isClCustomDuration
+        ? Math.round(basePerMonth * clCustomMonths)
+        : (selectedPlan?.basePrice || selectedPlan?.totalPrice || 1500);
+
+      const startDateStr = isClCustomDuration ? clCustomStartDate : new Date().toISOString().split('T')[0];
+      const startObj = new Date(startDateStr);
+      const expiry = new Date(startObj);
+      expiry.setMonth(expiry.getMonth() + effectiveMonths);
+      const endDateStr = expiry.toISOString().split('T')[0];
+
+      const customPlanName = isClCustomDuration
+        ? `${selectedPlan?.name || 'Custom'} (${effectiveMonths} Months)`
+        : selectedPlan.name;
 
       const created = await addMember({
         name: clName.trim(),
@@ -564,16 +593,16 @@ export const MobileTrainerApp: React.FC = () => {
         goal: clGoal,
         referralSource: 'Trainer Client Enrollment',
         branchId: selectedBranchId,
-        planId: selectedPlan.id,
-        planName: selectedPlan.name,
-        startDate: today.toISOString().split('T')[0],
-        endDate: expiry.toISOString().split('T')[0],
-        expiryDate: expiry.toISOString().split('T')[0],
+        planId: isClCustomDuration ? `${selectedPlan.id}-custom-${effectiveMonths}m` : selectedPlan.id,
+        planName: customPlanName,
+        startDate: startDateStr,
+        endDate: endDateStr,
+        expiryDate: endDateStr,
         paymentStatus: 'Paid',
         assignedTrainerId: currentTrainer?.id || 'emp-trainer-1',
         pendingDues: 0,
-        paidAmount: selectedPlan?.totalPrice || selectedPlan?.basePrice || 1500,
-        totalPlanAmount: selectedPlan?.totalPrice || selectedPlan?.basePrice || 1500,
+        paidAmount: packagePrice,
+        totalPlanAmount: packagePrice,
         faceEnrolled: false,
         lockerNumber: `L-${Math.floor(10 + Math.random() * 90)}`,
       });
@@ -1782,7 +1811,7 @@ export const MobileTrainerApp: React.FC = () => {
                   onChange={(e) => setClPlanId(e.target.value)}
                   className="w-full p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white focus:outline-none focus:border-[#4F7CFF]"
                 >
-                  {plans.map((p) => {
+                  {plans.filter(p => p.durationMonths !== 6 && p.duration !== 'Half-Yearly').map((p) => {
                     const price = p.basePrice || p.totalPrice || 1500;
                     const durationStr = p.durationMonths 
                       ? `${p.durationMonths} ${p.durationMonths === 1 ? 'Month' : 'Months'}`
@@ -1795,6 +1824,110 @@ export const MobileTrainerApp: React.FC = () => {
                   })}
                 </select>
               </div>
+
+              {/* Custom Duration Toggle & Period Settings */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsClCustomDuration(!isClCustomDuration)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[10px] font-bold transition-all cursor-pointer ${
+                      isClCustomDuration
+                        ? 'bg-orange-500/20 border-orange-500/60 text-orange-300'
+                        : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <CalendarRange className="w-3.5 h-3.5" />
+                    <span>{isClCustomDuration ? 'Custom Duration: ON' : 'Set Custom Months / Duration'}</span>
+                  </button>
+                  {isClCustomDuration && (
+                    <span className="text-[10px] text-orange-300">
+                      Prorated monthly rate
+                    </span>
+                  )}
+                </div>
+
+                {isClCustomDuration && (
+                  <div className="p-3 bg-orange-500/10 border border-orange-500/25 rounded-2xl space-y-2.5">
+                    <div className="flex items-center gap-1.5 text-[10px] font-black text-orange-300 uppercase tracking-wider">
+                      <Hash className="w-3.5 h-3.5" />
+                      <span>Custom PT Client Window</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">
+                          Months Count *
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={36}
+                          value={clCustomMonths}
+                          onChange={(e) => setClCustomMonths(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="w-full p-2 bg-[#07090E] rounded-xl border border-orange-500/40 text-xs text-orange-300 font-bold outline-none focus:border-orange-400"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">
+                          Subscription Start *
+                        </label>
+                        <input
+                          type="date"
+                          value={clCustomStartDate}
+                          onChange={(e) => setClCustomStartDate(e.target.value)}
+                          className="w-full p-2 bg-[#07090E] rounded-xl border border-orange-500/40 text-xs text-white outline-none focus:border-orange-400"
+                        />
+                      </div>
+                    </div>
+
+                    {(() => {
+                      const startObj = new Date(clCustomStartDate || new Date());
+                      const endObj = new Date(startObj);
+                      endObj.setMonth(endObj.getMonth() + clCustomMonths);
+                      return (
+                        <div className="text-[10px] text-slate-300 flex items-center justify-between px-1">
+                          <span>Period: <strong className="text-orange-300">{clCustomStartDate}</strong> → <strong className="text-orange-300">{endObj.toISOString().split('T')[0]}</strong></span>
+                          <span className="text-slate-400 font-semibold">({clCustomMonths} month{clCustomMonths !== 1 ? 's' : ''})</span>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+
+              {/* Tariff Breakdown Summary */}
+              {(() => {
+                const selectedPlan = plans.find((p) => p.id === clPlanId) || plans[0];
+                const planMonths = selectedPlan?.durationMonths || 1;
+                const effectiveMonths = isClCustomDuration ? clCustomMonths : planMonths;
+                const basePerMonth = (selectedPlan?.basePrice || selectedPlan?.totalPrice || 1500) / planMonths;
+                const packagePrice = isClCustomDuration
+                  ? Math.round(basePerMonth * clCustomMonths)
+                  : (selectedPlan?.basePrice || selectedPlan?.totalPrice || 1500);
+
+                return (
+                  <div className="p-3 bg-[#0B0E17] rounded-2xl border border-white/10 flex items-center justify-between text-xs">
+                    <div>
+                      <span className="text-white font-bold block">
+                        {selectedPlan?.name || 'Standard Package'}
+                        {isClCustomDuration && ` — ${effectiveMonths} Months`}
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        {isClCustomDuration 
+                          ? `₹${Math.round(basePerMonth).toLocaleString('en-IN')}/mo × ${effectiveMonths} mo`
+                          : `Duration: ${selectedPlan?.durationMonths || 1} Month(s)`}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[9px] uppercase font-bold text-slate-400 block">Package Fee</span>
+                      <span className={`font-black ${isClCustomDuration ? 'text-orange-400' : 'text-[#4F7CFF]'}`}>
+                        ₹{packagePrice.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="pt-2">
                 <button
