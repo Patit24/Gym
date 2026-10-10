@@ -46,7 +46,11 @@ import {
   Camera,
   Image as ImageIcon,
   Edit3,
-  X
+  X,
+  KeyRound,
+  Copy,
+  MessageSquare,
+  ExternalLink
 } from 'lucide-react';
 
 type Gender = 'Male' | 'Female' | 'Other';
@@ -57,6 +61,7 @@ type TrainerScreen =
   | 'attendance'
   | 'more'
   | 'add-client'
+  | 'client-created-success'
   | 'client-profile'
   | 'broadcast'
   | 'set-workout'
@@ -73,6 +78,7 @@ export const MobileTrainerApp: React.FC = () => {
     addWeeklyWorkout,
     addMonthlyDiet,
     addMember,
+    provisionMemberWithAccount,
     updateMember,
     sendBulkNotification,
     signOutApp,
@@ -309,6 +315,22 @@ export const MobileTrainerApp: React.FC = () => {
   );
   const [includeAdmissionFee, setIncludeAdmissionFee] = useState(true);
   const [isSubmittingClient, setIsSubmittingClient] = useState(false);
+  const [enrollError, setEnrollError] = useState<string | null>(null);
+
+  // Newly Created Client Success State
+  const [newlyCreatedClient, setNewlyCreatedClient] = useState<Member | null>(null);
+  const [newlyCreatedTempPassword, setNewlyCreatedTempPassword] = useState<string>('');
+  const [newlyCreatedWhatsAppUrl, setNewlyCreatedWhatsAppUrl] = useState<string>('');
+  const [newlyCreatedWhatsAppStatus, setNewlyCreatedWhatsAppStatus] = useState<string>('');
+  const [copiedField, setCopiedField] = useState<string>('');
+
+  const copyToClipboard = (text: string, label: string) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      setCopiedField(label);
+      setTimeout(() => setCopiedField(''), 2500);
+    }
+  };
 
   // Sync selected plan with available plans (filter out 6-month preset)
   useEffect(() => {
@@ -649,22 +671,32 @@ export const MobileTrainerApp: React.FC = () => {
 
   const handleEnrollClient = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!clName.trim() || !clMobile.trim()) return;
+    if (!clName.trim() || !clMobile.trim()) {
+      setEnrollError('Please enter both client full name and mobile number.');
+      return;
+    }
     setIsSubmittingClient(true);
+    setEnrollError(null);
 
     try {
-      const selectedPlan = plans.find((p) => p.id === clPlanId) || plans[0];
+      const selectedPlan = plans.find((p) => p.id === clPlanId) || plans[0] || {
+        id: 'plan-1',
+        name: 'Standard Package',
+        durationMonths: 1,
+        basePrice: 500,
+        totalPrice: 500
+      };
       const planMonths = selectedPlan?.durationMonths || 1;
-      const effectiveMonths = isClCustomDuration ? clCustomMonths : planMonths;
+      const effectiveMonths = isClCustomDuration ? Math.max(1, clCustomMonths || 1) : planMonths;
 
       const basePerMonth = (selectedPlan?.basePrice || selectedPlan?.totalPrice || 500) / planMonths;
       const packagePrice = isClCustomDuration
-        ? Math.round(basePerMonth * clCustomMonths)
+        ? Math.round(basePerMonth * effectiveMonths)
         : (selectedPlan?.basePrice || selectedPlan?.totalPrice || 500);
       const regFeeAmount = includeAdmissionFee ? 500 : 0;
       const totalAdmissionAmount = packagePrice + regFeeAmount;
 
-      const startDateStr = isClCustomDuration ? clCustomStartDate : new Date().toISOString().split('T')[0];
+      const startDateStr = isClCustomDuration ? (clCustomStartDate || new Date().toISOString().split('T')[0]) : new Date().toISOString().split('T')[0];
       const startObj = new Date(startDateStr);
       const expiry = new Date(startObj);
       expiry.setMonth(expiry.getMonth() + effectiveMonths);
@@ -674,7 +706,13 @@ export const MobileTrainerApp: React.FC = () => {
         ? `${selectedPlan?.name || 'Custom'} (${effectiveMonths} Months)`
         : selectedPlan.name;
 
-      const created = await addMember({
+      const effectiveBranchId = (currentTrainer?.branchId && currentTrainer.branchId !== 'all')
+        ? currentTrainer.branchId
+        : (selectedBranchId && selectedBranchId !== 'all' ? selectedBranchId : 'branch-1');
+
+      const assignedTrainer = currentTrainer?.id || appUserAccount?.linkedId || appUserAccount?.id || 'emp-trainer-1';
+
+      const res = await provisionMemberWithAccount({
         name: clName.trim(),
         mobile: clMobile.trim(),
         email: clEmail.trim() || `${clName.toLowerCase().replace(/\s+/g, '')}@gmail.com`,
@@ -690,34 +728,47 @@ export const MobileTrainerApp: React.FC = () => {
         armsCm: 35,
         thighsCm: 55,
         bloodGroup: 'B+',
-        emergencyContactName: 'Emergency',
+        emergencyContactName: 'Emergency Contact',
         emergencyMobile: clMobile.trim(),
         address: 'City Center',
         medicalHistory: 'None',
         goal: clGoal,
         referralSource: 'Trainer Client Enrollment',
-        branchId: selectedBranchId,
+        branchId: effectiveBranchId,
         planId: isClCustomDuration ? `${selectedPlan.id}-custom-${effectiveMonths}m` : selectedPlan.id,
         planName: customPlanName,
         startDate: startDateStr,
         endDate: endDateStr,
         expiryDate: endDateStr,
         paymentStatus: 'Paid',
-        assignedTrainerId: currentTrainer?.id || 'emp-trainer-1',
+        assignedTrainerId: assignedTrainer,
         pendingDues: 0,
         paidAmount: totalAdmissionAmount,
         totalPlanAmount: totalAdmissionAmount,
         faceEnrolled: !!clPhotoUrl,
         lockerNumber: `L-${Math.floor(10 + Math.random() * 90)}`,
+      }, {
+        createLogin: true,
+        sendWhatsApp: true,
       });
+
+      const created = res.member;
 
       setSelectedClient(created);
       setTargetMemberId(created.id);
+      setNewlyCreatedClient(created);
+      setNewlyCreatedTempPassword(res.tempPassword || created.tempPassword || 'Gym@48291');
+      setNewlyCreatedWhatsAppUrl(res.whatsappDirectUrl || '');
+      setNewlyCreatedWhatsAppStatus(res.whatsappStatus);
+
       setClName('');
       setClPhotoUrl('');
       setClMobile('');
       setClEmail('');
-      setCurrentScreen('client-profile');
+      setCurrentScreen('client-created-success');
+    } catch (err: any) {
+      console.error('Failed to enroll client:', err);
+      setEnrollError(err?.message || 'Failed to enroll client. Please check connection and try again.');
     } finally {
       setIsSubmittingClient(false);
     }
@@ -739,7 +790,7 @@ export const MobileTrainerApp: React.FC = () => {
     }
   };
 
-  const isSubPage = ['add-client', 'client-profile', 'broadcast', 'set-workout', 'set-diet'].includes(currentScreen);
+  const isSubPage = ['add-client', 'client-created-success', 'client-profile', 'broadcast', 'set-workout', 'set-diet'].includes(currentScreen);
 
   const bottomNavTabs: MobileNavTab[] = [
     { id: 'home', label: 'Home', icon: Home },
@@ -762,9 +813,10 @@ export const MobileTrainerApp: React.FC = () => {
         unreadCount={unreadNotifs.length}
         onOpenNotifications={() => navigateTo('more')}
         onSignOut={signOutApp}
-        backAction={isSubPage ? goBack : undefined}
+        backAction={isSubPage ? (currentScreen === 'client-created-success' ? () => navigateTo('clients') : goBack) : undefined}
         backTitle={
           currentScreen === 'add-client' ? 'Enroll Client' :
+          currentScreen === 'client-created-success' ? 'Clients' :
           currentScreen === 'client-profile' ? 'Client Profile' :
           currentScreen === 'set-workout' ? 'Set Workout' :
           currentScreen === 'set-diet' ? 'Set Diet' :
@@ -1860,6 +1912,13 @@ export const MobileTrainerApp: React.FC = () => {
               <span>Enroll New Client to PT Batch</span>
             </h3>
 
+            {enrollError && (
+              <div className="p-3 rounded-2xl bg-red-500/15 border border-red-500/30 text-red-400 text-xs font-bold flex items-center gap-2 animate-in fade-in">
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                <span>{enrollError}</span>
+              </div>
+            )}
+
             <form onSubmit={handleEnrollClient} className="space-y-3 text-xs">
               {/* Profile Photo Upload Field */}
               <div className="flex items-center gap-3.5 p-3 bg-[#0B0E17] rounded-2xl border border-white/10">
@@ -2187,13 +2246,162 @@ export const MobileTrainerApp: React.FC = () => {
                 <button
                   type="submit"
                   disabled={isSubmittingClient}
-                  className="w-full py-3 rounded-2xl bg-[#4F7CFF] hover:bg-[#3D69EB] active:scale-95 disabled:opacity-50 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-[#4F7CFF]/20"
+                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#4F7CFF] to-blue-600 hover:from-blue-600 hover:to-blue-700 active:scale-95 disabled:opacity-50 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-[#4F7CFF]/20 cursor-pointer"
                 >
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>{isSubmittingClient ? 'Enrolling...' : 'Enroll & Assign to Coach Profile'}</span>
+                  <span>{isSubmittingClient ? 'Enrolling Client...' : 'Enroll & Assign to Coach Profile'}</span>
                 </button>
               </div>
             </form>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════
+            SUBPAGE: CLIENT ENROLLED SUCCESS & CREDENTIALS
+        ═══════════════════════════════════════════════════════════ */}
+        {currentScreen === 'client-created-success' && newlyCreatedClient && (
+          <div className="space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="text-center space-y-1">
+              <div className="w-14 h-14 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto border border-emerald-500/40 shadow-lg">
+                <CheckCircle2 className="w-7 h-7" />
+              </div>
+              <h3 className="text-base font-black text-white">Client Successfully Enrolled! 🎉</h3>
+              <p className="text-xs text-slate-400">Assigned directly to Coach {currentTrainer?.name}</p>
+            </div>
+
+            {/* Admission Summary Card */}
+            <div className="p-4 bg-gradient-to-br from-[#0B1528] via-[#0D1220] to-[#07090E] rounded-3xl border border-emerald-500/30 shadow-xl space-y-2.5 text-xs">
+              <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Admission & Package Receipt</span>
+                <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                  Paid ✓
+                </span>
+              </div>
+              <div className="flex justify-between items-baseline">
+                <span className="text-slate-300">Total Admission Fee:</span>
+                <strong className="text-base font-black text-emerald-400">
+                  ₹{(newlyCreatedClient.paidAmount || 500).toLocaleString('en-IN')}
+                </strong>
+              </div>
+              <div className="p-2.5 bg-[#07090E] rounded-xl border border-white/5 text-[11px] space-y-1 text-slate-400">
+                <div className="flex justify-between">
+                  <span>Enrolled Package:</span>
+                  <span className="text-white font-bold">{newlyCreatedClient.planName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Membership Validity:</span>
+                  <span className="text-cyan-300 font-bold">{newlyCreatedClient.endDate || newlyCreatedClient.expiryDate}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Branch:</span>
+                  <span className="text-slate-300 font-bold uppercase">{newlyCreatedClient.branchId}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Login Credentials Card */}
+            <div className="bg-[#101422] p-4 rounded-3xl border border-cyan-500/30 shadow-2xl space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                <div className="flex items-center gap-2">
+                  <KeyRound className="w-4 h-4 text-cyan-400" />
+                  <span className="text-xs font-black text-white uppercase tracking-wider">Client Login Credentials</span>
+                </div>
+                <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                  Active
+                </span>
+              </div>
+
+              {/* Login Credentials Box */}
+              <div className="p-3.5 bg-[#07090E] rounded-2xl border border-white/10 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Username</span>
+                    <strong className="text-sm font-mono text-white font-black">{newlyCreatedClient.username || newlyCreatedClient.membershipNo}</strong>
+                  </div>
+                  <button
+                    onClick={() => copyToClipboard(newlyCreatedClient.username || newlyCreatedClient.membershipNo, 'Username')}
+                    className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 text-xs font-bold flex items-center gap-1 cursor-pointer active:scale-95"
+                    title="Copy Username"
+                  >
+                    {copiedField === 'Username' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedField === 'Username' ? 'Copied' : 'Copy'}</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-white/5">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Temporary Password</span>
+                    <strong className="text-sm font-mono text-amber-400 font-black">{newlyCreatedTempPassword || newlyCreatedClient.tempPassword || 'Gym@48291'}</strong>
+                  </div>
+                  <button
+                    onClick={() => copyToClipboard(newlyCreatedTempPassword || newlyCreatedClient.tempPassword || 'Gym@48291', 'Password')}
+                    className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 text-xs font-bold flex items-center gap-1 cursor-pointer active:scale-95"
+                    title="Copy Password"
+                  >
+                    {copiedField === 'Password' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedField === 'Password' ? 'Copied' : 'Copy'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* WhatsApp Action Button */}
+              <div className="flex items-center justify-between p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-xs">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-emerald-400" />
+                  <span className="text-emerald-300 font-bold">
+                    {newlyCreatedWhatsAppStatus === 'SENT' ? 'Credentials Sent via WhatsApp' : 'Dispatch via WhatsApp'}
+                  </span>
+                </div>
+                {newlyCreatedWhatsAppUrl && (
+                  <button
+                    onClick={() => window.open(newlyCreatedWhatsAppUrl, '_blank')}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-black font-black text-[10px] flex items-center gap-1 shadow-md cursor-pointer active:scale-95"
+                  >
+                    <span>Open Chat</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+
+              {/* Copy Full Text */}
+              <button
+                onClick={() => {
+                  const fullText = `Welcome to Smart Gym!\n\nHi ${newlyCreatedClient.name},\nYour member account is created.\nMember ID: ${newlyCreatedClient.membershipNo}\nUsername: ${newlyCreatedClient.username}\nTemporary Password: ${newlyCreatedTempPassword || 'Gym@48291'}\n\nPlease log in at: https://smartgym.app/login`;
+                  copyToClipboard(fullText, 'FullCredentials');
+                }}
+                className="w-full py-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+              >
+                {copiedField === 'FullCredentials' ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                <span>{copiedField === 'FullCredentials' ? 'Copied Full Credentials Message!' : 'Copy Full Credentials Message'}</span>
+              </button>
+            </div>
+
+            {/* Quick Actions after Creation */}
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                onClick={() => {
+                  setSelectedClient(newlyCreatedClient);
+                  setTargetMemberId(newlyCreatedClient.id);
+                  navigateTo('client-profile');
+                }}
+                className="py-3.5 rounded-2xl bg-[#4F7CFF] hover:bg-[#3D69EB] text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-[#4F7CFF]/25 cursor-pointer active:scale-95"
+              >
+                <Users className="w-4 h-4" />
+                <span>View Profile</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setTargetMemberId(newlyCreatedClient.id);
+                  setPlanSubTab('workout');
+                  navigateTo('set-workout');
+                }}
+                className="py-3.5 rounded-2xl bg-[#101422] hover:bg-[#151A2E] border border-white/10 text-cyan-300 font-black text-xs flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+              >
+                <Dumbbell className="w-4 h-4" />
+                <span>Set Workout</span>
+              </button>
+            </div>
           </div>
         )}
 
@@ -2907,7 +3115,7 @@ export const MobileTrainerApp: React.FC = () => {
       <MobileBottomNav
         tabs={bottomNavTabs}
         activeTab={
-          ['add-client', 'client-profile'].includes(currentScreen) ? 'clients' :
+          ['add-client', 'client-created-success', 'client-profile'].includes(currentScreen) ? 'clients' :
           ['set-workout', 'set-diet'].includes(currentScreen) ? 'plans' :
           currentScreen === 'broadcast' ? 'more' :
           currentScreen
