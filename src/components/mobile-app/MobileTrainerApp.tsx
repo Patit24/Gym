@@ -206,6 +206,7 @@ export const MobileTrainerApp: React.FC = () => {
   const [clCustomStartDate, setClCustomStartDate] = useState(
     () => new Date().toISOString().split('T')[0]
   );
+  const [includeAdmissionFee, setIncludeAdmissionFee] = useState(true);
   const [isSubmittingClient, setIsSubmittingClient] = useState(false);
 
   // Sync selected plan with available plans (filter out 6-month preset)
@@ -555,10 +556,12 @@ export const MobileTrainerApp: React.FC = () => {
       const planMonths = selectedPlan?.durationMonths || 1;
       const effectiveMonths = isClCustomDuration ? clCustomMonths : planMonths;
 
-      const basePerMonth = (selectedPlan?.basePrice || selectedPlan?.totalPrice || 1500) / planMonths;
+      const basePerMonth = (selectedPlan?.basePrice || selectedPlan?.totalPrice || 500) / planMonths;
       const packagePrice = isClCustomDuration
         ? Math.round(basePerMonth * clCustomMonths)
-        : (selectedPlan?.basePrice || selectedPlan?.totalPrice || 1500);
+        : (selectedPlan?.basePrice || selectedPlan?.totalPrice || 500);
+      const regFeeAmount = includeAdmissionFee ? 500 : 0;
+      const totalAdmissionAmount = packagePrice + regFeeAmount;
 
       const startDateStr = isClCustomDuration ? clCustomStartDate : new Date().toISOString().split('T')[0];
       const startObj = new Date(startDateStr);
@@ -601,8 +604,8 @@ export const MobileTrainerApp: React.FC = () => {
         paymentStatus: 'Paid',
         assignedTrainerId: currentTrainer?.id || 'emp-trainer-1',
         pendingDues: 0,
-        paidAmount: packagePrice,
-        totalPlanAmount: packagePrice,
+        paidAmount: totalAdmissionAmount,
+        totalPlanAmount: totalAdmissionAmount,
         faceEnrolled: false,
         lockerNumber: `L-${Math.floor(10 + Math.random() * 90)}`,
       });
@@ -1896,34 +1899,73 @@ export const MobileTrainerApp: React.FC = () => {
                 )}
               </div>
 
+              {/* Admission / Registration Fee Option */}
+              <div className="flex items-center justify-between p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs">
+                <label className="flex items-center gap-2 cursor-pointer text-slate-300 font-semibold">
+                  <input
+                    type="checkbox"
+                    checked={includeAdmissionFee}
+                    onChange={(e) => setIncludeAdmissionFee(e.target.checked)}
+                    className="w-4 h-4 rounded text-[#4F7CFF] bg-[#101422] border-white/20 focus:ring-0"
+                  />
+                  <span>Registration / Admission Fee</span>
+                </label>
+                <span className="text-white font-extrabold">₹500</span>
+              </div>
+
               {/* Tariff Breakdown Summary */}
               {(() => {
                 const selectedPlan = plans.find((p) => p.id === clPlanId) || plans[0];
                 const planMonths = selectedPlan?.durationMonths || 1;
                 const effectiveMonths = isClCustomDuration ? clCustomMonths : planMonths;
-                const basePerMonth = (selectedPlan?.basePrice || selectedPlan?.totalPrice || 1500) / planMonths;
+                const basePerMonth = (selectedPlan?.basePrice || selectedPlan?.totalPrice || 500) / planMonths;
                 const packagePrice = isClCustomDuration
                   ? Math.round(basePerMonth * clCustomMonths)
-                  : (selectedPlan?.basePrice || selectedPlan?.totalPrice || 1500);
+                  : (selectedPlan?.basePrice || selectedPlan?.totalPrice || 500);
+                const regFeeAmount = includeAdmissionFee ? 500 : 0;
+                const totalAdmissionAmount = packagePrice + regFeeAmount;
 
                 return (
-                  <div className="p-3 bg-[#0B0E17] rounded-2xl border border-white/10 flex items-center justify-between text-xs">
-                    <div>
-                      <span className="text-white font-bold block">
-                        {selectedPlan?.name || 'Standard Package'}
-                        {isClCustomDuration && ` — ${effectiveMonths} Months`}
+                  <div className="p-3.5 bg-gradient-to-br from-[#0B1528] via-[#0D1220] to-[#07090E] rounded-2xl border border-cyan-500/30 space-y-2.5 text-xs">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-white/10">
+                      <span className="text-[10px] font-black text-white uppercase tracking-wider flex items-center gap-1.5">
+                        <CreditCard className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>Admission & Package Summary</span>
                       </span>
-                      <span className="text-[10px] text-slate-400">
-                        {isClCustomDuration 
-                          ? `₹${Math.round(basePerMonth).toLocaleString('en-IN')}/mo × ${effectiveMonths} mo`
-                          : `Duration: ${selectedPlan?.durationMonths || 1} Month(s)`}
+                      <span className="text-[9px] font-black text-cyan-300 bg-cyan-500/10 px-2 py-0.5 rounded-full border border-cyan-500/20 uppercase">
+                        Payment Summary
                       </span>
                     </div>
-                    <div className="text-right">
-                      <span className="text-[9px] uppercase font-bold text-slate-400 block">Package Fee</span>
-                      <span className={`font-black ${isClCustomDuration ? 'text-orange-400' : 'text-[#4F7CFF]'}`}>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-white font-bold block">
+                          {selectedPlan?.name || 'Standard Package'}
+                          {isClCustomDuration && ` — ${effectiveMonths} Months (Custom)`}
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          {isClCustomDuration 
+                            ? `₹${Math.round(basePerMonth).toLocaleString('en-IN')}/mo × ${effectiveMonths} mo`
+                            : `Duration: ${selectedPlan?.durationMonths || 1} Month(s)`}
+                        </span>
+                      </div>
+                      <span className={`font-black ${isClCustomDuration ? 'text-orange-400' : 'text-cyan-300'}`}>
                         ₹{packagePrice.toLocaleString('en-IN')}
                       </span>
+                    </div>
+
+                    {includeAdmissionFee && (
+                      <div className="flex items-center justify-between text-slate-300">
+                        <span>Admission Fee</span>
+                        <span className="font-bold text-white">₹500</span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between pt-2 border-t border-white/10 bg-cyan-950/40 p-2.5 rounded-xl border border-cyan-500/30">
+                      <span className="text-xs font-black text-white uppercase">Total Payable Amount</span>
+                      <strong className={`text-sm font-black ${isClCustomDuration ? 'text-orange-400' : 'text-emerald-400'}`}>
+                        ₹{totalAdmissionAmount.toLocaleString('en-IN')}
+                      </strong>
                     </div>
                   </div>
                 );

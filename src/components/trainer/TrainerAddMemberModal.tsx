@@ -45,6 +45,7 @@ export const TrainerAddMemberModal: React.FC<TrainerAddMemberModalProps> = ({ is
   const [customStartDate, setCustomStartDate] = useState(
     () => new Date().toISOString().split('T')[0]
   );
+  const [includeAdmissionFee, setIncludeAdmissionFee] = useState(true);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
@@ -64,11 +65,13 @@ export const TrainerAddMemberModal: React.FC<TrainerAddMemberModalProps> = ({ is
 
   const getEffectivePrice = () => {
     if (!selectedPlan) return 0;
-    if (!isCustomDuration) return selectedPlan.totalPrice || 0;
     const planMonths = selectedPlan.durationMonths || 1;
-    const basePerMonth = (selectedPlan.basePrice || selectedPlan.totalPrice || 0) / planMonths;
-    const joiningFee = selectedPlan.joiningFee || 0;
-    return Math.round(basePerMonth * customMonths) + joiningFee;
+    const basePerMonth = (selectedPlan.basePrice || selectedPlan.totalPrice || 500) / planMonths;
+    const packagePrice = isCustomDuration
+      ? Math.round(basePerMonth * customMonths)
+      : (selectedPlan.basePrice || selectedPlan.totalPrice || 500);
+    const joiningFee = includeAdmissionFee ? (selectedPlan.joiningFee || 500) : 0;
+    return packagePrice + joiningFee;
   };
 
   const { startStr, endStr, months: effMonths } = getEffectiveDates();
@@ -352,12 +355,26 @@ export const TrainerAddMemberModal: React.FC<TrainerAddMemberModalProps> = ({ is
                 </div>
               )}
 
+              {/* Admission / Registration Fee Checkbox */}
+              <div className="flex items-center justify-between p-2 rounded-xl bg-white/5 border border-white/10 text-[10px]">
+                <label className="flex items-center gap-2 cursor-pointer text-slate-300 font-semibold">
+                  <input
+                    type="checkbox"
+                    checked={includeAdmissionFee}
+                    onChange={(e) => setIncludeAdmissionFee(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded text-[#4F7CFF] bg-[#101422] border-white/20 focus:ring-0"
+                  />
+                  <span>Registration / Admission Fee</span>
+                </label>
+                <span className="text-white font-extrabold">₹500</span>
+              </div>
+
               {/* Fee Summary */}
               <div className="p-2.5 rounded-xl bg-[#4F7CFF]/10 border border-[#4F7CFF]/20 text-[10px] text-slate-300 flex items-center justify-between">
                 <span>
                   {isCustomDuration
-                    ? `₹${Math.round((selectedPlan?.basePrice || selectedPlan?.totalPrice || 0) / (selectedPlan?.durationMonths || 1)).toLocaleString('en-IN')}/mo × ${effMonths}mo${(selectedPlan?.joiningFee || 0) > 0 ? ` + Admission ₹${(selectedPlan?.joiningFee || 0).toLocaleString('en-IN')}` : ''}`
-                    : `Tariff: ₹${(selectedPlan?.basePrice || selectedPlan?.totalPrice || 0).toLocaleString('en-IN')}${(selectedPlan?.joiningFee || 0) > 0 ? ` + Admission: ₹${(selectedPlan?.joiningFee || 0).toLocaleString('en-IN')}` : ''}`
+                    ? `₹${Math.round((selectedPlan?.basePrice || selectedPlan?.totalPrice || 500) / (selectedPlan?.durationMonths || 1)).toLocaleString('en-IN')}/mo × ${effMonths}mo${includeAdmissionFee ? ' + Admission ₹500' : ''}`
+                    : `Tariff: ₹${(selectedPlan?.basePrice || selectedPlan?.totalPrice || 500).toLocaleString('en-IN')}${includeAdmissionFee ? ' + Admission ₹500' : ''}`
                   }
                 </span>
                 <span className={`font-black ${isCustomDuration ? 'text-orange-400' : 'text-[#27D980]'}`}>
