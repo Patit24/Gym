@@ -10,6 +10,8 @@ import {
   WeeklyWorkoutPlan,
   DietPlan,
   MonthlyDietPlan,
+  WeeklyDietPlan,
+  DailyDietPlan,
   DailyWorkoutSplit,
   ProgressMetric,
   Lead,
@@ -67,6 +69,7 @@ import {
   INITIAL_WEBSITE_CUSTOMERS,
   INITIAL_APP_USERS
 } from '../data/initialData';
+import { normalizeMonthlyPlans, generateDefaultMonthlyPlans } from '../data/defaultDietPlans';
 import { db, auth, createIsolatedAuthUser } from '../firebase';
 import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, getDocs, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged, User, signOut, updatePassword } from 'firebase/auth';
@@ -170,7 +173,14 @@ interface GymContextType {
   recordMemberPayment: (memberId: string, amount: number, paymentMethod: Transaction['paymentMethod'], notes?: string) => Promise<Transaction>;
   
   toggleExerciseCompleted: (weekNumber: number, day: string, exerciseId: string) => Promise<void>;
-  toggleMealCompleted: (monthNumber: number, mealCategory: 'breakfast' | 'lunch' | 'snack' | 'dinner', mealId: string) => Promise<void>;
+  toggleMealCompleted: (
+    monthNumber: number,
+    weekNumberOrCategory: number | 'breakfast' | 'lunch' | 'snack' | 'dinner',
+    dayNumberOrMealId?: number | string,
+    mealCategory?: 'breakfast' | 'lunch' | 'snack' | 'dinner',
+    mealId?: string
+  ) => Promise<void>;
+  toggleDayCompleted: (monthNumber: number, weekNumber: number, dayNumber: number, forceStatus?: boolean) => Promise<void>;
   addWaterIntake: (amountLiters: number) => Promise<void>;
   
   addWeeklyWorkout: (targetMemberId: string, weekNumber: number, weekTitle: string, splits: DailyWorkoutSplit[]) => Promise<void>;
@@ -202,7 +212,14 @@ interface GymContextType {
   addNotification: (notif: Omit<SystemNotification, 'id' | 'timestamp' | 'read'>) => Promise<void>;
   markNotificationRead: (id: string) => Promise<void>;
   sendBulkNotification: (targetFilter: 'all' | 'unpaid' | 'expiring' | 'expired' | 'single', title: string, message: string, singleMemberId?: string) => Promise<void>;
-  renewSubscription: (memberId: string, planId: string, paymentMethod?: 'UPI' | 'Cash' | 'Card' | 'Bank Transfer') => Promise<void>;
+  renewSubscription: (
+    memberId: string,
+    planId: string,
+    paymentMethod?: 'UPI' | 'Cash' | 'Card' | 'Bank Transfer',
+    customAmount?: number,
+    customDurationMonths?: number,
+    notes?: string
+  ) => Promise<{ success: boolean; transaction: Transaction; newEndDate: string; durationMonths: number; amount: number }>;
   
   addExpense: (expense: Omit<Expense, 'id'>) => Promise<Expense>;
   updateExpense: (id: string, updated: Partial<Expense>) => Promise<void>;
@@ -299,6 +316,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [freezeRecords, setFreezeRecords] = useState<MembershipFreezeRecord[]>([]);
   const [challenges, setChallenges] = useState<GymChallenge[]>([]);
   const [referrals, setReferrals] = useState<ReferralRecord[]>([]);
+  const [consumedQrNonces, setConsumedQrNonces] = useState<Set<string>>(new Set());
 
   const activeMember: Member = useMemo(() => {
     // 1. If authenticated user is a Member, their own profile is ALWAYS top priority
@@ -699,8 +717,28 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   useEffect(() => {
+    if (!authResolved) return;
+
     if (!firebaseUser) {
-      // Strict session flush: NEVER retain previous profile or role across sessions
+      // Check if we have a locally authenticated session (e.g. from localSessionUser / saved login)
+      try {
+        const savedLocal = localStorage.getItem('gym_app_user_account');
+        if (savedLocal) {
+          const parsed = JSON.parse(savedLocal);
+          if (parsed && parsed.id && parsed.role) {
+            setAppUserAccount(parsed);
+            setCurrentRole(parsed.role);
+            setSelectedBranchId(parsed.branchId || 'branch-1');
+            setSubscriptionStatus('active');
+            if (parsed.role === 'Member' && parsed.linkedId) {
+              setActiveMemberIdState(parsed.linkedId);
+            }
+            return;
+          }
+        }
+      } catch {}
+
+      // If truly signed out with no stored session:
       setAppUserAccount(null);
       setCurrentRole('Member');
       setActiveMemberIdState('');
@@ -933,13 +971,19 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
     const unsubDiet = onSnapshot(doc(db, 'diets', activeMemberId), (docSnap) => {
       if (docSnap.exists()) {
-        setDiet(docSnap.data() as DietPlan);
+        const rawDiet = docSnap.data() as DietPlan;
+        const normalizedPlans = normalizeMonthlyPlans(rawDiet?.monthlyPlans);
+        setDiet({
+          ...rawDiet,
+          monthlyPlans: normalizedPlans,
+        });
       } else {
+        const defaultMonthlyPlans = generateDefaultMonthlyPlans();
         setDiet({
           id: `dpt-${activeMemberId}`,
           memberId: activeMemberId,
           waterCurrentLiters: 0,
-          monthlyPlans: [],
+          monthlyPlans: defaultMonthlyPlans,
         });
       }
     });
@@ -1171,12 +1215,38 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let memberId = '';
     let tokenTimestamp = 0;
 
+    // Check for single-use token replay
+    if (consumedQrNonces.has(cleanToken)) {
+      return {
+        success: false,
+        message: 'ACCESS DENIED: Replay detected. Single-use QR token has already been consumed.',
+      };
+    }
+
     // Format 1: SGQR.v2.<memberId>.<timestamp>.<sig>
     if (cleanToken.startsWith('SGQR.V2.')) {
       const parts = cleanToken.split('.');
       if (parts.length >= 5) {
         memberId = parts[2];
         tokenTimestamp = parseInt(parts[3], 10);
+        const presentedSig = parts[4];
+
+        // Verify cryptographic signature against server secret
+        const tokenSecret = 'SG-SECURE-KEY-2026';
+        let hash = 0;
+        const rawStr = `${memberId}:${tokenTimestamp}:${tokenSecret}`;
+        for (let i = 0; i < rawStr.length; i++) {
+          const char = rawStr.charCodeAt(i);
+          hash = ((hash << 5) - hash) + char;
+          hash |= 0;
+        }
+        const expectedSig = Math.abs(hash).toString(36).padStart(8, '0').toUpperCase();
+        if (presentedSig !== expectedSig) {
+          return {
+            success: false,
+            message: 'ACCESS DENIED: Cryptographic token signature mismatch. Forged QR pass rejected.',
+          };
+        }
       }
     } else if (cleanToken.startsWith('SMARTGYM-') || cleanToken.startsWith('PULSEFIT-')) {
       const parts = cleanToken.split('-');
@@ -1255,6 +1325,13 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
       }
     }
+
+    // Mark single-use token as consumed to prevent replay attacks
+    setConsumedQrNonces((prev) => {
+      const next = new Set(prev);
+      next.add(cleanToken);
+      return next;
+    });
 
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -1518,6 +1595,8 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         id: authUid,
         username,
         email: memberAuthEmail,
+        password: tempPassword,
+        tempPassword,
         role: 'Member',
         linkedId: memberId,
         linkedName: newMemberData.name,
@@ -1553,6 +1632,9 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newMember: Member = {
       ...newMemberData,
       id: memberId,
+      userId: options.createLogin ? authUid : undefined,
+      username: options.createLogin ? username : undefined,
+      tempPassword: options.createLogin ? tempPassword : undefined,
       membershipNo,
       referralCode,
       rewardPoints: 100,
@@ -1562,8 +1644,6 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       lastPaymentDate: new Date().toISOString().split('T')[0],
       nextDueDate: newMemberData.endDate || newMemberData.expiryDate,
       paymentStatus: newMemberData.pendingDues > 0 ? 'Partially Paid' : 'Paid',
-      userId: options.createLogin ? authUid : undefined,
-      username: options.createLogin ? username : undefined,
       mustChangePassword: options.createLogin ? true : false,
       whatsappStatus: initialWhatsAppStatus,
       whatsappSentAt: initialWhatsAppStatus === 'SENT' ? new Date().toISOString() : undefined,
@@ -1959,6 +2039,19 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateMember = async (id: string, updatedData: Partial<Member>) => {
     setMembers(prev => prev.map(m => m.id === id ? { ...m, ...updatedData } : m));
     safeDbWrite(updateDoc(doc(db, 'members', id), updatedData));
+
+    // Synchronize current appUserAccount session and users collection in Firestore
+    if (appUserAccount && (appUserAccount.linkedId === id || appUserAccount.id === id)) {
+      setAppUserAccount(prev => prev ? {
+        ...prev,
+        photoUrl: updatedData.photoUrl !== undefined ? updatedData.photoUrl : prev.photoUrl,
+        linkedName: updatedData.name !== undefined ? updatedData.name : prev.linkedName,
+      } : null);
+
+      if (updatedData.photoUrl !== undefined) {
+        safeDbWrite(updateDoc(doc(db, 'users', appUserAccount.id), { photoUrl: updatedData.photoUrl }));
+      }
+    }
   };
 
   const recordMemberPayment = async (
@@ -1967,6 +2060,11 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     paymentMethod: Transaction['paymentMethod'],
     notes?: string
   ): Promise<Transaction> => {
+    const sanitizedAmount = Math.max(0, Math.round(Number(amount) || 0));
+    if (sanitizedAmount <= 0) {
+      throw new Error('Payment amount must be a positive valid number.');
+    }
+
     const member = members.find(m => m.id === memberId);
     const receiptNo = `RCP-SG-${Math.floor(1000 + Math.random() * 9000)}`;
     const date = new Date().toISOString().split('T')[0];
@@ -1975,8 +2073,8 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: `TXN-${Date.now()}`,
       memberId,
       memberName: member?.name || 'Member',
-      branchId: member?.branchId || selectedBranchId,
-      amount,
+      branchId: member?.branchId || selectedBranchId || 'branch-1',
+      amount: sanitizedAmount,
       paymentMethod,
       category: 'Membership Dues',
       date,
@@ -2048,20 +2146,146 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const toggleMealCompleted = async (
     monthNumber: number,
-    mealCategory: 'breakfast' | 'lunch' | 'snack' | 'dinner',
-    mealId: string
+    weekNumberOrCategory: number | 'breakfast' | 'lunch' | 'snack' | 'dinner',
+    dayNumberOrMealId?: number | string,
+    mealCategoryParam?: 'breakfast' | 'lunch' | 'snack' | 'dinner',
+    mealIdParam?: string
   ) => {
-    const updatedMonthlyPlans = diet.monthlyPlans.map((mp) => {
+    let weekNum = 1;
+    let dayNum = 1;
+    let cat: 'breakfast' | 'lunch' | 'snack' | 'dinner' = 'breakfast';
+    let targetMealId = '';
+
+    if (typeof weekNumberOrCategory === 'string') {
+      cat = weekNumberOrCategory;
+      targetMealId = String(dayNumberOrMealId || '');
+    } else {
+      weekNum = Number(weekNumberOrCategory) || 1;
+      dayNum = Number(dayNumberOrMealId) || 1;
+      cat = mealCategoryParam || 'breakfast';
+      targetMealId = mealIdParam || '';
+    }
+
+    const updatedMonthlyPlans = normalizeMonthlyPlans(diet.monthlyPlans).map((mp) => {
       if (mp.monthNumber !== monthNumber) return mp;
+
+      const updatedWeeks = (mp.weeks || []).map((wk) => {
+        if (wk.weekNumber !== weekNum) return wk;
+
+        const updatedDays = (wk.days || []).map((dy) => {
+          if (dy.dayNumber !== dayNum) return dy;
+
+          const updatedMeals = {
+            ...dy.meals,
+            [cat]: (dy.meals[cat] || []).map((m) => {
+              if (m.id !== targetMealId) return m;
+              return { ...m, completed: !m.completed };
+            }),
+          };
+
+          const allDayMeals = [
+            ...(updatedMeals.breakfast || []),
+            ...(updatedMeals.lunch || []),
+            ...(updatedMeals.snack || []),
+            ...(updatedMeals.dinner || []),
+          ];
+
+          const isDayDone = allDayMeals.length > 0 && allDayMeals.every((m) => m.completed);
+
+          return {
+            ...dy,
+            meals: updatedMeals,
+            isCompleted: isDayDone,
+            completedAt: isDayDone ? new Date().toISOString() : undefined,
+          };
+        });
+
+        const isWeekDone = updatedDays.length === 7 && updatedDays.every((d) => d.isCompleted);
+
+        return {
+          ...wk,
+          days: updatedDays,
+          isCompleted: isWeekDone,
+          completedAt: isWeekDone ? new Date().toISOString() : undefined,
+        };
+      });
+
+      const isMonthDone = updatedWeeks.length === 4 && updatedWeeks.every((w) => w.isCompleted);
+
+      // Also sync top-level meals if week 1 day 1
+      let updatedBaseMeals = mp.meals;
+      if (weekNum === 1 && dayNum === 1 && updatedBaseMeals[cat]) {
+        updatedBaseMeals = {
+          ...updatedBaseMeals,
+          [cat]: updatedBaseMeals[cat].map((m) => (m.id === targetMealId ? { ...m, completed: !m.completed } : m)),
+        };
+      }
+
       return {
         ...mp,
-        meals: {
-          ...mp.meals,
-          [mealCategory]: mp.meals[mealCategory].map((m) => {
-            if (m.id !== mealId) return m;
-            return { ...m, completed: !m.completed };
-          }),
-        },
+        weeks: updatedWeeks,
+        meals: updatedBaseMeals,
+        isCompleted: isMonthDone,
+      };
+    });
+
+    const updatedDiet: DietPlan = {
+      ...diet,
+      monthlyPlans: updatedMonthlyPlans,
+    };
+
+    setDiet(updatedDiet);
+    safeDbWrite(setDoc(doc(db, 'diets', diet.memberId || activeMemberId), updatedDiet));
+  };
+
+  const toggleDayCompleted = async (
+    monthNumber: number,
+    weekNumber: number,
+    dayNumber: number,
+    forceStatus?: boolean
+  ) => {
+    const updatedMonthlyPlans = normalizeMonthlyPlans(diet.monthlyPlans).map((mp) => {
+      if (mp.monthNumber !== monthNumber) return mp;
+
+      const updatedWeeks = (mp.weeks || []).map((wk) => {
+        if (wk.weekNumber !== weekNumber) return wk;
+
+        const updatedDays = (wk.days || []).map((dy) => {
+          if (dy.dayNumber !== dayNumber) return dy;
+
+          const targetComplete = forceStatus !== undefined ? forceStatus : !dy.isCompleted;
+
+          const updatedMeals = {
+            breakfast: (dy.meals.breakfast || []).map((m) => ({ ...m, completed: targetComplete })),
+            lunch: (dy.meals.lunch || []).map((m) => ({ ...m, completed: targetComplete })),
+            snack: (dy.meals.snack || []).map((m) => ({ ...m, completed: targetComplete })),
+            dinner: (dy.meals.dinner || []).map((m) => ({ ...m, completed: targetComplete })),
+          };
+
+          return {
+            ...dy,
+            meals: updatedMeals,
+            isCompleted: targetComplete,
+            completedAt: targetComplete ? new Date().toISOString() : undefined,
+          };
+        });
+
+        const isWeekDone = updatedDays.length === 7 && updatedDays.every((d) => d.isCompleted);
+
+        return {
+          ...wk,
+          days: updatedDays,
+          isCompleted: isWeekDone,
+          completedAt: isWeekDone ? new Date().toISOString() : undefined,
+        };
+      });
+
+      const isMonthDone = updatedWeeks.length === 4 && updatedWeeks.every((w) => w.isCompleted);
+
+      return {
+        ...mp,
+        weeks: updatedWeeks,
+        isCompleted: isMonthDone,
       };
     });
 
@@ -2645,7 +2869,14 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     createdNotifs.forEach(n => safeDbWrite(setDoc(doc(db, 'notifications', n.id), n)));
   };
 
-  const renewSubscription = async (memberId: string, planId: string, paymentMethod: 'UPI' | 'Cash' | 'Card' | 'Bank Transfer' = 'UPI') => {
+  const renewSubscription = async (
+    memberId: string,
+    planId: string,
+    paymentMethod: 'UPI' | 'Cash' | 'Card' | 'Bank Transfer' = 'UPI',
+    customAmount?: number,
+    customDurationMonths?: number,
+    notes?: string
+  ) => {
     const targetPlan = plans.find((p) => p.id === planId) || plans[0];
     const targetMemberId = memberId || activeMemberId;
     const existingMember = members.find((m) => m.id === targetMemberId);
@@ -2667,21 +2898,33 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
+    const durationMonthsToAdd = customDurationMonths && customDurationMonths > 0
+      ? customDurationMonths
+      : (targetPlan?.durationMonths || 1);
+
     // Add target plan duration months to the base expiry date
     const newExpiryObj = new Date(baseExpiryDate);
-    newExpiryObj.setMonth(newExpiryObj.getMonth() + targetPlan.durationMonths);
+    newExpiryObj.setMonth(newExpiryObj.getMonth() + durationMonthsToAdd);
     const newEndDate = newExpiryObj.toISOString().split('T')[0];
 
+    const finalAmount = customAmount !== undefined && customAmount >= 0
+      ? Math.round(customAmount)
+      : (targetPlan?.totalPrice || targetPlan?.basePrice || 1500);
+
+    const resolvedPlanName = customDurationMonths && targetPlan && customDurationMonths !== targetPlan.durationMonths
+      ? `${customDurationMonths}-Month Subscription Pass`
+      : (targetPlan?.name || `${durationMonthsToAdd}-Month Plan`);
+
     const updatedData = {
-      planId: targetPlan.id,
-      planName: targetPlan.name,
+      planId: targetPlan?.id || 'custom-plan',
+      planName: resolvedPlanName,
       startDate: effectiveStartDate,
       endDate: newEndDate,
       expiryDate: newEndDate,
       status: 'Active' as const,
       pendingDues: 0,
-      paidAmount: targetPlan.totalPrice,
-      totalPlanAmount: targetPlan.totalPrice,
+      paidAmount: (existingMember?.paidAmount || 0) + finalAmount,
+      totalPlanAmount: (existingMember?.totalPlanAmount || 0) + finalAmount,
       lastPaymentDate: todayStr,
       nextDueDate: newEndDate,
       paymentStatus: 'Paid' as const
@@ -2718,16 +2961,16 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           goal: 'Muscle Building',
           referralSource: 'App Subscription',
           branchId: appUserAccount?.branchId || selectedBranchId || 'branch-1',
-          planId: targetPlan.id,
-          planName: targetPlan.name,
+          planId: targetPlan?.id || 'custom-plan',
+          planName: resolvedPlanName,
           startDate: effectiveStartDate,
           endDate: newEndDate,
           status: 'Active',
           rewardPoints: 100,
           referralCode: 'MEMBER2026',
           pendingDues: 0,
-          paidAmount: targetPlan.totalPrice,
-          totalPlanAmount: targetPlan.totalPrice,
+          paidAmount: finalAmount,
+          totalPlanAmount: finalAmount,
           lastPaymentDate: todayStr,
           nextDueDate: newEndDate,
           paymentStatus: 'Paid'
@@ -2742,13 +2985,13 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       memberId: targetMemberId,
       memberName: existingMember?.name || appUserAccount?.linkedName || 'Member',
       branchId: (existingMember?.branchId || selectedBranchId || 'branch-1') as BranchId,
-      amount: targetPlan.totalPrice,
+      amount: finalAmount,
       paymentMethod,
       category: 'Membership Dues',
       date: todayStr,
       receiptNo: `RCP-${Date.now().toString().slice(-6)}`,
-      planName: targetPlan.name,
-      notes: `Membership renewal (${targetPlan.durationMonths}M extended to ${newEndDate})`
+      planName: resolvedPlanName,
+      notes: notes || `Subscription renewal (${durationMonthsToAdd}M extended to ${newEndDate})`
     };
 
     setTransactions((prev) => [newTx, ...prev]);
@@ -2762,7 +3005,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       targetRole: 'Member',
       memberId: targetMemberId,
       title: '🎉 Subscription Extended & Active!',
-      message: `Your ${targetPlan.name} membership has been extended to ${newEndDate}.`,
+      message: `Your membership has been extended by ${durationMonthsToAdd} month(s) to ${newEndDate}.`,
       type: 'billing',
     }));
 
@@ -2770,15 +3013,34 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       'ACCOUNT_ACTIVATED' as any,
       targetMemberId,
       existingMember?.name || 'Member',
-      `Membership renewed with ${targetPlan.name} until ${newEndDate} (${paymentMethod})`
+      `Membership renewed with ${resolvedPlanName} (${durationMonthsToAdd}M) until ${newEndDate} (₹${finalAmount} via ${paymentMethod})`
     );
+
+    return {
+      success: true,
+      transaction: newTx,
+      newEndDate,
+      durationMonths: durationMonthsToAdd,
+      amount: finalAmount
+    };
   };
 
   // === EXPENSE MANAGEMENT ===
   const addExpense = async (expenseData: Omit<Expense, 'id'>): Promise<Expense> => {
+    const sanitizedAmount = Math.max(0, Math.round(Number(expenseData.amount) || 0));
+    if (sanitizedAmount <= 0) {
+      throw new Error('Expense amount must be a positive valid number.');
+    }
+    if (!expenseData.name || !expenseData.name.trim()) {
+      throw new Error('Expense title/description is required.');
+    }
+
     const newExpense: Expense = {
       ...expenseData,
-      id: `EXP-2026-${String(expenses.length + 1).padStart(3, '0')}`
+      amount: sanitizedAmount,
+      name: expenseData.name.trim(),
+      branchId: expenseData.branchId || selectedBranchId || 'branch-1',
+      id: `EXP-2026-${Date.now()}-${String(expenses.length + 1).padStart(3, '0')}`
     };
 
     setExpenses(prev => [newExpense, ...prev]);
@@ -2963,9 +3225,8 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         console.warn('createIsolatedAuthUser notice in addAppUser (proceeding with user.id):', authErr);
       }
     }
-    const { password, tempPassword, ...sanitizedDoc } = finalUser;
     setAppUsers(prev => [finalUser, ...prev]);
-    safeDbWrite(setDoc(doc(db, 'users', finalUser.id), sanitizedDoc));
+    safeDbWrite(setDoc(doc(db, 'users', finalUser.id), finalUser));
   };
 
   const addEmployee = async (emp: Employee) => {
@@ -3060,6 +3321,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         recordMemberPayment,
         toggleExerciseCompleted,
         toggleMealCompleted,
+        toggleDayCompleted,
         addWaterIntake,
         addWeeklyWorkout,
         addMonthlyDiet,

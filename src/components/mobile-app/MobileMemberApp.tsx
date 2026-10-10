@@ -12,6 +12,7 @@ import { MemberProfileEditor } from '../mobile/MemberProfileEditor';
 import { PrivilegePassCard } from '../shared/PrivilegePassCard';
 import { WearableHeartRateSyncModal } from '../mobile/WearableHeartRateSyncModal';
 import { SubscriptionExpiredLockCard } from '../mobile/SubscriptionExpiredLockCard';
+import { ProfilePhotoModal } from '../mobile/ProfilePhotoModal';
 import {
   Home,
   Dumbbell,
@@ -58,6 +59,8 @@ import {
   UserCheck,
   MapPin,
   AlertCircle,
+  Camera,
+  Upload,
 } from 'lucide-react';
 
 type MemberScreen =
@@ -101,6 +104,7 @@ export const MobileMemberApp: React.FC = () => {
   const [copiedCode, setCopiedCode] = useState(false);
   const [notifFilter, setNotifFilter] = useState<'all' | 'unread' | 'important'>('all');
   const [isWearableSyncOpen, setIsWearableSyncOpen] = useState(false);
+  const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
   const [isCheckInLoading, setIsCheckInLoading] = useState(false);
   const [checkInFeedback, setCheckInFeedback] = useState<{ success: boolean; message: string } | null>(null);
 
@@ -307,6 +311,33 @@ export const MobileMemberApp: React.FC = () => {
                 showFlipButton={true}
               />
             </div>
+
+            {/* ── MANDATORY PROFILE PHOTO VERIFICATION BANNER ── */}
+            {(!activeMember?.photoUrl || !activeMember?.faceEnrolled) && (
+              <div className="p-4 rounded-3xl bg-gradient-to-r from-rose-950/40 via-[#18111B] to-[#120E1A] border border-rose-500/40 shadow-xl space-y-2.5 animate-in fade-in">
+                <div className="flex items-center justify-between">
+                  <span className="px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 text-[10px] font-black uppercase tracking-wider border border-rose-500/40 flex items-center gap-1.5 shadow-sm">
+                    <Camera className="w-3 h-3 text-rose-400" />
+                    Mandatory Action Required
+                  </span>
+                  <span className="text-[10px] font-bold text-amber-400">Smart Turnstile Gate</span>
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-white">Upload Your Official Profile Photo</h4>
+                  <p className="text-[10.5px] text-slate-300 mt-0.5 leading-relaxed">
+                    An official profile photo is strictly required for Turnstile Smart Gate Face ID recognition and your Digital VIP Pass.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsPhotoModalOpen(true)}
+                  className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-rose-500 via-pink-500 to-amber-400 text-black font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-rose-500/20 active:scale-98 transition-all cursor-pointer"
+                >
+                  <Camera className="w-4 h-4 text-black" />
+                  <span>Upload Profile Photo Now</span>
+                </button>
+              </div>
+            )}
 
             {/* Quick Actions Matrix: 5 Colorful Glass Buttons */}
             <div className="space-y-2">
@@ -669,13 +700,15 @@ export const MobileMemberApp: React.FC = () => {
             {/* Member Profile Hero Header */}
             <div className="p-4 rounded-3xl glass-card flex items-center justify-between shadow-xl">
               <div className="flex items-center gap-3">
-                <div className="relative">
+                <div className="relative group cursor-pointer" onClick={() => setIsPhotoModalOpen(true)}>
                   <img
                     src={activeMember?.photoUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&fit=crop&q=80'}
                     alt={activeMember?.name || 'Member'}
-                    className="w-12 h-12 rounded-2xl object-cover border-2 border-[#00D4FF] shadow-lg"
+                    className="w-12 h-12 rounded-2xl object-cover border-2 border-[#00D4FF] shadow-lg group-hover:opacity-80 transition-opacity"
                   />
-                  <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-[#00F5A0] border-2 border-[#070A12]" />
+                  <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-cyan-400 text-black flex items-center justify-center shadow-md border border-black/40">
+                    <Camera className="w-3 h-3" />
+                  </div>
                 </div>
                 <div>
                   <h3 className="text-sm font-black text-white">{activeMember?.name || 'Member'}</h3>
@@ -683,13 +716,23 @@ export const MobileMemberApp: React.FC = () => {
                 </div>
               </div>
 
-              <button
-                onClick={() => navigateTo('profile')}
-                className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold text-cyan-300 border border-white/10 flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
-              >
-                <span>View Profile</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsPhotoModalOpen(true)}
+                  className="px-2.5 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 text-[11px] font-extrabold text-cyan-300 border border-cyan-500/30 flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  <span>Photo</span>
+                </button>
+
+                <button
+                  onClick={() => navigateTo('profile')}
+                  className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold text-slate-200 border border-white/10 flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
+                >
+                  <span>Profile</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
 
             {/* 12-Icon Glass Grid */}
@@ -1171,6 +1214,12 @@ export const MobileMemberApp: React.FC = () => {
           navigateTo('workout');
         }}
         onCancel={() => setIsWearableSyncOpen(false)}
+      />
+
+      {/* Mandatory / Self-Service Profile Photo Upload Modal */}
+      <ProfilePhotoModal
+        isOpen={isPhotoModalOpen}
+        onClose={() => setIsPhotoModalOpen(false)}
       />
 
     </div>

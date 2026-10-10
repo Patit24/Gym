@@ -69,6 +69,8 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
   // Renewal Modal
   const [showRenewalModal, setShowRenewalModal] = useState(false);
   const [renewalPlanId, setRenewalPlanId] = useState<string>('');
+  const [renewalDurationMonths, setRenewalDurationMonths] = useState<number>(2);
+  const [renewalAmount, setRenewalAmount] = useState<number>(2500);
   const [renewalPaymentMethod, setRenewalPaymentMethod] = useState<'UPI' | 'Cash' | 'Card' | 'Bank Transfer'>('UPI');
   const [isRenewing, setIsRenewing] = useState(false);
   const [renewalSuccessMsg, setRenewalSuccessMsg] = useState<string | null>(null);
@@ -150,10 +152,17 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
   // Membership Renewal
   const handleRenewMemberSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedMember || !renewalPlanId) return;
+    if (!selectedMember) return;
     setIsRenewing(true);
     try {
-      await renewSubscription(selectedMember.id, renewalPlanId, renewalPaymentMethod);
+      await renewSubscription(
+        selectedMember.id,
+        renewalPlanId || plans[0]?.id || 'plan-monthly',
+        renewalPaymentMethod,
+        Number(renewalAmount),
+        Number(renewalDurationMonths),
+        `Admin manual subscription extension (${renewalDurationMonths} Months)`
+      );
       const updated = members.find(m => m.id === selectedMember.id);
       if (updated) setSelectedMember(updated);
       setRenewalSuccessMsg('Membership renewed & extended successfully!');
@@ -998,14 +1007,53 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
             </div>
 
             <form onSubmit={handleRenewMemberSubmit} className="space-y-3.5 text-xs">
-              {/* Plan Selector */}
+              {/* Duration Selector */}
               <div>
-                <label className="block text-[10px] font-black text-slate-300 uppercase mb-1">Select Renewal Package *</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[10px] font-black text-slate-300 uppercase">Duration (Months) *</label>
+                  <span className="text-[10px] text-cyan-400 font-bold">{renewalDurationMonths} Month{renewalDurationMonths > 1 ? 's' : ''} Extension</span>
+                </div>
+                <div className="grid grid-cols-5 gap-1.5 mb-2">
+                  {[1, 2, 3, 6, 12].map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => {
+                        setRenewalDurationMonths(m);
+                        const match = plans.find((p) => p.durationMonths === m);
+                        if (match) {
+                          setRenewalPlanId(match.id);
+                          setRenewalAmount(match.totalPrice);
+                        } else {
+                          setRenewalAmount(m * 1250);
+                        }
+                      }}
+                      className={`py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                        renewalDurationMonths === m
+                          ? 'bg-cyan-500 text-black border-cyan-400 font-black shadow-md'
+                          : 'bg-[#0B0D12] border-gym-border text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      {m}M {m === 2 ? '⭐' : ''}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Package Template (Optional) */}
+              <div>
+                <label className="block text-[10px] font-black text-slate-300 uppercase mb-1">Package Plan Template</label>
                 <select
                   value={renewalPlanId}
-                  onChange={(e) => setRenewalPlanId(e.target.value)}
-                  required
-                  className="w-full bg-[#0B0D12] border border-gym-border rounded-xl px-3 py-2.5 text-white font-bold outline-none focus:border-cyan-400"
+                  onChange={(e) => {
+                    setRenewalPlanId(e.target.value);
+                    const p = plans.find((item) => item.id === e.target.value);
+                    if (p) {
+                      setRenewalAmount(p.totalPrice);
+                      if (p.durationMonths) setRenewalDurationMonths(p.durationMonths);
+                    }
+                  }}
+                  className="w-full bg-[#0B0D12] border border-gym-border rounded-xl px-3 py-2 text-white font-bold outline-none focus:border-cyan-400"
                 >
                   {plans.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -1013,6 +1061,22 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* Amount Input */}
+              <div>
+                <label className="block text-[10px] font-black text-slate-300 uppercase mb-1">Payment Amount (₹) *</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₹</span>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={renewalAmount || ''}
+                    onChange={(e) => setRenewalAmount(Number(e.target.value))}
+                    className="w-full bg-[#0B0D12] border border-gym-border rounded-xl pl-7 pr-3 py-2.5 text-white font-black text-sm outline-none focus:border-cyan-400"
+                  />
+                </div>
               </div>
 
               {/* Payment Method */}

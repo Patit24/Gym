@@ -4,6 +4,8 @@ import { Member, GoalType, Exercise, DailyWorkoutSplit, MealItem, MonthlyDietPla
 import { MobileAppHeader } from './MobileAppHeader';
 import { MobileBottomNav, MobileNavTab } from './MobileBottomNav';
 import { PrivilegePassCard } from '../shared/PrivilegePassCard';
+import { TrainerCollectPaymentModal } from '../trainer/TrainerCollectPaymentModal';
+import { TrainerAddExpenseModal } from '../trainer/TrainerAddExpenseModal';
 import {
   Home,
   Users,
@@ -34,7 +36,10 @@ import {
   Coffee,
   Sun,
   Moon,
-  Cookie
+  Cookie,
+  CreditCard,
+  Receipt,
+  DollarSign
 } from 'lucide-react';
 
 type Gender = 'Male' | 'Female' | 'Other';
@@ -201,6 +206,13 @@ export const MobileTrainerApp: React.FC = () => {
   const [notifMessage, setNotifMessage] = useState('');
   const [notifSuccess, setNotifSuccess] = useState('');
   const [isSendingNotif, setIsSendingNotif] = useState(false);
+
+  // Collect Payment Modal State
+  const [isCollectPaymentOpen, setIsCollectPaymentOpen] = useState(false);
+  const [paymentTargetMember, setPaymentTargetMember] = useState<Member | null>(null);
+
+  // Add Expense Voucher Modal State
+  const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
 
   const todayStr = new Date().toISOString().split('T')[0];
   const todayAttendance = attendance.filter((a) => a.date === todayStr);
@@ -527,7 +539,7 @@ export const MobileTrainerApp: React.FC = () => {
       const selectedPlan = plans.find((p) => p.id === clPlanId) || plans[0];
       const today = new Date();
       const expiry = new Date();
-      expiry.setDate(today.getDate() + (selectedPlan?.durationDays || 30));
+      expiry.setDate(today.getDate() + (selectedPlan?.durationDays || (selectedPlan?.durationMonths ? selectedPlan.durationMonths * 30 : 30)));
 
       const created = await addMember({
         name: clName.trim(),
@@ -688,6 +700,62 @@ export const MobileTrainerApp: React.FC = () => {
                 <div className="text-xl font-black text-[#8B5CF6] mt-0.5">{myClients.length}</div>
                 <span className="text-[9px] text-[#8B5CF6] font-bold block mt-0.5">Diets & Sets →</span>
               </div>
+            </div>
+
+            {/* Featured: Collect Subscription Fee & Record Gym Expense */}
+            <div className="pt-1 space-y-2">
+              <button
+                onClick={() => {
+                  setPaymentTargetMember(myClients[0] || members[0] || null);
+                  setIsCollectPaymentOpen(true);
+                }}
+                className="w-full p-3.5 rounded-3xl bg-gradient-to-r from-emerald-500/15 via-[#101422] to-teal-500/15 border border-emerald-500/30 hover:border-emerald-500/60 active:scale-95 text-left transition-all shadow-xl group cursor-pointer flex items-center justify-between"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform border border-emerald-500/40 shadow-lg shadow-emerald-500/20">
+                    <CreditCard className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-xs text-white">💳 Collect Subscription Fee</span>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[9px] font-black uppercase">
+                        1-12M
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-medium mt-0.5">
+                      Manual payment entry • Extend 1, 2, or custom pass
+                    </div>
+                  </div>
+                </div>
+                <div className="w-7 h-7 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs group-hover:translate-x-1 transition-transform">
+                  →
+                </div>
+              </button>
+
+              <button
+                onClick={() => setIsAddExpenseOpen(true)}
+                className="w-full p-3.5 rounded-3xl bg-gradient-to-r from-amber-500/15 via-[#101422] to-orange-500/15 border border-amber-500/30 hover:border-amber-500/60 active:scale-95 text-left transition-all shadow-xl group cursor-pointer flex items-center justify-between"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center group-hover:scale-110 transition-transform border border-amber-500/40 shadow-lg shadow-amber-500/20">
+                    <Receipt className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-xs text-white">🧾 Record Gym Expense</span>
+                      <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-[9px] font-black uppercase">
+                        Voucher
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-medium mt-0.5">
+                      Equipment repair, cleaning, chalk, first aid, water refills
+                    </div>
+                  </div>
+                </div>
+                <div className="w-7 h-7 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-xs group-hover:translate-x-1 transition-transform">
+                  +
+                </div>
+              </button>
             </div>
 
             {/* Quick Actions Grid */}
@@ -852,27 +920,29 @@ export const MobileTrainerApp: React.FC = () => {
               {filteredClients.map((client) => (
                 <div
                   key={client.id}
-                  onClick={() => {
-                    setSelectedClient(client);
-                    setTargetMemberId(client.id);
-                    navigateTo('client-profile');
-                  }}
-                  className="p-3.5 bg-[#101422] hover:bg-[#151A2E] active:scale-[0.98] rounded-2xl border border-white/10 flex items-center justify-between cursor-pointer transition-all shadow-sm"
+                  className="p-3.5 bg-[#101422] hover:bg-[#151A2E] rounded-2xl border border-white/10 flex items-center justify-between transition-all shadow-sm gap-2"
                 >
-                  <div className="flex items-center gap-3">
+                  <div
+                    onClick={() => {
+                      setSelectedClient(client);
+                      setTargetMemberId(client.id);
+                      navigateTo('client-profile');
+                    }}
+                    className="flex items-center gap-3 flex-1 cursor-pointer min-w-0"
+                  >
                     <img
                       src={client.photoUrl}
                       alt={client.name}
-                      className="w-11 h-11 rounded-2xl object-cover border border-[#4F7CFF]/50 shadow-inner"
+                      className="w-11 h-11 rounded-2xl object-cover border border-[#4F7CFF]/50 shadow-inner shrink-0"
                     />
-                    <div>
+                    <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <h4 className="text-xs font-black text-white">{client.name}</h4>
-                        <span className="text-[8px] font-black px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 uppercase">
+                        <h4 className="text-xs font-black text-white truncate">{client.name}</h4>
+                        <span className="text-[8px] font-black px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 uppercase shrink-0">
                           {client.status}
                         </span>
                       </div>
-                      <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-2">
+                      <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-2 truncate">
                         <span>{client.membershipNo}</span>
                         <span>•</span>
                         <span className="text-[#4F7CFF] font-semibold">{client.goal}</span>
@@ -880,9 +950,31 @@ export const MobileTrainerApp: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="text-right">
-                    <span className="text-xs font-black text-purple-400">{client.planName}</span>
-                    <span className="text-[9px] text-slate-400 block mt-0.5">Exp: {client.endDate}</span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPaymentTargetMember(client);
+                        setIsCollectPaymentOpen(true);
+                      }}
+                      className="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 font-bold text-[10px] flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
+                    >
+                      <CreditCard className="w-3 h-3" />
+                      <span>💳 Fee</span>
+                    </button>
+
+                    <div
+                      onClick={() => {
+                        setSelectedClient(client);
+                        setTargetMemberId(client.id);
+                        navigateTo('client-profile');
+                      }}
+                      className="text-right cursor-pointer"
+                    >
+                      <span className="text-[10px] font-black text-purple-400 block truncate max-w-[80px]">{client.planName}</span>
+                      <span className="text-[9px] text-slate-400 block mt-0.5">Exp: {client.endDate || 'N/A'}</span>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1541,6 +1633,36 @@ export const MobileTrainerApp: React.FC = () => {
               </div>
             </div>
 
+            {/* Coach Operations Actions */}
+            <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 shadow-xl space-y-2.5">
+              <h3 className="text-xs font-black text-slate-400 uppercase tracking-wider block">
+                Coach Operations
+              </h3>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaymentTargetMember(myClients[0] || members[0] || null);
+                    setIsCollectPaymentOpen(true);
+                  }}
+                  className="p-3 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 font-black text-xs flex flex-col items-center text-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-md"
+                >
+                  <CreditCard className="w-5 h-5" />
+                  <span>Collect Fee</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsAddExpenseOpen(true)}
+                  className="p-3 rounded-2xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-400 font-black text-xs flex flex-col items-center text-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-md"
+                >
+                  <Receipt className="w-5 h-5" />
+                  <span>Add Expense</span>
+                </button>
+              </div>
+            </div>
+
             {/* Broadcast Form */}
             <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 shadow-xl space-y-3">
               <h3 className="text-xs font-black text-white flex items-center gap-2">
@@ -1660,9 +1782,17 @@ export const MobileTrainerApp: React.FC = () => {
                   onChange={(e) => setClPlanId(e.target.value)}
                   className="w-full p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white focus:outline-none focus:border-[#4F7CFF]"
                 >
-                  {plans.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name} ({p.durationDays || 30} Days)</option>
-                  ))}
+                  {plans.map((p) => {
+                    const price = p.basePrice || p.totalPrice || 1500;
+                    const durationStr = p.durationMonths 
+                      ? `${p.durationMonths} ${p.durationMonths === 1 ? 'Month' : 'Months'}`
+                      : `${p.durationDays || 30} Days`;
+                    return (
+                      <option key={p.id} value={p.id}>
+                        {p.name} — ₹{price.toLocaleString('en-IN')} ({durationStr})
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
@@ -1708,39 +1838,54 @@ export const MobileTrainerApp: React.FC = () => {
             </div>
 
             {/* Action Buttons */}
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="space-y-2.5">
+              {/* Collect Subscription Payment Button */}
               <button
+                type="button"
                 onClick={() => {
-                  setTargetMemberId(selectedClient.id);
-                  setPlanSubTab('workout');
-                  navigateTo('set-workout');
+                  setPaymentTargetMember(selectedClient);
+                  setIsCollectPaymentOpen(true);
                 }}
-                className="py-3.5 rounded-2xl bg-[#4F7CFF] hover:bg-[#3D69EB] active:scale-95 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-[#4F7CFF]/20 cursor-pointer"
+                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-600 hover:to-teal-600 active:scale-95 text-black font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 cursor-pointer transition-all"
               >
-                <Dumbbell className="w-4 h-4" />
-                <span>🏋️ Set Workout Split</span>
+                <CreditCard className="w-4 h-4" />
+                <span>💳 Collect Fee / Extend Pass (1-12 Months)</span>
               </button>
 
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  onClick={() => {
+                    setTargetMemberId(selectedClient.id);
+                    setPlanSubTab('workout');
+                    navigateTo('set-workout');
+                  }}
+                  className="py-3.5 rounded-2xl bg-[#4F7CFF] hover:bg-[#3D69EB] active:scale-95 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-[#4F7CFF]/20 cursor-pointer"
+                >
+                  <Dumbbell className="w-4 h-4" />
+                  <span>🏋️ Set Workout Split</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setTargetMemberId(selectedClient.id);
+                    setPlanSubTab('diet');
+                    navigateTo('set-diet');
+                  }}
+                  className="py-3.5 rounded-2xl bg-[#101422] hover:bg-[#151A2E] border border-white/10 active:scale-95 text-emerald-400 font-black text-xs flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                >
+                  <Utensils className="w-4 h-4" />
+                  <span>🥗 Set Nutrition Diet</span>
+                </button>
+              </div>
+
               <button
-                onClick={() => {
-                  setTargetMemberId(selectedClient.id);
-                  setPlanSubTab('diet');
-                  navigateTo('set-diet');
-                }}
-                className="py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 cursor-pointer"
+                onClick={() => alert(`Calling ${selectedClient.mobile}`)}
+                className="w-full py-3 rounded-2xl bg-[#101422] hover:bg-[#151A2E] text-white font-bold text-xs flex items-center justify-center gap-2 border border-white/10"
               >
-                <Utensils className="w-4 h-4" />
-                <span>🥗 Set Nutrition Diet</span>
+                <Phone className="w-4 h-4 text-emerald-400" />
+                <span>Call Client ({selectedClient.mobile})</span>
               </button>
             </div>
-
-            <button
-              onClick={() => alert(`Calling ${selectedClient.mobile}`)}
-              className="w-full py-3 rounded-2xl bg-[#101422] hover:bg-[#151A2E] text-white font-bold text-xs flex items-center justify-center gap-2 border border-white/10"
-            >
-              <Phone className="w-4 h-4 text-emerald-400" />
-              <span>Call Client ({selectedClient.mobile})</span>
-            </button>
           </div>
         )}
 
@@ -2340,6 +2485,24 @@ export const MobileTrainerApp: React.FC = () => {
         }
         onSelectTab={(tabId) => navigateTo(tabId as TrainerScreen)}
         accentColor="#00D4FF"
+      />
+
+      {/* ── 4. TRAINER COLLECT PAYMENT MODAL ── */}
+      <TrainerCollectPaymentModal
+        isOpen={isCollectPaymentOpen}
+        onClose={() => {
+          setIsCollectPaymentOpen(false);
+          setPaymentTargetMember(null);
+        }}
+        preSelectedMember={paymentTargetMember}
+        currentTrainer={currentTrainer}
+      />
+
+      {/* ── 5. TRAINER ADD EXPENSE MODAL ── */}
+      <TrainerAddExpenseModal
+        isOpen={isAddExpenseOpen}
+        onClose={() => setIsAddExpenseOpen(false)}
+        trainerName={currentTrainer?.name}
       />
 
     </div>

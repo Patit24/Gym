@@ -46,12 +46,22 @@ service cloud.firestore {
     match /users/{userId} {
       // User can read own profile; Staff/Admin can read directory
       allow read: if isUser(userId) || isStaff();
-      // Managers can create users; User can create own initial document upon isolated signup
-      allow create: if isManager() || isUser(userId);
+      // Managers can create any user; Self-service signup strictly locked to 'Member' role with no admin permissions
+      allow create: if isManager() || (
+        isUser(userId) &&
+        request.resource.data.role == 'Member' &&
+        (!('isProtected' in request.resource.data) || request.resource.data.isProtected == false) &&
+        (!('permissions' in request.resource.data) || (
+          request.resource.data.permissions.canManageFinance == false &&
+          request.resource.data.permissions.canAccessAdmin == false
+        ))
+      );
       // Admin can update all; User can only update non-privileged self-service fields
       allow update: if isManager() || (
         isUser(userId) && 
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'id', 'permissions', 'createdByAdminId', 'isProtected'])
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'role', 'id', 'permissions', 'createdByAdminId', 'isProtected', 'branchId', 'linkedId'
+        ])
       );
       allow delete: if isOwner();
     }
@@ -67,14 +77,14 @@ service cloud.firestore {
         )
       );
       allow create: if isStaff();
-      // Admin/Staff can update everything; Member can only update self-service personal info
+      // Admin/Staff can update everything; Member can only update self-service personal bio/profile info
       allow update: if isStaff() || (
         isAuthenticated() && (
-          (resource.data.userId == request.auth.uid || memberId == request.auth.uid) &&
+          (resource.data.userId == request.auth.uid || resource.data.id == request.auth.uid || memberId == request.auth.uid) &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-            'status', 'paidAmount', 'pendingDues', 'totalPlanAmount', 
+            'status', 'paidAmount', 'pendingDues', 'balanceDue', 'totalPlanAmount', 
             'planId', 'planName', 'startDate', 'endDate', 'expiryDate', 
-            'membershipNo', 'rewardPoints', 'paymentStatus'
+            'membershipNo', 'rewardPoints', 'paymentStatus', 'branchId', 'assignedTrainerId', 'assignedDietitianId'
           ])
         )
       );
@@ -83,7 +93,8 @@ service cloud.firestore {
 
     // --- EMPLOYEES COLLECTION ---
     match /employees/{employeeId} {
-      allow read: if isAuthenticated();
+      // Staff only (trainers, accountants, managers); hidden from regular members
+      allow read: if isStaff();
       allow write: if isManager();
     }
 
@@ -143,14 +154,16 @@ service cloud.firestore {
     // --- ATTENDANCE ---
     match /attendance/{recordId} {
       allow read: if isStaff() || (isAuthenticated() && resource.data.memberId == request.auth.uid);
-      allow create: if isStaff() || isAuthenticated();
+      allow create: if isStaff() || (isAuthenticated() && request.resource.data.memberId == request.auth.uid);
       allow update, delete: if isManager();
     }
 
     // --- TRANSACTIONS & FINANCE ---
+    // Trainers strictly prohibited from reading financial transaction logs or reports
     match /transactions/{txnId} {
-      allow read: if isStaff() || (isAuthenticated() && resource.data.memberId == request.auth.uid);
-      allow write: if isManager() || hasRole('Accountant');
+      allow read: if isManager() || hasRole('Accountant') || (isAuthenticated() && resource.data.memberId == request.auth.uid);
+      allow create: if isStaff() || (isAuthenticated() && request.resource.data.memberId == request.auth.uid);
+      allow update, delete: if isManager() || hasRole('Accountant');
     }
 
     match /expenses/{expenseId} {
@@ -180,7 +193,7 @@ service cloud.firestore {
 
     match /complaints/{complaintId} {
       allow read: if isStaff() || (isAuthenticated() && resource.data.memberId == request.auth.uid);
-      allow create: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.memberId == request.auth.uid;
       allow update: if isStaff();
       allow delete: if isManager();
     }
@@ -207,7 +220,8 @@ service cloud.firestore {
 
     match /referrals/{referralId} {
       allow read: if isStaff() || (isAuthenticated() && resource.data.referrerMemberId == request.auth.uid);
-      allow write: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.referrerMemberId == request.auth.uid;
+      allow update, delete: if isManager();
     }
 
     match /freezeRecords/{freezeId} {

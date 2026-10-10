@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useGym } from '../../context/GymContext';
 import { Member } from '../../types/gym';
+import { ProfilePhotoModal } from './ProfilePhotoModal';
 import {
   User,
   Ruler,
@@ -12,11 +13,15 @@ import {
   CheckCircle2,
   AlertCircle,
   Sparkles,
-  Activity
+  Activity,
+  Camera,
+  ShieldCheck,
+  Upload
 } from 'lucide-react';
 
 export const MemberProfileEditor: React.FC = () => {
   const { activeMember, updateMember } = useGym();
+  const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
 
   const [formData, setFormData] = useState({
     name: activeMember?.name || '',
@@ -110,12 +115,59 @@ export const MemberProfileEditor: React.FC = () => {
           </div>
           <div>
             <h3 className="text-sm font-black text-white">My Fitness & Health Profile</h3>
-            <p className="text-[10px] text-slate-400">Manage body tape measurements & medical info</p>
+            <p className="text-[10px] text-slate-400">Manage profile photo, body measurements & medical info</p>
           </div>
         </div>
         <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-[#27D980]/15 text-[#27D980] border border-[#27D980]/30">
           Member Self-Service
         </span>
+      </div>
+
+      {/* ── MANDATORY PROFILE PHOTO CARD ── */}
+      <div className="p-4 bg-gradient-to-r from-[#111726] via-[#0E1320] to-[#0B0F1A] rounded-3xl border border-cyan-500/30 shadow-xl flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3.5">
+          <div className="relative group">
+            <div className="w-14 h-14 rounded-2xl overflow-hidden border-2 border-cyan-400 shadow-md bg-slate-900 flex items-center justify-center">
+              {activeMember?.photoUrl ? (
+                <img
+                  src={activeMember.photoUrl}
+                  alt={activeMember.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <User className="w-7 h-7 text-slate-500" />
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsPhotoModalOpen(true)}
+              className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-cyan-400 text-black flex items-center justify-center shadow-lg border border-white/20 active:scale-95 cursor-pointer hover:bg-cyan-300 transition-all"
+            >
+              <Camera className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div>
+            <div className="flex items-center gap-1.5">
+              <h4 className="text-xs font-black text-white">{activeMember?.name || 'Member'}</h4>
+              <span className="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 text-[9px] font-black uppercase tracking-wider border border-rose-500/40">
+                Mandatory
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-0.5">
+              {activeMember?.photoUrl ? 'Official Photo Verified & Active' : 'No photo uploaded yet — required for Smart Gate Pass'}
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setIsPhotoModalOpen(true)}
+          className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-[#00D4FF] via-cyan-400 to-[#00F5A0] text-black font-extrabold text-[11px] flex items-center gap-1.5 shadow-md shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer shrink-0"
+        >
+          <Camera className="w-3.5 h-3.5" />
+          <span>{activeMember?.photoUrl ? 'Change' : 'Upload'}</span>
+        </button>
       </div>
 
       {success && (
@@ -131,6 +183,8 @@ export const MemberProfileEditor: React.FC = () => {
           <span>{error}</span>
         </div>
       )}
+
+      <ProfilePhotoModal isOpen={isPhotoModalOpen} onClose={() => setIsPhotoModalOpen(false)} />
 
       <form onSubmit={handleSave} className="space-y-4">
         <div className="p-4 bg-[#101422] rounded-3xl border border-white/10 shadow-xl space-y-3">

@@ -59,15 +59,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNewMemberM
   }).length;
 
   // 2. Real Financial Metrics from Database
-  const branchTransactions = selectedBranchId === 'all'
+  const branchTransactions = !selectedBranchId || selectedBranchId === 'all'
     ? transactions
-    : transactions.filter((t) => t.branchId === selectedBranchId);
-  const totalRevenueCollected = branchTransactions.reduce((acc, t) => acc + t.amount, 0);
+    : transactions.filter((t) => t.branchId === selectedBranchId || !t.branchId);
+  const totalRevenueCollected = branchTransactions.reduce((acc, t) => acc + (t.amount || 0), 0);
   
-  const branchExpenses = selectedBranchId === 'all'
+  const branchExpenses = !selectedBranchId || selectedBranchId === 'all'
     ? expenses
-    : expenses.filter((e) => e.branchId === selectedBranchId);
-  const totalExpenses = branchExpenses.reduce((acc, e) => acc + e.amount, 0);
+    : expenses.filter((e) => e.branchId === selectedBranchId || !e.branchId);
+  const totalExpenses = branchExpenses.reduce((acc, e) => acc + (e.amount || 0), 0);
   
   const netProfit = totalRevenueCollected - totalExpenses;
   const isProfitable = netProfit >= 0;
@@ -117,11 +117,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNewMemberM
 
           <div className="flex items-center gap-3 flex-wrap">
             <button
+              onClick={() => onNavigateTab('members')}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-black font-extrabold text-xs shadow-lg shadow-emerald-500/25 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+            >
+              <CreditCard className="w-4 h-4" />
+              <span>💳 Collect Payment</span>
+            </button>
+            <button
               onClick={onOpenNewMemberModal}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#4F7CFF] to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold text-xs shadow-lg shadow-[#4F7CFF]/30 transition-all hover:scale-105 active:scale-95"
             >
               <UserPlus className="w-4 h-4" />
               <span>+ Add Member</span>
+            </button>
+            <button
+              onClick={() => onNavigateTab('traineraudit')}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#1E2330] hover:bg-[#252C3D] border border-gym-border text-[#27D980] font-semibold text-xs transition-all hover:border-[#27D980]/40"
+            >
+              <Activity className="w-4 h-4 text-[#27D980]" />
+              <span>Trainer Audit</span>
             </button>
             <button
               onClick={() => onNavigateTab('finance')}

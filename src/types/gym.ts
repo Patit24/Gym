@@ -20,6 +20,7 @@ export interface AppUser {
   role: Role;
   linkedId: string;         // memberId or employeeId
   linkedName: string;
+  photoUrl?: string;
   branchId: BranchId;
   createdAt: string;
   createdByAdminId: string;
@@ -241,6 +242,32 @@ export interface MealItem {
   completed: boolean;
 }
 
+export interface DailyDietPlan {
+  dayNumber: number; // 1..7
+  dayName: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday' | string;
+  dayTitle?: string;
+  targetCalories?: number;
+  targetProteinG?: number;
+  targetCarbsG?: number;
+  targetFatG?: number;
+  isCompleted?: boolean;
+  completedAt?: string;
+  meals: {
+    breakfast: MealItem[];
+    lunch: MealItem[];
+    snack: MealItem[];
+    dinner: MealItem[];
+  };
+}
+
+export interface WeeklyDietPlan {
+  weekNumber: number; // 1..4
+  weekTitle: string;
+  isCompleted?: boolean;
+  completedAt?: string;
+  days: DailyDietPlan[];
+}
+
 export interface MonthlyDietPlan {
   monthNumber: number;
   monthTitle: string;
@@ -249,6 +276,8 @@ export interface MonthlyDietPlan {
   targetCarbsG: number;
   targetFatG: number;
   waterTargetLiters: number;
+  isCompleted?: boolean;
+  weeks?: WeeklyDietPlan[];
   meals: {
     breakfast: MealItem[];
     lunch: MealItem[];

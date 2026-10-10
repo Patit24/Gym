@@ -105,11 +105,17 @@ export const TrainerAddMemberModal: React.FC<TrainerAddMemberModalProps> = ({ is
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
-      <div className="bg-[#121724] border border-white/10 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 my-auto animate-in fade-in zoom-in-95">
+    <div 
+      onClick={onClose}
+      className="fixed inset-0 z-50 overflow-y-auto overscroll-contain flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in"
+    >
+      <div 
+        onClick={(e) => e.stopPropagation()}
+        className="bg-[#121724] border border-white/10 rounded-3xl max-w-lg w-full shadow-2xl my-auto max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95"
+      >
         
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+        <div className="flex items-center justify-between border-b border-white/10 p-5 shrink-0 bg-[#121724] z-10">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-[#4F7CFF]/20 border border-[#4F7CFF]/40 flex items-center justify-center">
               <UserPlus className="w-5 h-5 text-[#4F7CFF]" />
@@ -123,21 +129,23 @@ export const TrainerAddMemberModal: React.FC<TrainerAddMemberModalProps> = ({ is
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all"
+            className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Security Notice */}
-        <div className="p-2.5 rounded-2xl bg-[#4F7CFF]/10 border border-[#4F7CFF]/20 flex items-center gap-2 text-[11px] text-[#4F7CFF]">
-          <ShieldCheck className="w-4 h-4 shrink-0" />
-          <span>Newly registered member will be automatically assigned to you for workout & diet planning.</span>
-        </div>
+        {/* Scrollable Body */}
+        <div className="p-5 overflow-y-auto overscroll-contain flex-1 min-h-0 space-y-4">
+          {/* Security Notice */}
+          <div className="p-2.5 rounded-2xl bg-[#4F7CFF]/10 border border-[#4F7CFF]/20 flex items-center gap-2 text-[11px] text-[#4F7CFF]">
+            <ShieldCheck className="w-4 h-4 shrink-0" />
+            <span>Newly registered member will be automatically assigned to you for workout & diet planning.</span>
+          </div>
 
-        {/* Notifications */}
-        {errorMsg && (
-          <div className="p-3 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center gap-2 text-xs text-red-200">
+          {/* Notifications */}
+          {errorMsg && (
+            <div className="p-3 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center gap-2 text-xs text-red-200">
             <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
             <span>{errorMsg}</span>
           </div>
@@ -240,7 +248,7 @@ export const TrainerAddMemberModal: React.FC<TrainerAddMemberModalProps> = ({ is
           </div>
 
           <div className="space-y-1">
-            <label className="block text-[10px] font-black text-slate-300 uppercase">Membership Plan</label>
+            <label className="block text-[10px] font-black text-slate-300 uppercase">Membership Plan & Fee Structure</label>
             <select
               value={selectedPlanId}
               onChange={(e) => setSelectedPlanId(e.target.value)}
@@ -248,10 +256,28 @@ export const TrainerAddMemberModal: React.FC<TrainerAddMemberModalProps> = ({ is
             >
               {plans.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} ({p.durationMonths} Months)
+                  {p.name} — ₹{p.totalPrice.toLocaleString('en-IN')} ({p.durationMonths} Months)
                 </option>
               ))}
             </select>
+
+            {/* Fee Structure Summary */}
+            {(() => {
+              const p = plans.find((x) => x.id === selectedPlanId) || plans[0];
+              if (!p) return null;
+              const base = p.basePrice || p.totalPrice || 0;
+              const joinFee = p.joiningFee || 0;
+              return (
+                <div className="p-2.5 rounded-xl bg-[#4F7CFF]/10 border border-[#4F7CFF]/20 text-[10px] text-slate-300 flex items-center justify-between">
+                  <span>
+                    Tariff: ₹{base.toLocaleString('en-IN')} {joinFee > 0 && `+ Admission: ₹${joinFee.toLocaleString('en-IN')}`}
+                  </span>
+                  <span className="font-black text-[#27D980]">
+                    Total: ₹{p.totalPrice.toLocaleString('en-IN')}
+                  </span>
+                </div>
+              );
+            })()}
           </div>
 
           <div className="space-y-1">
@@ -275,6 +301,7 @@ export const TrainerAddMemberModal: React.FC<TrainerAddMemberModalProps> = ({ is
           </button>
 
         </form>
+        </div>
 
       </div>
     </div>

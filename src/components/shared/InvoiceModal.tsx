@@ -29,23 +29,27 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ transaction, onClose
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto overscroll-contain animate-in fade-in duration-200"
       role="dialog"
       aria-modal="true"
       aria-labelledby="invoice-modal-title"
     >
-      <div className="bg-[#14171F] border border-gym-border rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-6 relative text-slate-200">
+      <div 
+        onClick={(e) => e.stopPropagation()}
+        className="bg-[#14171F] border border-gym-border rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl space-y-4 my-auto max-h-[90vh] overflow-y-auto overscroll-contain relative text-slate-200"
+      >
         
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gym-border pb-4">
+        <div className="flex items-center justify-between border-b border-gym-border pb-3 shrink-0">
           <div className="flex items-center gap-2">
             <Activity className="w-5 h-5 text-[#27D980]" />
-            <h3 id="invoice-modal-title" className="font-extrabold text-white text-base">PULSEFIT POS INVOICE</h3>
+            <h3 id="invoice-modal-title" className="font-extrabold text-white text-base">SMART GYM POS INVOICE</h3>
           </div>
           <button 
             onClick={onClose} 
             aria-label="Close invoice"
-            className="p-1.5 rounded-lg bg-[#1E2330] hover:bg-slate-700 text-slate-300 transition-colors focus-visible:ring-2 focus-visible:ring-[#27D980]"
+            className="p-1.5 rounded-lg bg-[#1E2330] hover:bg-slate-700 text-slate-300 transition-colors focus-visible:ring-2 focus-visible:ring-[#27D980] cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>

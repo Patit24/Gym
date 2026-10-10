@@ -1,6 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useGym } from '../../context/GymContext';
 import { Transaction, Expense, BranchId } from '../../types/gym';
+import { exportToCSV, exportToPrintPDF } from '../../utils/exportUtils';
 import {
   DollarSign,
   TrendingUp,
@@ -33,6 +35,8 @@ import {
   Check,
   Eye,
   Trash2,
+  Printer,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 type DatePeriod = 'today' | 'week' | 'month' | 'all';
@@ -99,6 +103,48 @@ export const MobileFinanceScreen: React.FC = () => {
   const [isAddIncomeOpen, setIsAddIncomeOpen] = useState(false);
   const [selectedTxItem, setSelectedTxItem] = useState<UnifiedTransactionItem | null>(null);
   const [isSeeAllTxOpen, setIsSeeAllTxOpen] = useState(false);
+  const [isReportCardOpen, setIsReportCardOpen] = useState(false);
+
+  // Custom Date Range for Report Card
+  const [reportStartDate, setReportStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(1); // 1st day of current month
+    return d.toISOString().split('T')[0];
+  });
+  const [reportEndDate, setReportEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+
+  // Lock body scroll when any modal or bottom sheet is open
+  useEffect(() => {
+    const isAnyModalOpen =
+      isBranchSheetOpen ||
+      isAddExpenseOpen ||
+      isAddIncomeOpen ||
+      !!selectedTxItem ||
+      isSeeAllTxOpen ||
+      isReportCardOpen;
+
+    if (isAnyModalOpen) {
+      const scrollY = window.scrollY;
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = '100%';
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.width = '';
+        document.body.style.overflow = '';
+        window.scrollTo(0, scrollY);
+      };
+    }
+  }, [
+    isBranchSheetOpen,
+    isAddExpenseOpen,
+    isAddIncomeOpen,
+    selectedTxItem,
+    isSeeAllTxOpen,
+    isReportCardOpen,
+  ]);
 
   // Form States - Expense
   const [expTitle, setExpTitle] = useState('');
@@ -151,13 +197,21 @@ export const MobileFinanceScreen: React.FC = () => {
     );
   }, [branches, selectedBranchId]);
 
-  // Branch Isolated Collections & Expenses
+  // Branch Isolated Collections & Expenses with robust fallback
   const branchTransactions = useMemo(() => {
-    return (transactions || []).filter((t) => t && t.branchId === selectedBranchId);
+    return (transactions || []).filter((t) => {
+      if (!t) return false;
+      if (!selectedBranchId || selectedBranchId === 'all') return true;
+      return t.branchId === selectedBranchId || !t.branchId;
+    });
   }, [transactions, selectedBranchId]);
 
   const branchExpenses = useMemo(() => {
-    return (expenses || []).filter((e) => e && e.branchId === selectedBranchId);
+    return (expenses || []).filter((e) => {
+      if (!e) return false;
+      if (!selectedBranchId || selectedBranchId === 'all') return true;
+      return e.branchId === selectedBranchId || !e.branchId;
+    });
   }, [expenses, selectedBranchId]);
 
   // Filtered by selected Date Period
@@ -171,12 +225,19 @@ export const MobileFinanceScreen: React.FC = () => {
     weekAgo.setDate(today.getDate() - 7);
     const weekAgoStr = weekAgo.toISOString().split('T')[0];
 
+    // 30 Days ago (Rolling 30 days window)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(today.getDate() - 30);
+    const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
+
     const filterFn = (itemDate?: string) => {
       if (!itemDate) return false;
       if (datePeriod === 'all') return true;
       if (datePeriod === 'today') return itemDate === todayStr;
       if (datePeriod === 'week') return itemDate >= weekAgoStr && itemDate <= todayStr;
-      if (datePeriod === 'month') return itemDate.startsWith(currentMonthPrefix);
+      if (datePeriod === 'month') {
+        return itemDate.startsWith(currentMonthPrefix) || (itemDate >= thirtyDaysAgoStr && itemDate <= todayStr);
+      }
       return true;
     };
 
@@ -235,7 +296,7 @@ export const MobileFinanceScreen: React.FC = () => {
     return combined;
   }, [branchTransactions, branchExpenses, txFilter]);
 
-  // Expense Category Breakdown
+  // Expense Category Breakdown with dynamic category detection
   const categoryBreakdown = useMemo(() => {
     const map: Record<string, number> = {};
     periodExpenses.forEach((exp) => {
@@ -245,64 +306,72 @@ export const MobileFinanceScreen: React.FC = () => {
 
     const total = totalExpenseAmount > 0 ? totalExpenseAmount : 1;
 
-    return EXPENSE_CATEGORIES.map((c) => {
-      const amount = map[c.id] || map[c.label] || 0;
+    const recordedCats = Object.keys(map);
+    const allCatKeys = Array.from(new Set([...recordedCats, ...EXPENSE_CATEGORIES.map(c => c.id)]));
+
+    return allCatKeys.map((catKey) => {
+      const preset = EXPENSE_CATEGORIES.find(
+        (c) => c.id.toLowerCase() === catKey.toLowerCase() || c.label.toLowerCase() === catKey.toLowerCase()
+      );
+      const amount = map[catKey] || (preset ? (map[preset.id] || map[preset.label] || 0) : 0);
       const percent = Math.round((amount / total) * 100);
       return {
-        ...c,
+        id: catKey,
+        label: preset?.label || catKey,
+        icon: preset?.icon || getCategoryIcon(catKey, false),
+        color: preset?.color || '#F43F5E',
         amount,
         percent,
       };
-    }).filter((c) => c.amount > 0 || datePeriod === 'all');
-  }, [periodExpenses, totalExpenseAmount, datePeriod]);
+    }).filter((c) => c.amount > 0);
+  }, [periodExpenses, totalExpenseAmount]);
 
-  // Cashflow Interactive Chart Data Points
+  // Cashflow Interactive Chart Data Points with Interval Bucketing
   const chartData = useMemo(() => {
     const pointsCount = chartTimeframe === '7D' ? 7 : chartTimeframe === '30D' ? 6 : chartTimeframe === '3M' ? 6 : 12;
     const now = new Date();
     const data: { label: string; income: number; expense: number; net: number; dateStr: string }[] = [];
 
+    const intervalDays = chartTimeframe === '7D' ? 1 : chartTimeframe === '30D' ? 5 : chartTimeframe === '3M' ? 15 : 30;
+
     for (let i = pointsCount - 1; i >= 0; i--) {
-      const d = new Date();
-      if (chartTimeframe === '7D') {
-        d.setDate(now.getDate() - i);
-      } else if (chartTimeframe === '30D') {
-        d.setDate(now.getDate() - i * 5);
-      } else if (chartTimeframe === '3M') {
-        d.setDate(now.getDate() - i * 15);
+      const startD = new Date(now);
+      const endD = new Date(now);
+
+      if (chartTimeframe === '1Y') {
+        startD.setMonth(now.getMonth() - i, 1);
+        endD.setMonth(now.getMonth() - i + 1, 0);
       } else {
-        d.setMonth(now.getMonth() - i);
+        startD.setDate(now.getDate() - (i * intervalDays + (intervalDays - 1)));
+        endD.setDate(now.getDate() - i * intervalDays);
       }
 
-      const iso = d.toISOString().split('T')[0];
-      const monthShort = d.toLocaleString('default', { month: 'short' });
-      const day = d.getDate();
+      const startIso = startD.toISOString().split('T')[0];
+      const endIso = endD.toISOString().split('T')[0];
+      const monthShort = endD.toLocaleString('default', { month: 'short' });
+      const day = endD.getDate();
       const label = chartTimeframe === '1Y' ? monthShort : `${day} ${monthShort}`;
 
-      // Sum matching records
+      // Sum matching records falling into this date interval
       const matchInc = branchTransactions
-        .filter((t) => (chartTimeframe === '1Y' ? t.date?.startsWith(iso.slice(0, 7)) : t.date === iso))
+        .filter((t) => t.date && t.date >= startIso && t.date <= endIso)
         .reduce((sum, t) => sum + (t.amount || 0), 0);
 
       const matchExp = branchExpenses
-        .filter((e) => (chartTimeframe === '1Y' ? e.date?.startsWith(iso.slice(0, 7)) : e.date === iso))
+        .filter((e) => e.date && e.date >= startIso && e.date <= endIso)
         .reduce((sum, e) => sum + (e.amount || 0), 0);
-
-      // Add synthetic baseline if sparse for polished visual preview
-      const syntheticBaseInc = matchInc > 0 ? matchInc : (totalCollections > 0 ? Math.round(totalCollections / pointsCount * (0.8 + (i % 3) * 0.15)) : 3500 + i * 400);
-      const syntheticBaseExp = matchExp > 0 ? matchExp : (totalExpenseAmount > 0 ? Math.round(totalExpenseAmount / pointsCount * (0.7 + (i % 2) * 0.2)) : 1200 + (i % 4) * 300);
 
       data.push({
         label,
-        income: matchInc > 0 ? matchInc : syntheticBaseInc,
-        expense: matchExp > 0 ? matchExp : syntheticBaseExp,
-        net: (matchInc > 0 ? matchInc : syntheticBaseInc) - (matchExp > 0 ? matchExp : syntheticBaseExp),
-        dateStr: iso,
+        income: matchInc,
+        expense: matchExp,
+        net: matchInc - matchExp,
+        dateStr: endIso,
       });
     }
 
     return data;
-  }, [branchTransactions, branchExpenses, chartTimeframe, totalCollections, totalExpenseAmount]);
+  }, [branchTransactions, branchExpenses, chartTimeframe]);
 
   // Max value for SVG scaling
   const maxChartVal = useMemo(() => {
@@ -699,7 +768,7 @@ export const MobileFinanceScreen: React.FC = () => {
 
           {/* Reports / Export */}
           <button
-            onClick={() => showToast('Financial Statement exported to Downloads.')}
+            onClick={() => setIsReportCardOpen(true)}
             className="p-3 rounded-[18px] glass-card-premium hover:border-purple-400/40 flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer shadow-lg group"
           >
             <div className="w-8 h-8 rounded-xl bg-purple-500/15 text-purple-400 flex items-center justify-center border border-purple-500/30 group-hover:scale-110 transition-transform">
@@ -848,16 +917,19 @@ export const MobileFinanceScreen: React.FC = () => {
       {/* ═══════════════════════════════════════════════════════════
           BOTTOM SHEET 1: RECORD NEW EXPENSE
       ═══════════════════════════════════════════════════════════ */}
-      {isAddExpenseOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+      {isAddExpenseOpen && typeof document !== 'undefined' && createPortal(
+        <div 
+          onClick={() => setIsAddExpenseOpen(false)}
+          className="fixed inset-0 z-[99999] flex items-end justify-center bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
+        >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg bg-[#0E121E] border-t border-white/12 rounded-t-[32px] p-5 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto animate-in slide-in-from-bottom duration-300"
+            className="w-full max-w-lg bg-[#0E121E] border-t border-white/15 rounded-t-[32px] p-5 shadow-2xl flex flex-col max-h-[88vh] overflow-hidden animate-in slide-in-from-bottom duration-300"
           >
             {/* Sheet Handle */}
-            <div className="w-12 h-1 bg-white/20 rounded-full mx-auto" />
+            <div className="w-12 h-1 bg-white/20 rounded-full mx-auto shrink-0 cursor-pointer mb-3" onClick={() => setIsAddExpenseOpen(false)} />
 
-            <div className="flex items-center justify-between pb-2 border-b border-white/10">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10 shrink-0">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center border border-rose-500/40">
                   <Plus className="w-4 h-4" />
@@ -869,154 +941,161 @@ export const MobileFinanceScreen: React.FC = () => {
               </div>
               <button
                 onClick={() => setIsAddExpenseOpen(false)}
-                className="w-7 h-7 rounded-full bg-white/10 text-slate-400 hover:text-white flex items-center justify-center"
+                className="w-7 h-7 rounded-full bg-white/10 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {expError && (
-              <div className="p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[10px] flex items-center gap-2">
+              <div className="p-2.5 my-2 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[10px] flex items-center gap-2 shrink-0">
                 <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
                 <span>{expError}</span>
               </div>
             )}
 
-            <form onSubmit={handleSaveExpense} className="space-y-3 text-xs">
-              {/* Expense Title */}
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
-                  Expense Title *
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Monthly Electricity Bill, Dumbbell Maintenance"
-                  value={expTitle}
-                  onChange={(e) => setExpTitle(e.target.value)}
-                  required
-                  className="w-full bg-[#080C14] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-400"
-                />
-              </div>
-
-              {/* Amount & Date */}
-              <div className="grid grid-cols-2 gap-2.5">
+            {/* Scrollable Form Body */}
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain py-2 pr-1 space-y-3 pb-8">
+              <form onSubmit={handleSaveExpense} className="space-y-3 text-xs">
+                {/* Expense Title */}
                 <div>
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
-                    Amount (₹) *
+                    Expense Title *
                   </label>
                   <input
-                    type="number"
-                    placeholder="e.g. 2500"
-                    value={expAmount}
-                    onChange={(e) => setExpAmount(e.target.value)}
+                    type="text"
+                    placeholder="e.g. Monthly Electricity Bill, Dumbbell Maintenance"
+                    value={expTitle}
+                    onChange={(e) => setExpTitle(e.target.value)}
                     required
-                    min="1"
-                    className="w-full bg-[#080C14] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white font-bold placeholder-slate-500 focus:outline-none focus:border-rose-400"
+                    className="w-full bg-[#080C14] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-400"
                   />
                 </div>
 
+                {/* Amount & Date */}
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                      Amount (₹) *
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 2500"
+                      value={expAmount}
+                      onChange={(e) => setExpAmount(e.target.value)}
+                      required
+                      min="1"
+                      className="w-full bg-[#080C14] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white font-bold placeholder-slate-500 focus:outline-none focus:border-rose-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                      Date *
+                    </label>
+                    <input
+                      type="date"
+                      value={expDate}
+                      onChange={(e) => setExpDate(e.target.value)}
+                      required
+                      className="w-full bg-[#080C14] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-rose-400"
+                    />
+                  </div>
+                </div>
+
+                {/* Category Chips */}
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1.5">
+                    Category *
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {EXPENSE_CATEGORIES.map((cat) => (
+                      <button
+                        type="button"
+                        key={cat.id}
+                        onClick={() => setExpCategory(cat.id)}
+                        className={`px-2.5 py-1.5 rounded-xl text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                          expCategory === cat.id
+                            ? 'bg-rose-500/25 border border-rose-500/60 text-white shadow-md'
+                            : 'bg-[#080C14] border border-white/10 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <cat.icon className="w-3 h-3" style={{ color: cat.color }} />
+                        <span>{cat.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Payment Method */}
                 <div>
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
-                    Date *
+                    Payment Method
                   </label>
-                  <input
-                    type="date"
-                    value={expDate}
-                    onChange={(e) => setExpDate(e.target.value)}
-                    required
-                    className="w-full bg-[#080C14] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-rose-400"
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {PAYMENT_METHODS.map((m) => (
+                      <button
+                        type="button"
+                        key={m}
+                        onClick={() => setExpMethod(m)}
+                        className={`py-1.5 rounded-xl text-[10px] font-bold border transition-all cursor-pointer ${
+                          expMethod === m
+                            ? 'bg-cyan-500/20 border-cyan-500/50 text-white'
+                            : 'bg-[#080C14] border-white/10 text-slate-400'
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                    Notes / Vendor Info (Optional)
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Paid to technician, invoice #9482..."
+                    value={expNotes}
+                    onChange={(e) => setExpNotes(e.target.value)}
+                    className="w-full bg-[#080C14] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-400"
                   />
                 </div>
-              </div>
 
-              {/* Category Chips */}
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1.5">
-                  Category *
-                </label>
-                <div className="flex flex-wrap gap-1.5">
-                  {EXPENSE_CATEGORIES.map((cat) => (
-                    <button
-                      type="button"
-                      key={cat.id}
-                      onClick={() => setExpCategory(cat.id)}
-                      className={`px-2.5 py-1.5 rounded-xl text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
-                        expCategory === cat.id
-                          ? 'bg-rose-500/25 border border-rose-500/60 text-white shadow-md'
-                          : 'bg-[#080C14] border border-white/10 text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      <cat.icon className="w-3 h-3" style={{ color: cat.color }} />
-                      <span>{cat.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Payment Method */}
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
-                  Payment Method
-                </label>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {PAYMENT_METHODS.map((m) => (
-                    <button
-                      type="button"
-                      key={m}
-                      onClick={() => setExpMethod(m)}
-                      className={`py-1.5 rounded-xl text-[10px] font-bold border transition-all cursor-pointer ${
-                        expMethod === m
-                          ? 'bg-cyan-500/20 border-cyan-500/50 text-white'
-                          : 'bg-[#080C14] border-white/10 text-slate-400'
-                      }`}
-                    >
-                      {m}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Notes */}
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
-                  Notes / Vendor Info (Optional)
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="Paid to technician, invoice #9482..."
-                  value={expNotes}
-                  onChange={(e) => setExpNotes(e.target.value)}
-                  className="w-full bg-[#080C14] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-400"
-                />
-              </div>
-
-              {/* Submit Button */}
-              <button
-                type="submit"
-                disabled={isSavingExp}
-                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-rose-500 via-rose-600 to-red-600 text-white font-black text-xs flex items-center justify-center gap-2 shadow-xl shadow-rose-500/25 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50"
-              >
-                <Check className="w-4 h-4" />
-                <span>{isSavingExp ? 'Saving Expense...' : 'Save & Record Expense'}</span>
-              </button>
-            </form>
+                {/* Submit Button */}
+                <button
+                  type="submit"
+                  disabled={isSavingExp}
+                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-rose-500 via-rose-600 to-red-600 text-white font-black text-xs flex items-center justify-center gap-2 shadow-xl shadow-rose-500/25 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 mt-2"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{isSavingExp ? 'Saving Expense...' : 'Save & Record Expense'}</span>
+                </button>
+              </form>
+            </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ═══════════════════════════════════════════════════════════
           BOTTOM SHEET 2: RECORD NEW INCOME
       ═══════════════════════════════════════════════════════════ */}
-      {isAddIncomeOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+      {isAddIncomeOpen && typeof document !== 'undefined' && createPortal(
+        <div 
+          onClick={() => setIsAddIncomeOpen(false)}
+          className="fixed inset-0 z-[99999] flex items-end justify-center bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
+        >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg bg-[#0E121E] border-t border-white/12 rounded-t-[32px] p-5 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto animate-in slide-in-from-bottom duration-300"
+            className="w-full max-w-lg bg-[#0E121E] border-t border-white/15 rounded-t-[32px] p-5 shadow-2xl flex flex-col max-h-[88vh] overflow-hidden animate-in slide-in-from-bottom duration-300"
           >
             {/* Sheet Handle */}
-            <div className="w-12 h-1 bg-white/20 rounded-full mx-auto" />
+            <div className="w-12 h-1 bg-white/20 rounded-full mx-auto shrink-0 cursor-pointer mb-3" onClick={() => setIsAddIncomeOpen(false)} />
 
-            <div className="flex items-center justify-between pb-2 border-b border-white/10">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10 shrink-0">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/40">
                   <Plus className="w-4 h-4" />
@@ -1028,150 +1107,157 @@ export const MobileFinanceScreen: React.FC = () => {
               </div>
               <button
                 onClick={() => setIsAddIncomeOpen(false)}
-                className="w-7 h-7 rounded-full bg-white/10 text-slate-400 hover:text-white flex items-center justify-center"
+                className="w-7 h-7 rounded-full bg-white/10 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {incError && (
-              <div className="p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[10px] flex items-center gap-2">
+              <div className="p-2.5 my-2 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[10px] flex items-center gap-2 shrink-0">
                 <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
                 <span>{incError}</span>
               </div>
             )}
 
-            <form onSubmit={handleSaveIncome} className="space-y-3 text-xs">
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
-                  Income Title / Plan Name *
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. VIP Quarterly Membership, PT 10-Sessions"
-                  value={incTitle}
-                  onChange={(e) => setIncTitle(e.target.value)}
-                  required
-                  className="w-full bg-[#080C14] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2.5">
+            {/* Scrollable Form Body */}
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain py-2 pr-1 space-y-3 pb-8">
+              <form onSubmit={handleSaveIncome} className="space-y-3 text-xs">
                 <div>
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
-                    Amount (₹) *
+                    Income Title / Plan Name *
                   </label>
                   <input
-                    type="number"
-                    placeholder="e.g. 5000"
-                    value={incAmount}
-                    onChange={(e) => setIncAmount(e.target.value)}
+                    type="text"
+                    placeholder="e.g. VIP Quarterly Membership, PT 10-Sessions"
+                    value={incTitle}
+                    onChange={(e) => setIncTitle(e.target.value)}
                     required
-                    min="1"
-                    className="w-full bg-[#080C14] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white font-bold placeholder-slate-500 focus:outline-none focus:border-emerald-400"
+                    className="w-full bg-[#080C14] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400"
                   />
                 </div>
 
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                      Amount (₹) *
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 5000"
+                      value={incAmount}
+                      onChange={(e) => setIncAmount(e.target.value)}
+                      required
+                      min="1"
+                      className="w-full bg-[#080C14] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white font-bold placeholder-slate-500 focus:outline-none focus:border-emerald-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                      Date *
+                    </label>
+                    <input
+                      type="date"
+                      value={incDate}
+                      onChange={(e) => setIncDate(e.target.value)}
+                      required
+                      className="w-full bg-[#080C14] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-400"
+                    />
+                  </div>
+                </div>
+
+                {/* Category Chips */}
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1.5">
+                    Category *
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {INCOME_CATEGORIES.map((cat) => (
+                      <button
+                        type="button"
+                        key={cat}
+                        onClick={() => setIncCategory(cat)}
+                        className={`px-2.5 py-1.5 rounded-xl text-[10px] font-bold transition-all cursor-pointer ${
+                          incCategory === cat
+                            ? 'bg-emerald-500/25 border border-emerald-500/60 text-white shadow-md'
+                            : 'bg-[#080C14] border border-white/10 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Payment Method */}
                 <div>
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
-                    Date *
+                    Payment Method
                   </label>
-                  <input
-                    type="date"
-                    value={incDate}
-                    onChange={(e) => setIncDate(e.target.value)}
-                    required
-                    className="w-full bg-[#080C14] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-400"
-                  />
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {PAYMENT_METHODS.map((m) => (
+                      <button
+                        type="button"
+                        key={m}
+                        onClick={() => setIncMethod(m)}
+                        className={`py-1.5 rounded-xl text-[10px] font-bold border transition-all cursor-pointer ${
+                          incMethod === m
+                            ? 'bg-emerald-500/20 border-emerald-500/50 text-white'
+                            : 'bg-[#080C14] border-white/10 text-slate-400'
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              {/* Category Chips */}
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1.5">
-                  Category *
-                </label>
-                <div className="flex flex-wrap gap-1.5">
-                  {INCOME_CATEGORIES.map((cat) => (
-                    <button
-                      type="button"
-                      key={cat}
-                      onClick={() => setIncCategory(cat)}
-                      className={`px-2.5 py-1.5 rounded-xl text-[10px] font-bold transition-all cursor-pointer ${
-                        incCategory === cat
-                          ? 'bg-emerald-500/25 border border-emerald-500/60 text-white shadow-md'
-                          : 'bg-[#080C14] border border-white/10 text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      {cat}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Payment Method */}
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
-                  Payment Method
-                </label>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {PAYMENT_METHODS.map((m) => (
-                    <button
-                      type="button"
-                      key={m}
-                      onClick={() => setIncMethod(m)}
-                      className={`py-1.5 rounded-xl text-[10px] font-bold border transition-all cursor-pointer ${
-                        incMethod === m
-                          ? 'bg-emerald-500/20 border-emerald-500/50 text-white'
-                          : 'bg-[#080C14] border-white/10 text-slate-400'
-                      }`}
-                    >
-                      {m}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Submit Button */}
-              <button
-                type="submit"
-                disabled={isSavingInc}
-                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 text-white font-black text-xs flex items-center justify-center gap-2 shadow-xl shadow-emerald-500/25 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50"
-              >
-                <Check className="w-4 h-4" />
-                <span>{isSavingInc ? 'Recording Income...' : 'Record Collection'}</span>
-              </button>
-            </form>
+                {/* Submit Button */}
+                <button
+                  type="submit"
+                  disabled={isSavingInc}
+                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 text-white font-black text-xs flex items-center justify-center gap-2 shadow-xl shadow-emerald-500/25 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 mt-2"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{isSavingInc ? 'Recording Income...' : 'Record Collection'}</span>
+                </button>
+              </form>
+            </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ═══════════════════════════════════════════════════════════
           BOTTOM SHEET 3: BRANCH SWITCHER
       ═══════════════════════════════════════════════════════════ */}
-      {isBranchSheetOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+      {isBranchSheetOpen && typeof document !== 'undefined' && createPortal(
+        <div 
+          onClick={() => setIsBranchSheetOpen(false)}
+          className="fixed inset-0 z-[99999] flex items-end justify-center bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
+        >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg bg-[#0E121E] border-t border-white/12 rounded-t-[32px] p-5 shadow-2xl space-y-4 max-h-[75vh] overflow-y-auto animate-in slide-in-from-bottom duration-300"
+            className="w-full max-w-lg bg-[#0E121E] border-t border-white/15 rounded-t-[32px] p-5 shadow-2xl flex flex-col max-h-[75vh] overflow-hidden animate-in slide-in-from-bottom duration-300"
           >
             {/* Handle */}
-            <div className="w-12 h-1 bg-white/20 rounded-full mx-auto" />
+            <div className="w-12 h-1 bg-white/20 rounded-full mx-auto shrink-0 mb-3 cursor-pointer" onClick={() => setIsBranchSheetOpen(false)} />
 
-            <div className="flex items-center justify-between pb-2 border-b border-white/10">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10 shrink-0">
               <div>
                 <h3 className="text-sm font-black text-white">Select Accounting Branch</h3>
                 <p className="text-[10px] text-slate-400">Switch franchise cashflow view</p>
               </div>
               <button
                 onClick={() => setIsBranchSheetOpen(false)}
-                className="w-7 h-7 rounded-full bg-white/10 text-slate-400 hover:text-white flex items-center justify-center"
+                className="w-7 h-7 rounded-full bg-white/10 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-2 pt-1">
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain py-2 space-y-2 pb-6">
               {(branches || []).map((b) => {
                 const isSelected = selectedBranchId === b.id;
                 return (
@@ -1216,17 +1302,21 @@ export const MobileFinanceScreen: React.FC = () => {
               })}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ═══════════════════════════════════════════════════════════
           MODAL 4: TRANSACTION INSPECTION DETAILS
       ═══════════════════════════════════════════════════════════ */}
-      {selectedTxItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+      {selectedTxItem && typeof document !== 'undefined' && createPortal(
+        <div 
+          onClick={() => setSelectedTxItem(null)}
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
+        >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-sm bg-[#0E121E] border border-white/12 rounded-[28px] p-5 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200"
+            className="w-full max-w-sm bg-[#0E121E] border border-white/15 rounded-[28px] p-5 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200"
           >
             <div className="flex items-center justify-between pb-3 border-b border-white/10">
               <span
@@ -1240,7 +1330,7 @@ export const MobileFinanceScreen: React.FC = () => {
               </span>
               <button
                 onClick={() => setSelectedTxItem(null)}
-                className="w-7 h-7 rounded-full bg-white/10 text-slate-400 hover:text-white flex items-center justify-center"
+                className="w-7 h-7 rounded-full bg-white/10 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1281,42 +1371,46 @@ export const MobileFinanceScreen: React.FC = () => {
             {selectedTxItem.type === 'EXPENSE' && (
               <button
                 onClick={() => handleDeleteExpenseItem(selectedTxItem.id)}
-                className="w-full py-2.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-400 font-bold text-xs flex items-center justify-center gap-1.5 transition-all"
+                className="w-full py-2.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-400 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>Delete Expense Entry</span>
               </button>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ═══════════════════════════════════════════════════════════
           BOTTOM SHEET 5: FULL TRANSACTIONS STATEMENT (SEE ALL)
       ═══════════════════════════════════════════════════════════ */}
-      {isSeeAllTxOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+      {isSeeAllTxOpen && typeof document !== 'undefined' && createPortal(
+        <div 
+          onClick={() => setIsSeeAllTxOpen(false)}
+          className="fixed inset-0 z-[99999] flex items-end justify-center bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
+        >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg bg-[#0E121E] border-t border-white/12 rounded-t-[32px] p-5 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto animate-in slide-in-from-bottom duration-300"
+            className="w-full max-w-lg bg-[#0E121E] border-t border-white/15 rounded-t-[32px] p-5 shadow-2xl flex flex-col max-h-[85vh] overflow-hidden animate-in slide-in-from-bottom duration-300"
           >
             {/* Handle */}
-            <div className="w-12 h-1 bg-white/20 rounded-full mx-auto" />
+            <div className="w-12 h-1 bg-white/20 rounded-full mx-auto shrink-0 mb-3 cursor-pointer" onClick={() => setIsSeeAllTxOpen(false)} />
 
-            <div className="flex items-center justify-between pb-2 border-b border-white/10">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10 shrink-0">
               <div>
                 <h3 className="text-sm font-black text-white">Full Transaction Statement</h3>
                 <p className="text-[10px] text-slate-400">{currentBranch.name} • {unifiedTransactions.length} records</p>
               </div>
               <button
                 onClick={() => setIsSeeAllTxOpen(false)}
-                className="w-7 h-7 rounded-full bg-white/10 text-slate-400 hover:text-white flex items-center justify-center"
+                className="w-7 h-7 rounded-full bg-white/10 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-2 pt-1 max-h-[60vh] overflow-y-auto">
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain py-2 space-y-2 pb-6">
               {unifiedTransactions.map((item) => {
                 const isIncome = item.type === 'INCOME';
                 const IconComponent = getCategoryIcon(item.category, isIncome);
@@ -1357,8 +1451,329 @@ export const MobileFinanceScreen: React.FC = () => {
               })}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
+
+      {/* ═══════════════════════════════════════════════════════════
+          MODAL 6: CUSTOM DATE FINANCIAL REPORT CARD & DOWNLOAD
+      ═══════════════════════════════════════════════════════════ */}
+      {isReportCardOpen && typeof document !== 'undefined' && (() => {
+        // Compute report data for the selected custom date range
+        const filteredTx = branchTransactions.filter((t) => {
+          if (!t?.date) return false;
+          return t.date >= reportStartDate && t.date <= reportEndDate;
+        });
+
+        const filteredExp = branchExpenses.filter((e) => {
+          if (!e?.date) return false;
+          return e.date >= reportStartDate && e.date <= reportEndDate;
+        });
+
+        const reportTotalRevenue = filteredTx.reduce((sum, t) => sum + (t?.amount || 0), 0);
+        const reportTotalExpense = filteredExp.reduce((sum, e) => sum + (e?.amount || 0), 0);
+        const reportNetCash = reportTotalRevenue - reportTotalExpense;
+
+        const newAdmissionsInPeriod = (members || []).filter((m) => {
+          if (selectedBranchId && selectedBranchId !== 'all' && m.branchId !== selectedBranchId) return false;
+          return m.startDate && m.startDate >= reportStartDate && m.startDate <= reportEndDate;
+        }).length;
+
+        // Build itemized ledger
+        const reportLedger = [
+          ...filteredTx.map((t) => ({
+            id: t.id,
+            type: 'INCOME',
+            date: t.date || '',
+            desc: t.planName ? `${t.planName} (${t.memberName || 'Member'})` : t.category || 'Collection',
+            category: t.category || 'Membership',
+            paymentMethod: t.paymentMethod || 'UPI',
+            amount: t.amount || 0,
+          })),
+          ...filteredExp.map((e) => ({
+            id: e.id,
+            type: 'EXPENSE',
+            date: e.date || '',
+            desc: e.name || 'Operational Expense',
+            category: e.category || 'Expense',
+            paymentMethod: e.paymentMethod || 'Cash',
+            amount: e.amount || 0,
+          })),
+        ].sort((a, b) => b.date.localeCompare(a.date));
+
+        // Export Print / PDF Handler
+        const handleDownloadPDF = () => {
+          exportToPrintPDF({
+            title: 'SMART GYM FINANCIAL REPORT CARD',
+            subtitle: `Executive Performance Statement (${reportStartDate} to ${reportEndDate})`,
+            branchName: currentBranch.name,
+            generatedBy: 'Smart Gym System Admin',
+            dateRange: `${reportStartDate} to ${reportEndDate}`,
+            summaryStats: [
+              { label: 'Total Collections', value: `₹${reportTotalRevenue.toLocaleString('en-IN')}`, color: '#10b981' },
+              { label: 'Total Expenses', value: `₹${reportTotalExpense.toLocaleString('en-IN')}`, color: '#ef4444' },
+              { label: 'Net Cash Flow', value: `₹${reportNetCash.toLocaleString('en-IN')}`, color: reportNetCash >= 0 ? '#10b981' : '#ef4444' },
+              { label: 'New Admissions', value: newAdmissionsInPeriod, color: '#38bdf8' },
+            ],
+            headers: ['Date', 'Type', 'Description / Title', 'Category', 'Mode', 'Amount (INR)'],
+            rows: reportLedger.map((row) => [
+              row.date,
+              row.type,
+              row.desc,
+              row.category,
+              row.paymentMethod,
+              row.type === 'INCOME' ? `+ ₹${row.amount.toLocaleString('en-IN')}` : `- ₹${row.amount.toLocaleString('en-IN')}`,
+            ]),
+            notes: 'Generated automatically from Smart Gym Enterprise Ledger. Legally valid verified statement.',
+          });
+          showToast('Print / PDF Report generated successfully!');
+        };
+
+        // Export CSV Handler
+        const handleDownloadCSV = () => {
+          exportToCSV(
+            `SmartGym_Financial_Report_${reportStartDate}_to_${reportEndDate}.csv`,
+            ['Date', 'Transaction Type', 'Description / Plan', 'Category', 'Payment Mode', 'Amount (₹)'],
+            reportLedger.map((row) => [
+              row.date,
+              row.type,
+              row.desc,
+              row.category,
+              row.paymentMethod,
+              row.type === 'INCOME' ? row.amount : -row.amount,
+            ])
+          );
+          showToast('CSV Report downloaded to your device!');
+        };
+
+        // Quick Preset Ranges
+        const setPreset = (preset: 'today' | 'week' | 'month' | '30d' | 'year') => {
+          const today = new Date();
+          const todayStr = today.toISOString().split('T')[0];
+          setReportEndDate(todayStr);
+
+          if (preset === 'today') {
+            setReportStartDate(todayStr);
+          } else if (preset === 'week') {
+            const w = new Date();
+            w.setDate(today.getDate() - 7);
+            setReportStartDate(w.toISOString().split('T')[0]);
+          } else if (preset === 'month') {
+            const m = new Date();
+            m.setDate(1);
+            setReportStartDate(m.toISOString().split('T')[0]);
+          } else if (preset === '30d') {
+            const d = new Date();
+            d.setDate(today.getDate() - 30);
+            setReportStartDate(d.toISOString().split('T')[0]);
+          } else if (preset === 'year') {
+            const y = new Date();
+            y.setMonth(0, 1);
+            setReportStartDate(y.toISOString().split('T')[0]);
+          }
+        };
+
+        return createPortal(
+          <div
+            onClick={() => setIsReportCardOpen(false)}
+            className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-2xl bg-[#0E121E] border border-white/15 rounded-[32px] shadow-2xl flex flex-col max-h-[92vh] overflow-hidden animate-in zoom-in-95 duration-200"
+            >
+              {/* Header */}
+              <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between shrink-0 bg-[#0B0F19]">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center justify-center">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-white flex items-center gap-2">
+                      Financial Report Card
+                      <span className="text-[9px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold">
+                        Custom Range
+                      </span>
+                    </h3>
+                    <p className="text-[10px] text-slate-400">{currentBranch.name} • Audit & P&L Statement</p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setIsReportCardOpen(false)}
+                  className="w-8 h-8 rounded-full bg-white/10 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Scrollable Body */}
+              <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-5 space-y-4">
+                {/* Date Controls & Fast Presets */}
+                <div className="p-4 rounded-2xl bg-[#080C14] border border-white/10 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-black text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-purple-400" />
+                      Select Date Range
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setPreset('today')}
+                        className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/15 text-[10px] font-bold text-slate-300 hover:text-white cursor-pointer"
+                      >
+                        Today
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPreset('week')}
+                        className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/15 text-[10px] font-bold text-slate-300 hover:text-white cursor-pointer"
+                      >
+                        7D
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPreset('month')}
+                        className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/15 text-[10px] font-bold text-slate-300 hover:text-white cursor-pointer"
+                      >
+                        Month
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPreset('30d')}
+                        className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/15 text-[10px] font-bold text-slate-300 hover:text-white cursor-pointer"
+                      >
+                        30D
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPreset('year')}
+                        className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/15 text-[10px] font-bold text-slate-300 hover:text-white cursor-pointer"
+                      >
+                        Year
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <span className="block text-[9px] text-slate-400 font-bold uppercase mb-1">From Date</span>
+                      <input
+                        type="date"
+                        value={reportStartDate}
+                        onChange={(e) => setReportStartDate(e.target.value)}
+                        className="w-full bg-[#0E121E] border border-white/15 rounded-xl px-3 py-2 text-xs text-white font-bold outline-none focus:border-purple-400"
+                      />
+                    </div>
+                    <div>
+                      <span className="block text-[9px] text-slate-400 font-bold uppercase mb-1">To Date</span>
+                      <input
+                        type="date"
+                        value={reportEndDate}
+                        onChange={(e) => setReportEndDate(e.target.value)}
+                        className="w-full bg-[#0E121E] border border-white/15 rounded-xl px-3 py-2 text-xs text-white font-bold outline-none focus:border-purple-400"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4 Financial KPI Summary Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/25">
+                    <span className="text-[9.5px] font-black uppercase text-emerald-400 block tracking-tight">Total Inflow</span>
+                    <div className="text-base font-black text-white mt-1">₹{reportTotalRevenue.toLocaleString('en-IN')}</div>
+                    <span className="text-[9px] text-slate-400">{filteredTx.length} payments</span>
+                  </div>
+
+                  <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/25">
+                    <span className="text-[9.5px] font-black uppercase text-rose-400 block tracking-tight">Total Outflow</span>
+                    <div className="text-base font-black text-white mt-1">₹{reportTotalExpense.toLocaleString('en-IN')}</div>
+                    <span className="text-[9px] text-slate-400">{filteredExp.length} expenses</span>
+                  </div>
+
+                  <div className={`p-3 rounded-2xl ${reportNetCash >= 0 ? 'bg-cyan-500/10 border-cyan-500/25' : 'bg-amber-500/10 border-amber-500/25'} border`}>
+                    <span className={`text-[9.5px] font-black uppercase ${reportNetCash >= 0 ? 'text-cyan-400' : 'text-amber-400'} block tracking-tight`}>Net Cash Flow</span>
+                    <div className={`text-base font-black ${reportNetCash >= 0 ? 'text-cyan-300' : 'text-amber-300'} mt-1`}>
+                      ₹{reportNetCash.toLocaleString('en-IN')}
+                    </div>
+                    <span className="text-[9px] text-slate-400">{reportNetCash >= 0 ? 'Net Surplus' : 'Net Deficit'}</span>
+                  </div>
+
+                  <div className="p-3 rounded-2xl bg-purple-500/10 border border-purple-500/25">
+                    <span className="text-[9.5px] font-black uppercase text-purple-400 block tracking-tight">New Admissions</span>
+                    <div className="text-base font-black text-white mt-1">{newAdmissionsInPeriod}</div>
+                    <span className="text-[9px] text-slate-400">Enrolled Members</span>
+                  </div>
+                </div>
+
+                {/* Itemized Transactions Table */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-black text-white uppercase tracking-wider">
+                      Itemized Ledger ({reportLedger.length} Records)
+                    </h4>
+                    <span className="text-[10px] text-slate-400">
+                      {reportStartDate} → {reportEndDate}
+                    </span>
+                  </div>
+
+                  <div className="max-h-[220px] overflow-y-auto overscroll-contain rounded-2xl border border-white/10 bg-[#080C14] divide-y divide-white/5">
+                    {reportLedger.length === 0 ? (
+                      <div className="p-6 text-center text-slate-500 text-xs">
+                        No transactions found in this date window.
+                      </div>
+                    ) : (
+                      reportLedger.map((row) => {
+                        const isIncome = row.type === 'INCOME';
+                        return (
+                          <div key={row.id} className="p-2.5 flex items-center justify-between text-xs hover:bg-white/[0.02]">
+                            <div className="min-w-0 pr-2">
+                              <div className="flex items-center gap-2">
+                                <span className={`text-[8.5px] font-black uppercase px-1.5 py-0.5 rounded ${isIncome ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
+                                  {isIncome ? 'IN' : 'OUT'}
+                                </span>
+                                <span className="text-white font-bold truncate">{row.desc}</span>
+                              </div>
+                              <div className="text-[10px] text-slate-400 mt-0.5">
+                                {row.date} • {row.category} • {row.paymentMethod}
+                              </div>
+                            </div>
+                            <span className={`font-black shrink-0 ${isIncome ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              {isIncome ? `+₹${row.amount.toLocaleString('en-IN')}` : `-₹${row.amount.toLocaleString('en-IN')}`}
+                            </span>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer Actions: Download PDF / CSV */}
+              <div className="p-4 border-t border-white/10 bg-[#0B0F19] grid grid-cols-2 gap-2.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleDownloadCSV}
+                  className="py-3 px-4 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/15 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                  <span>Export CSV</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDownloadPDF}
+                  className="py-3 px-4 rounded-2xl bg-gradient-to-r from-purple-500 via-indigo-600 to-blue-600 text-white font-black text-xs shadow-lg shadow-purple-500/25 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Download / Print PDF</span>
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        );
+      })()}
     </div>
   );
 };

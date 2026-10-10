@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useGym } from '../../context/GymContext';
 import { Member } from '../../types/gym';
+import { TrainerCollectPaymentModal } from '../trainer/TrainerCollectPaymentModal';
+import { TrainerAddExpenseModal } from '../trainer/TrainerAddExpenseModal';
 import {
   Dumbbell,
   Users,
@@ -17,7 +19,9 @@ import {
   Heart,
   Plus,
   X,
-  Scale
+  Scale,
+  CreditCard,
+  Receipt
 } from 'lucide-react';
 
 export const TrainerDashboard: React.FC = () => {
@@ -39,6 +43,13 @@ export const TrainerDashboard: React.FC = () => {
   const [selectedTrainerId, setSelectedTrainerId] = useState('EMP-001');
   const [deepDiveMember, setDeepDiveMember] = useState<Member | null>(null);
   
+  // Payment Collection Modal State
+  const [isCollectFeeOpen, setIsCollectFeeOpen] = useState(false);
+  const [feeTargetMember, setFeeTargetMember] = useState<Member | null>(null);
+
+  // Add Expense Voucher Modal State
+  const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
+
   // Note Form
   const [noteContent, setNoteContent] = useState('');
   const [noteCategory, setNoteCategory] = useState<'General' | 'Workout Form' | 'Nutrition' | 'Motivation'>('Workout Form');
@@ -98,18 +109,41 @@ export const TrainerDashboard: React.FC = () => {
           <p className="text-xs text-gym-subtext">Manage client transformation profiles, adherence, missed visits & coaching notes</p>
         </div>
 
-        {/* Switch Between Multiple Trainers */}
-        <div className="flex items-center gap-2 bg-[#14171F] p-2 rounded-2xl border border-gym-border text-xs">
-          <span className="text-gym-subtext font-medium">Switch Trainer:</span>
-          <select
-            value={selectedTrainerId}
-            onChange={(e) => setSelectedTrainerId(e.target.value)}
-            className="bg-[#0B0D12] text-white font-bold px-3 py-1.5 rounded-xl border border-gym-border focus:outline-none cursor-pointer"
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Collect Fee Action Button */}
+          <button
+            onClick={() => {
+              setFeeTargetMember(assignedMembers[0] || members[0] || null);
+              setIsCollectFeeOpen(true);
+            }}
+            className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-black font-black text-xs flex items-center gap-1.5 shadow-lg shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer"
           >
-            {trainers.map((t) => (
-              <option key={t.id} value={t.id}>{t.name} ({t.shift.split(' ')[0]})</option>
-            ))}
-          </select>
+            <CreditCard className="w-4 h-4" />
+            <span>💳 Collect Fee</span>
+          </button>
+
+          {/* Record Expense Action Button */}
+          <button
+            onClick={() => setIsAddExpenseOpen(true)}
+            className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-black font-black text-xs flex items-center gap-1.5 shadow-lg shadow-amber-500/20 active:scale-95 transition-all cursor-pointer"
+          >
+            <Receipt className="w-4 h-4" />
+            <span>🧾 Add Expense</span>
+          </button>
+
+          {/* Switch Between Multiple Trainers */}
+          <div className="flex items-center gap-2 bg-[#14171F] p-2 rounded-2xl border border-gym-border text-xs">
+            <span className="text-gym-subtext font-medium">Switch Trainer:</span>
+            <select
+              value={selectedTrainerId}
+              onChange={(e) => setSelectedTrainerId(e.target.value)}
+              className="bg-[#0B0D12] text-white font-bold px-3 py-1.5 rounded-xl border border-gym-border focus:outline-none cursor-pointer"
+            >
+              {trainers.map((t) => (
+                <option key={t.id} value={t.id}>{t.name} ({t.shift.split(' ')[0]})</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -202,7 +236,18 @@ export const TrainerDashboard: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFeeTargetMember(mem);
+                            setIsCollectFeeOpen(true);
+                          }}
+                          className="px-3 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 font-black text-xs transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                        >
+                          <CreditCard className="w-3.5 h-3.5" />
+                          <span>💳 Collect Fee</span>
+                        </button>
                         <button
                           onClick={() => setDeepDiveMember(mem)}
                           className="px-3 py-2 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 font-black text-xs transition-all flex items-center gap-1 cursor-pointer"
@@ -434,6 +479,24 @@ export const TrainerDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Collect Fee / Subscription Modal */}
+      <TrainerCollectPaymentModal
+        isOpen={isCollectFeeOpen}
+        onClose={() => {
+          setIsCollectFeeOpen(false);
+          setFeeTargetMember(null);
+        }}
+        preSelectedMember={feeTargetMember}
+        currentTrainer={currentTrainer as any}
+      />
+
+      {/* Record Expense Voucher Modal */}
+      <TrainerAddExpenseModal
+        isOpen={isAddExpenseOpen}
+        onClose={() => setIsAddExpenseOpen(false)}
+        trainerName={currentTrainer?.name}
+      />
 
     </div>
   );

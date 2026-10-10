@@ -5,6 +5,7 @@ import { Member, GoalType, Employee } from '../../types/gym';
 type Gender = 'Male' | 'Female' | 'Other';
 import { PrivilegePassCard } from '../shared/PrivilegePassCard';
 import { QuickDailyPlanner } from '../planner/QuickDailyPlanner';
+import { TrainerAddExpenseModal } from '../trainer/TrainerAddExpenseModal';
 import {
   Home,
   Users,
@@ -27,7 +28,8 @@ import {
   Send,
   Sparkles,
   Flame,
-  Check
+  Check,
+  Receipt
 } from 'lucide-react';
 
 type TrainerScreen = 'home' | 'members' | 'quick-plan' | 'attendance' | 'notifications' | 'add-client' | 'client-profile';
@@ -85,6 +87,9 @@ export const TrainerMobileAppSimulator: React.FC = () => {
   const [notifSuccess, setNotifSuccess] = useState('');
   const [isSending, setIsSending] = useState(false);
 
+  // Add Expense Modal State
+  const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
+
   const todayStr = new Date().toISOString().split('T')[0];
   const todayAttendance = attendance.filter(a => a.date === todayStr);
 
@@ -99,11 +104,7 @@ export const TrainerMobileAppSimulator: React.FC = () => {
   };
 
   const goBack = () => {
-    if (['add-client', 'client-profile'].includes(currentScreen)) {
-      setCurrentScreen('members');
-    } else {
-      setCurrentScreen(previousScreen || 'home');
-    }
+    setCurrentScreen(previousScreen === currentScreen ? 'home' : previousScreen);
   };
 
   const handleCreateClient = async (e: React.FormEvent) => {
@@ -236,13 +237,22 @@ export const TrainerMobileAppSimulator: React.FC = () => {
           )}
 
           {!isSubPage && (
-            <button
-              onClick={() => navigateTo('add-client')}
-              className="p-1.5 rounded-xl bg-[#4F7CFF] hover:bg-[#3D69EB] text-white text-xs font-bold flex items-center gap-1 shadow-md"
-            >
-              <UserPlus className="w-3.5 h-3.5" />
-              <span className="text-[10px]">+ Client</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setIsAddExpenseOpen(true)}
+                className="p-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-xs font-bold flex items-center gap-1 border border-amber-500/30"
+              >
+                <Receipt className="w-3.5 h-3.5" />
+                <span className="text-[10px]">+ Expense</span>
+              </button>
+              <button
+                onClick={() => navigateTo('add-client')}
+                className="p-1.5 rounded-xl bg-[#4F7CFF] hover:bg-[#3D69EB] text-white text-xs font-bold flex items-center gap-1 shadow-md"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span className="text-[10px]">+ Client</span>
+              </button>
+            </div>
           )}
         </div>
 
@@ -253,14 +263,24 @@ export const TrainerMobileAppSimulator: React.FC = () => {
           {currentScreen === 'home' && (
             <div className="space-y-3.5 animate-in fade-in">
               
-              {/* Quick 1-Click Planner Button */}
-              <button
-                onClick={() => navigateTo('quick-plan')}
-                className="w-full py-3 rounded-2xl bg-gradient-to-r from-[#4F7CFF] via-[#27D980] to-emerald-400 text-black font-black text-xs shadow-lg shadow-[#27D980]/20 flex items-center justify-center gap-2 hover:scale-[1.01] transition-all"
-              >
-                <Zap className="w-4 h-4 text-black" />
-                <span>⚡ 1-Click Assign Workout & Diet Plan</span>
-              </button>
+              {/* Quick Action Buttons */}
+              <div className="grid grid-cols-1 gap-2">
+                <button
+                  onClick={() => navigateTo('quick-plan')}
+                  className="w-full py-3 rounded-2xl bg-gradient-to-r from-[#4F7CFF] via-[#27D980] to-emerald-400 text-black font-black text-xs shadow-lg shadow-[#27D980]/20 flex items-center justify-center gap-2 hover:scale-[1.01] transition-all"
+                >
+                  <Zap className="w-4 h-4 text-black" />
+                  <span>⚡ 1-Click Assign Workout & Diet Plan</span>
+                </button>
+
+                <button
+                  onClick={() => setIsAddExpenseOpen(true)}
+                  className="w-full py-2.5 rounded-2xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-black text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                >
+                  <Receipt className="w-4 h-4" />
+                  <span>🧾 Record Gym Expense Voucher</span>
+                </button>
+              </div>
 
               {/* Metrics Grid */}
               <div className="grid grid-cols-3 gap-2">
@@ -631,6 +651,13 @@ export const TrainerMobileAppSimulator: React.FC = () => {
         </div>
 
       </div>
+
+      {/* Record Expense Voucher Modal */}
+      <TrainerAddExpenseModal
+        isOpen={isAddExpenseOpen}
+        onClose={() => setIsAddExpenseOpen(false)}
+        trainerName={currentTrainer?.name}
+      />
 
     </div>
   );

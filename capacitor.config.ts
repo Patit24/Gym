@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.smartgym.app',
-  appName: 'Smart Gym App',
+  appName: 'Smart Gym',
   webDir: 'dist',
   server: {
     androidScheme: 'https',

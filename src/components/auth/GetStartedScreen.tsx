@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useGym } from '../../context/GymContext';
 import {
   Activity,
   Dumbbell,
@@ -21,6 +22,20 @@ interface GetStartedScreenProps {
 
 export const GetStartedScreen: React.FC<GetStartedScreenProps> = ({ onGetStarted }) => {
   const navigate = useNavigate();
+  const { appUserAccount, isAuthLoading } = useGym();
+
+  // If already logged in, seamlessly route to dashboard
+  useEffect(() => {
+    if (!isAuthLoading && appUserAccount) {
+      if (appUserAccount.role === 'Member') {
+        navigate('/app/user/dashboard', { replace: true });
+      } else if (appUserAccount.role === 'Trainer' || appUserAccount.role === 'Dietitian') {
+        navigate('/app/trainer/dashboard', { replace: true });
+      } else {
+        navigate('/app/admin/dashboard', { replace: true });
+      }
+    }
+  }, [appUserAccount, isAuthLoading, navigate]);
 
   const handleStart = () => {
     try {
@@ -28,6 +43,17 @@ export const GetStartedScreen: React.FC<GetStartedScreenProps> = ({ onGetStarted
         navigator.vibrate(40);
       }
     } catch {}
+
+    if (appUserAccount) {
+      if (appUserAccount.role === 'Member') {
+        navigate('/app/user/dashboard', { replace: true });
+      } else if (appUserAccount.role === 'Trainer' || appUserAccount.role === 'Dietitian') {
+        navigate('/app/trainer/dashboard', { replace: true });
+      } else {
+        navigate('/app/admin/dashboard', { replace: true });
+      }
+      return;
+    }
 
     if (onGetStarted) {
       onGetStarted();

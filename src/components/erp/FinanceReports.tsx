@@ -100,16 +100,25 @@ export const FinanceReports: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("ALL");
 
-  // Branch Scope Filtered Data
-  const branchTransactions = selectedBranchId === "all"
+  // Custom Date Range for Financial Report Card
+  const [reportStartDate, setReportStartDate] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(1); // 1st of current month
+    return d.toISOString().split("T")[0];
+  });
+  const [reportEndDate, setReportEndDate] = useState<string>(() => new Date().toISOString().split("T")[0]);
+  const [showCustomDateReportModal, setShowCustomDateReportModal] = useState<boolean>(false);
+
+  // Branch Scope Filtered Data with robust fallback
+  const branchTransactions = !selectedBranchId || selectedBranchId === "all"
     ? transactions
-    : transactions.filter((t) => t.branchId === selectedBranchId);
-  const totalRevenue = branchTransactions.reduce((acc, t) => acc + t.amount, 0);
+    : transactions.filter((t) => t.branchId === selectedBranchId || !t.branchId);
+  const totalRevenue = branchTransactions.reduce((acc, t) => acc + (t.amount || 0), 0);
   
-  const branchExpenses = selectedBranchId === "all"
+  const branchExpenses = !selectedBranchId || selectedBranchId === "all"
     ? expenses
-    : expenses.filter((e) => e.branchId === selectedBranchId);
-  const totalExpenses = branchExpenses.reduce((acc, e) => acc + e.amount, 0);
+    : expenses.filter((e) => e.branchId === selectedBranchId || !e.branchId);
+  const totalExpenses = branchExpenses.reduce((acc, e) => acc + (e.amount || 0), 0);
   const netProfit = totalRevenue - totalExpenses;
   const isProfitable = netProfit >= 0;
   const profitMarginPercent = totalRevenue > 0 ? ((netProfit / totalRevenue) * 100).toFixed(1) : "0";
@@ -400,6 +409,14 @@ export const FinanceReports: React.FC = () => {
 
         {/* Global Export Buttons */}
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setShowCustomDateReportModal(true)}
+            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 active:scale-95 text-white font-black flex items-center gap-1.5 shadow-md shadow-purple-500/20 cursor-pointer transition-all"
+          >
+            <Calendar className="w-3.5 h-3.5" />
+            <span>Report Card (Custom Date)</span>
+          </button>
+
           <button
             onClick={() => handleExportPnL("pdf")}
             className="px-3.5 py-2 rounded-xl bg-[#27D980] hover:bg-[#20BE6F] active:scale-95 text-black font-black flex items-center gap-1.5 shadow-md cursor-pointer transition-all"
@@ -1026,21 +1043,27 @@ export const FinanceReports: React.FC = () => {
 
       {/* MODAL: ADD / EDIT EXPENSE */}
       {showAddExpenseModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-[#101422] border border-white/15 rounded-3xl p-6 w-full max-w-md space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+        <div 
+          onClick={() => setShowAddExpenseModal(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto overscroll-contain animate-in fade-in duration-200"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#101422] border border-white/15 rounded-3xl p-5 sm:p-6 w-full max-w-md shadow-2xl my-auto max-h-[90vh] flex flex-col overflow-hidden"
+          >
+            <div className="flex items-center justify-between border-b border-white/10 pb-3 shrink-0">
               <h3 className="text-sm font-black text-white">
                 {editingExpenseId ? "Edit Expense Record" : "Record New Expense"}
               </h3>
               <button
                 onClick={() => setShowAddExpenseModal(false)}
-                className="text-slate-400 hover:text-white font-bold text-sm"
+                className="text-slate-400 hover:text-white font-bold text-sm cursor-pointer p-1"
               >
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleExpenseSubmit} className="space-y-3 text-xs">
+            <form onSubmit={handleExpenseSubmit} className="space-y-3 text-xs overflow-y-auto overscroll-contain flex-1 min-h-0 pt-3">
               <div>
                 <label className="block text-[10px] text-slate-400 font-bold mb-1">Expense Title *</label>
                 <input
@@ -1059,7 +1082,7 @@ export const FinanceReports: React.FC = () => {
                   <select
                     value={expenseCategory}
                     onChange={(e) => setExpenseCategory(e.target.value)}
-                    className="w-full bg-[#0B0E17] border border-white/15 rounded-xl px-3 py-2 text-white outline-none"
+                    className="w-full bg-[#0B0E17] border border-white/15 rounded-xl px-3 py-2 text-white outline-none cursor-pointer"
                   >
                     {expenseTypes.map((t) => (
                       <option key={t.id} value={t.name}>{t.name}</option>
@@ -1096,7 +1119,7 @@ export const FinanceReports: React.FC = () => {
                   <select
                     value={expensePaymentMethod}
                     onChange={(e) => setExpensePaymentMethod(e.target.value as any)}
-                    className="w-full bg-[#0B0E17] border border-white/15 rounded-xl px-3 py-2 text-white outline-none"
+                    className="w-full bg-[#0B0E17] border border-white/15 rounded-xl px-3 py-2 text-white outline-none cursor-pointer"
                   >
                     <option value="Bank Transfer">Bank Transfer</option>
                     <option value="UPI">UPI</option>
@@ -1131,28 +1154,34 @@ export const FinanceReports: React.FC = () => {
 
       {/* MODAL: RECORD DUES PAYMENT */}
       {payingMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-[#101422] border border-white/15 rounded-3xl p-6 w-full max-w-sm space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+        <div 
+          onClick={() => setPayingMember(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto overscroll-contain animate-in fade-in duration-200"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#101422] border border-white/15 rounded-3xl p-5 sm:p-6 w-full max-w-sm shadow-2xl my-auto max-h-[90vh] flex flex-col overflow-hidden"
+          >
+            <div className="flex items-center justify-between border-b border-white/10 pb-3 shrink-0">
               <div>
                 <h3 className="text-sm font-black text-white">Collect Outstanding Dues</h3>
                 <span className="text-[10px] text-[#27D980] font-bold">{payingMember.name}</span>
               </div>
               <button
                 onClick={() => setPayingMember(null)}
-                className="text-slate-400 hover:text-white font-bold text-sm"
+                className="text-slate-400 hover:text-white font-bold text-sm cursor-pointer p-1"
               >
                 ✕
               </button>
             </div>
 
             {paySuccess ? (
-              <div className="p-4 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 font-bold text-center space-y-2">
+              <div className="p-4 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 font-bold text-center space-y-2 my-auto">
                 <CheckCircle2 className="w-6 h-6 text-[#27D980] mx-auto" />
                 <p>{paySuccess}</p>
               </div>
             ) : (
-              <form onSubmit={handleRecordPayment} className="space-y-3 text-xs">
+              <form onSubmit={handleRecordPayment} className="space-y-3 text-xs overflow-y-auto overscroll-contain flex-1 min-h-0 pt-3">
                 <div className="p-3 bg-[#0B0E17] rounded-2xl border border-white/5 text-center">
                   <span className="text-[10px] text-slate-400 uppercase font-bold">Outstanding Due</span>
                   <div className="text-xl font-black text-rose-400 mt-0.5">₹{payingMember.dues.toLocaleString()}</div>
@@ -1176,7 +1205,7 @@ export const FinanceReports: React.FC = () => {
                   <select
                     value={payMethod}
                     onChange={(e) => setPayMethod(e.target.value)}
-                    className="w-full bg-[#0B0E17] border border-white/15 rounded-xl px-3 py-2 text-white outline-none font-bold"
+                    className="w-full bg-[#0B0E17] border border-white/15 rounded-xl px-3 py-2 text-white outline-none font-bold cursor-pointer"
                   >
                     <option value="UPI">UPI (GPay / PhonePe / QR)</option>
                     <option value="Cash">Cash at Counter</option>
@@ -1199,25 +1228,31 @@ export const FinanceReports: React.FC = () => {
 
       {/* MODAL: ADD EXPENSE TYPE */}
       {showAddTypeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-[#101422] border border-white/15 rounded-3xl p-6 w-full max-w-sm space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+        <div 
+          onClick={() => setShowAddTypeModal(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto overscroll-contain animate-in fade-in duration-200"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#101422] border border-white/15 rounded-3xl p-5 sm:p-6 w-full max-w-sm shadow-2xl my-auto max-h-[90vh] flex flex-col overflow-hidden"
+          >
+            <div className="flex items-center justify-between border-b border-white/10 pb-3 shrink-0">
               <h3 className="text-sm font-black text-white">Add Expense Category</h3>
               <button
                 onClick={() => setShowAddTypeModal(false)}
-                className="text-slate-400 hover:text-white font-bold text-sm"
+                className="text-slate-400 hover:text-white font-bold text-sm cursor-pointer p-1"
               >
                 ✕
               </button>
             </div>
 
             {typeError && (
-              <div className="p-2.5 rounded-xl bg-red-500/20 border border-red-500/40 text-red-300 font-bold text-[11px]">
+              <div className="p-2.5 rounded-xl bg-red-500/20 border border-red-500/40 text-red-300 font-bold text-[11px] mt-2">
                 {typeError}
               </div>
             )}
 
-            <form onSubmit={handleCreateType} className="space-y-3 text-xs">
+            <form onSubmit={handleCreateType} className="space-y-3 text-xs overflow-y-auto overscroll-contain flex-1 min-h-0 pt-3">
               <div>
                 <label className="block text-[10px] text-slate-400 font-bold mb-1">Category Name *</label>
                 <input
@@ -1251,6 +1286,302 @@ export const FinanceReports: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* MODAL: CUSTOM DATE FINANCIAL REPORT CARD */}
+      {showCustomDateReportModal && (() => {
+        const filteredTx = branchTransactions.filter((t) => {
+          if (!t?.date) return false;
+          return t.date >= reportStartDate && t.date <= reportEndDate;
+        });
+
+        const filteredExp = branchExpenses.filter((e) => {
+          if (!e?.date) return false;
+          return e.date >= reportStartDate && e.date <= reportEndDate;
+        });
+
+        const periodRev = filteredTx.reduce((sum, t) => sum + (t?.amount || 0), 0);
+        const periodExp = filteredExp.reduce((sum, e) => sum + (e?.amount || 0), 0);
+        const periodNet = periodRev - periodExp;
+
+        const periodAdmissions = branchMembers.filter((m) => {
+          return m.startDate && m.startDate >= reportStartDate && m.startDate <= reportEndDate;
+        }).length;
+
+        const ledgerItems = [
+          ...filteredTx.map((t) => ({
+            id: t.id,
+            type: "INCOME",
+            date: t.date || "",
+            title: t.planName ? `${t.planName} (${t.memberName || "Member"})` : t.category || "Collection",
+            category: t.category || "Membership",
+            method: t.paymentMethod || "UPI",
+            amount: t.amount || 0,
+          })),
+          ...filteredExp.map((e) => ({
+            id: e.id,
+            type: "EXPENSE",
+            date: e.date || "",
+            title: e.name || "Expense",
+            category: e.category || "Operational",
+            method: e.paymentMethod || "Cash",
+            amount: e.amount || 0,
+          })),
+        ].sort((a, b) => b.date.localeCompare(a.date));
+
+        const downloadPDF = () => {
+          exportToPrintPDF({
+            title: "SMART GYM FINANCIAL REPORT CARD",
+            subtitle: `Verified Audit Statement (${reportStartDate} to ${reportEndDate})`,
+            branchName: currentBranch.name,
+            generatedBy: currentRole,
+            dateRange: `${reportStartDate} to ${reportEndDate}`,
+            summaryStats: [
+              { label: "Total Revenue", value: `₹${periodRev.toLocaleString("en-IN")}`, color: "#10b981" },
+              { label: "Total Expenses", value: `₹${periodExp.toLocaleString("en-IN")}`, color: "#ef4444" },
+              { label: "Net Cash Flow", value: `₹${periodNet.toLocaleString("en-IN")}`, color: periodNet >= 0 ? "#10b981" : "#ef4444" },
+              { label: "New Admissions", value: periodAdmissions, color: "#38bdf8" },
+            ],
+            headers: ["Date", "Type", "Description", "Category", "Payment Mode", "Amount (₹)"],
+            rows: ledgerItems.map((r) => [
+              r.date,
+              r.type,
+              r.title,
+              r.category,
+              r.method,
+              r.type === "INCOME" ? `+ ₹${r.amount.toLocaleString("en-IN")}` : `- ₹${r.amount.toLocaleString("en-IN")}`,
+            ]),
+            notes: "Smart Gym Enterprise Financial System. Valid verified statement.",
+          });
+        };
+
+        const downloadCSV = () => {
+          exportToCSV(
+            `SmartGym_Financial_Report_${reportStartDate}_to_${reportEndDate}.csv`,
+            ["Date", "Type", "Description", "Category", "Payment Mode", "Amount (₹)"],
+            ledgerItems.map((r) => [
+              r.date,
+              r.type,
+              r.title,
+              r.category,
+              r.method,
+              r.type === "INCOME" ? r.amount : -r.amount,
+            ])
+          );
+        };
+
+        const setPreset = (preset: "today" | "week" | "month" | "30d" | "year") => {
+          const today = new Date();
+          const todayStr = today.toISOString().split("T")[0];
+          setReportEndDate(todayStr);
+
+          if (preset === "today") setReportStartDate(todayStr);
+          else if (preset === "week") {
+            const d = new Date();
+            d.setDate(today.getDate() - 7);
+            setReportStartDate(d.toISOString().split("T")[0]);
+          } else if (preset === "month") {
+            const d = new Date();
+            d.setDate(1);
+            setReportStartDate(d.toISOString().split("T")[0]);
+          } else if (preset === "30d") {
+            const d = new Date();
+            d.setDate(today.getDate() - 30);
+            setReportStartDate(d.toISOString().split("T")[0]);
+          } else if (preset === "year") {
+            const d = new Date();
+            d.setMonth(0, 1);
+            setReportStartDate(d.toISOString().split("T")[0]);
+          }
+        };
+
+        return (
+          <div
+            onClick={() => setShowCustomDateReportModal(false)}
+            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto overscroll-contain animate-in fade-in duration-200"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="bg-[#101422] border border-white/15 rounded-3xl w-full max-w-2xl shadow-2xl my-auto max-h-[90vh] flex flex-col overflow-hidden"
+            >
+              {/* Header */}
+              <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between shrink-0 bg-[#0B0E17]">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center justify-center">
+                    <Calendar className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-white">Financial Report Card</h3>
+                    <p className="text-[10px] text-slate-400">{currentBranch.name} • Custom Date Statement</p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setShowCustomDateReportModal(false)}
+                  className="w-8 h-8 rounded-full bg-white/10 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-6 space-y-4">
+                {/* Date Controls & Fast Presets */}
+                <div className="p-4 rounded-2xl bg-[#080C14] border border-white/10 space-y-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <span className="text-[11px] font-black text-white uppercase tracking-wider">Date Window</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setPreset("today")}
+                        className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/15 text-[10px] font-bold text-slate-300 hover:text-white cursor-pointer"
+                      >
+                        Today
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPreset("week")}
+                        className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/15 text-[10px] font-bold text-slate-300 hover:text-white cursor-pointer"
+                      >
+                        7D
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPreset("month")}
+                        className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/15 text-[10px] font-bold text-slate-300 hover:text-white cursor-pointer"
+                      >
+                        Month
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPreset("30d")}
+                        className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/15 text-[10px] font-bold text-slate-300 hover:text-white cursor-pointer"
+                      >
+                        30D
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPreset("year")}
+                        className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/15 text-[10px] font-bold text-slate-300 hover:text-white cursor-pointer"
+                      >
+                        Year
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <span className="block text-[10px] text-slate-400 font-bold mb-1">From Date</span>
+                      <input
+                        type="date"
+                        value={reportStartDate}
+                        onChange={(e) => setReportStartDate(e.target.value)}
+                        className="w-full bg-[#101422] border border-white/15 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-purple-400 font-bold"
+                      />
+                    </div>
+                    <div>
+                      <span className="block text-[10px] text-slate-400 font-bold mb-1">To Date</span>
+                      <input
+                        type="date"
+                        value={reportEndDate}
+                        onChange={(e) => setReportEndDate(e.target.value)}
+                        className="w-full bg-[#101422] border border-white/15 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-purple-400 font-bold"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* KPI Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 space-y-1">
+                    <span className="text-[10px] font-bold text-emerald-400 uppercase">Collections</span>
+                    <div className="text-base font-black text-white">₹{periodRev.toLocaleString("en-IN")}</div>
+                    <span className="text-[9px] text-slate-400">{filteredTx.length} records</span>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/25 space-y-1">
+                    <span className="text-[10px] font-bold text-rose-400 uppercase">Expenses</span>
+                    <div className="text-base font-black text-white">₹{periodExp.toLocaleString("en-IN")}</div>
+                    <span className="text-[9px] text-slate-400">{filteredExp.length} records</span>
+                  </div>
+
+                  <div className={"p-3.5 rounded-2xl border space-y-1 " + (periodNet >= 0 ? "bg-cyan-500/10 border-cyan-500/25" : "bg-amber-500/10 border-amber-500/25")}>
+                    <span className={"text-[10px] font-bold uppercase " + (periodNet >= 0 ? "text-cyan-400" : "text-amber-400")}>Net Cash Flow</span>
+                    <div className={"text-base font-black " + (periodNet >= 0 ? "text-cyan-300" : "text-amber-300")}>₹{periodNet.toLocaleString("en-IN")}</div>
+                    <span className="text-[9px] text-slate-400">{periodNet >= 0 ? "Net Profit" : "Net Deficit"}</span>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-purple-500/10 border border-purple-500/25 space-y-1">
+                    <span className="text-[10px] font-bold text-purple-400 uppercase">New Admissions</span>
+                    <div className="text-base font-black text-white">{periodAdmissions}</div>
+                    <span className="text-[9px] text-slate-400">Enrolled Members</span>
+                  </div>
+                </div>
+
+                {/* Ledger preview */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-black text-white uppercase tracking-wider">
+                      Itemized Statement ({ledgerItems.length} records)
+                    </h4>
+                    <span className="text-[10px] text-slate-400">{reportStartDate} → {reportEndDate}</span>
+                  </div>
+
+                  <div className="max-h-[220px] overflow-y-auto overscroll-contain rounded-2xl border border-white/10 bg-[#080C14] divide-y divide-white/5">
+                    {ledgerItems.length === 0 ? (
+                      <div className="p-6 text-center text-slate-500 text-xs">
+                        No transactions in this date range.
+                      </div>
+                    ) : (
+                      ledgerItems.map((r) => {
+                        const isIncome = r.type === "INCOME";
+                        return (
+                          <div key={r.id} className="p-2.5 flex items-center justify-between text-xs hover:bg-white/[0.02]">
+                            <div className="min-w-0 pr-2">
+                              <div className="flex items-center gap-1.5">
+                                <span className={"text-[9px] font-black px-1.5 py-0.5 rounded " + (isIncome ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400")}>
+                                  {isIncome ? "IN" : "OUT"}
+                                </span>
+                                <span className="text-white font-bold truncate">{r.title}</span>
+                              </div>
+                              <div className="text-[10px] text-slate-400 mt-0.5">
+                                {r.date} • {r.category} • {r.method}
+                              </div>
+                            </div>
+                            <span className={"font-black shrink-0 " + (isIncome ? "text-emerald-400" : "text-rose-400")}>
+                              {isIncome ? `+₹${r.amount.toLocaleString("en-IN")}` : `-₹${r.amount.toLocaleString("en-IN")}`}
+                            </span>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="p-4 border-t border-white/10 bg-[#0B0E17] grid grid-cols-2 gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={downloadCSV}
+                  className="py-3 px-4 rounded-2xl bg-white/10 hover:bg-white/15 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                  <span>Download CSV</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={downloadPDF}
+                  className="py-3 px-4 rounded-2xl bg-gradient-to-r from-purple-500 via-indigo-600 to-blue-600 text-white font-black text-xs shadow-lg shadow-purple-500/25 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Download / Print PDF</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );

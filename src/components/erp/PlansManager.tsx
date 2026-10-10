@@ -69,18 +69,20 @@ export const PlansManager: React.FC = () => {
         await updateMembershipPlan(monthlyPlan.id, {
           basePrice: monthlyFee,
           joiningFee: regFee,
-          totalPrice: calculateTotal(monthlyFee, regFee, monthlyPlan.gstPercent || 18)
+          totalPrice: monthlyFee,
+          durationDays: monthlyPlan.durationDays || 30
         });
       } else {
         await addMembershipPlan({
           id: `plan-monthly-${Date.now()}`,
           name: 'Monthly Standard Membership',
           durationMonths: 1,
+          durationDays: 30,
           duration: 'Monthly',
           basePrice: monthlyFee,
           joiningFee: regFee,
           gstPercent: 18,
-          totalPrice: calculateTotal(monthlyFee, regFee, 18),
+          totalPrice: monthlyFee,
           description: 'Standard monthly gym pass with full facility access.',
           includedAddons: ['Gym Floor Access', 'Locker Room'],
           includedFeatures: { personalTraining: false, dietPlan: false, locker: true, steam: false },
@@ -93,18 +95,20 @@ export const PlansManager: React.FC = () => {
         await updateMembershipPlan(quarterlyPlan.id, {
           basePrice: quarterlyFee,
           joiningFee: regFee,
-          totalPrice: calculateTotal(quarterlyFee, regFee, quarterlyPlan.gstPercent || 18)
+          totalPrice: quarterlyFee,
+          durationDays: quarterlyPlan.durationDays || 90
         });
       } else {
         await addMembershipPlan({
           id: `plan-quarterly-${Date.now()}`,
           name: 'Quarterly Transformation Pass',
           durationMonths: 3,
+          durationDays: 90,
           duration: 'Quarterly',
           basePrice: quarterlyFee,
           joiningFee: regFee,
           gstPercent: 18,
-          totalPrice: calculateTotal(quarterlyFee, regFee, 18),
+          totalPrice: quarterlyFee,
           description: '3-month gym pass with trainer assessments.',
           includedAddons: ['Gym Floor Access', 'Locker Room', 'Trainer Assessment'],
           includedFeatures: { personalTraining: true, dietPlan: true, locker: true, steam: false },
@@ -117,18 +121,20 @@ export const PlansManager: React.FC = () => {
         await updateMembershipPlan(yearlyPlan.id, {
           basePrice: yearlyFee,
           joiningFee: regFee,
-          totalPrice: calculateTotal(yearlyFee, regFee, yearlyPlan.gstPercent || 18)
+          totalPrice: yearlyFee,
+          durationDays: yearlyPlan.durationDays || 365
         });
       } else {
         await addMembershipPlan({
           id: `plan-yearly-${Date.now()}`,
           name: 'Annual VIP All-Access Pass',
           durationMonths: 12,
+          durationDays: 365,
           duration: 'Yearly',
           basePrice: yearlyFee,
           joiningFee: regFee,
           gstPercent: 18,
-          totalPrice: calculateTotal(yearlyFee, regFee, 18),
+          totalPrice: yearlyFee,
           description: 'Full 12-month unlimited gym floor and amenities pass.',
           includedAddons: ['Gym Floor Access', 'Locker Room', 'Steam & Sauna', 'Diet Plan'],
           includedFeatures: { personalTraining: true, dietPlan: true, locker: true, steam: true },

@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useGym } from '../../context/GymContext';
 import { Employee } from '../../types/gym';
-import { Users, DollarSign, FileText, CheckCircle2, ShieldCheck, Download, X } from 'lucide-react';
+import { Users, DollarSign, FileText, CheckCircle2, ShieldCheck, Download, X, Activity, Award } from 'lucide-react';
+import { TrainerActivityAudit } from './TrainerActivityAudit';
 
 export const PayrollHR: React.FC = () => {
   const { employees, selectedBranchId } = useGym();
+  const [activeSubTab, setActiveSubTab] = useState<'payroll' | 'trainer-audit'>('payroll');
   const [selectedPayslipEmp, setSelectedPayslipEmp] = useState<Employee | null>(null);
 
   const branchEmployees = employees.filter((e) => e.branchId === selectedBranchId);
@@ -12,13 +14,53 @@ export const PayrollHR: React.FC = () => {
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       
-      {/* Payslip Modal */}
+      {/* Sub-navigation switcher */}
+      <div className="flex items-center gap-2 p-1.5 bg-[#14171F] border border-gym-border rounded-2xl w-fit">
+        <button
+          onClick={() => setActiveSubTab('payroll')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            activeSubTab === 'payroll'
+              ? 'bg-[#4F7CFF] text-white shadow-lg shadow-[#4F7CFF]/20'
+              : 'text-gym-subtext hover:text-white'
+          }`}
+        >
+          <FileText className="w-3.5 h-3.5" />
+          <span>Staff Payroll & Payslips</span>
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('trainer-audit')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            activeSubTab === 'trainer-audit'
+              ? 'bg-[#27D980] text-black shadow-lg shadow-[#27D980]/20'
+              : 'text-gym-subtext hover:text-white'
+          }`}
+        >
+          <Activity className="w-3.5 h-3.5" />
+          <span>Trainer Activity & Performance Audit</span>
+        </button>
+      </div>
+
+      {activeSubTab === 'trainer-audit' ? (
+        <TrainerActivityAudit />
+      ) : (
+        <>
+          {/* Payslip Modal */}
       {selectedPayslipEmp && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
-          <div className="bg-[#14171F] border border-gym-border rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 text-slate-200">
-            <div className="flex items-center justify-between border-b border-gym-border pb-3">
+        <div 
+          onClick={() => setSelectedPayslipEmp(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto overscroll-contain animate-in fade-in duration-200"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#14171F] border border-gym-border rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl space-y-4 text-slate-200 my-auto max-h-[90vh] overflow-y-auto overscroll-contain"
+          >
+            <div className="flex items-center justify-between border-b border-gym-border pb-3 shrink-0">
               <h3 className="font-extrabold text-white text-base">MONTHLY PAYSLIP - AUGUST 2026</h3>
-              <button onClick={() => setSelectedPayslipEmp(null)} className="p-1.5 rounded-lg bg-[#1E2330] text-slate-300">
+              <button 
+                onClick={() => setSelectedPayslipEmp(null)} 
+                className="p-1.5 rounded-lg bg-[#1E2330] text-slate-300 hover:text-white cursor-pointer"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -146,6 +188,8 @@ export const PayrollHR: React.FC = () => {
           );
         })}
       </div>
+        </>
+      )}
 
     </div>
   );

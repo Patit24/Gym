@@ -43,6 +43,7 @@ const InventoryLockers = lazy(() => import('./components/erp/InventoryLockers').
 const FinanceReports = lazy(() => import('./components/erp/FinanceReports').then(m => ({ default: m.FinanceReports })));
 const ComplaintsDesk = lazy(() => import('./components/erp/ComplaintsDesk').then(m => ({ default: m.ComplaintsDesk })));
 const AICoachStudio = lazy(() => import('./components/erp/AICoachStudio').then(m => ({ default: m.AICoachStudio })));
+const TrainerActivityAudit = lazy(() => import('./components/erp/TrainerActivityAudit').then(m => ({ default: m.TrainerActivityAudit })));
 const UserAccountManager = lazy(() => import('./components/erp/UserAccountManager').then(m => ({ default: m.UserAccountManager })));
 const AdvancedPlannerStudio = lazy(() => import('./components/planner/AdvancedPlannerStudio').then(m => ({ default: m.AdvancedPlannerStudio })));
 const SmartDoorSimulator = lazy(() => import('./components/hardware/SmartDoorSimulator').then(m => ({ default: m.SmartDoorSimulator })));
@@ -80,6 +81,7 @@ const ERpLayout: React.FC = () => {
     { id: 'pos', label: 'Supplement POS', icon: ShoppingBag, roles: ['Super Admin', 'Owner', 'Branch Manager', 'Receptionist', 'Accountant'] },
     { id: 'crm', label: 'Lead CRM', icon: Target, roles: ['Super Admin', 'Owner', 'Branch Manager', 'Receptionist'] },
     { id: 'payroll', label: 'Payroll & HR', icon: FileText, roles: ['Super Admin', 'Owner', 'Accountant'] },
+    { id: 'traineraudit', label: 'Trainer Audit & Activity', icon: Activity, roles: ['Super Admin', 'Owner', 'Branch Manager', 'Accountant'] },
     { id: 'lockers', label: 'Lockers & Equip', icon: Lock, roles: ['Super Admin', 'Owner', 'Branch Manager', 'Receptionist'] },
     { id: 'complaints', label: 'Complaints', icon: AlertCircle, roles: ['Super Admin', 'Owner', 'Branch Manager', 'Employee'] },
     { id: 'aistudio', label: 'AI Coach Studio', icon: Brain, roles: ['Super Admin', 'Trainer', 'Dietitian'] },
@@ -136,6 +138,7 @@ const ERpLayout: React.FC = () => {
           {erpTab === 'pos' && <POSStore />}
           {erpTab === 'crm' && <LeadCRM />}
           {erpTab === 'payroll' && <PayrollHR />}
+          {erpTab === 'traineraudit' && <TrainerActivityAudit />}
           {erpTab === 'lockers' && <InventoryLockers />}
           {erpTab === 'finance' && <FinanceReports />}
           {erpTab === 'complaints' && <ComplaintsDesk />}
@@ -153,16 +156,16 @@ const ERpLayout: React.FC = () => {
 };
 
 // -------------------------------------------------------------
-// App Entry Auto-Router
+// App Entry Auto-Router (Auto-restores session when reopening app)
 // -------------------------------------------------------------
 const AppEntryRedirect: React.FC = () => {
-  const { firebaseUser, appUserAccount, isAuthLoading } = useGym();
+  const { appUserAccount, isAuthLoading } = useGym();
 
   if (isAuthLoading) {
     return <TabLoadingFallback />;
   }
 
-  if (!firebaseUser || !appUserAccount) {
+  if (!appUserAccount) {
     return <GetStartedScreen />;
   }
 

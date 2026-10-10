@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useGym } from '../../context/GymContext';
 import { Member, GoalType, BranchId, AuditLog, Employee } from '../../types/gym';
 
@@ -50,7 +50,8 @@ import {
   Lock,
   Building2,
   ChevronDown,
-  AlertTriangle
+  AlertTriangle,
+  Camera
 } from 'lucide-react';
 
 type OwnerScreen =
@@ -102,7 +103,8 @@ export const MobileOwnerApp: React.FC = () => {
     signOutApp,
     notifications,
     markNotificationRead,
-    recordMemberPayment
+    recordMemberPayment,
+    updateMember
   } = useGym();
 
   const [currentScreen, setCurrentScreen] = useState<OwnerScreen>('home');
@@ -138,28 +140,42 @@ export const MobileOwnerApp: React.FC = () => {
   const [isSavingFeeMatrix, setIsSavingFeeMatrix] = useState(false);
   const [feeMatrixToast, setFeeMatrixToast] = useState<string | null>(null);
 
+  // Synchronize Fee Matrix when plans are updated by Admin
+  useEffect(() => {
+    if (monthlyPlanItem) {
+      if (monthlyPlanItem.joiningFee !== undefined) setFeeReg(monthlyPlanItem.joiningFee);
+      if (monthlyPlanItem.basePrice !== undefined) setFeeMonthly(monthlyPlanItem.basePrice);
+    }
+    if (quarterlyPlanItem && quarterlyPlanItem.basePrice !== undefined) {
+      setFeeQuarterly(quarterlyPlanItem.basePrice);
+    }
+    if (yearlyPlanItem && yearlyPlanItem.basePrice !== undefined) {
+      setFeeYearly(yearlyPlanItem.basePrice);
+    }
+  }, [plans, monthlyPlanItem, quarterlyPlanItem, yearlyPlanItem]);
+
   const handleSaveMobileFeeMatrix = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSavingFeeMatrix(true);
     try {
-      const calcTot = (b: number, j: number, gst: number = 18) => Math.round((b + j) * (1 + gst / 100));
-
       if (monthlyPlanItem) {
         await updateMembershipPlan(monthlyPlanItem.id, {
           basePrice: feeMonthly,
           joiningFee: feeReg,
-          totalPrice: calcTot(feeMonthly, feeReg, monthlyPlanItem.gstPercent || 18)
+          totalPrice: feeMonthly,
+          durationDays: monthlyPlanItem.durationDays || 30
         });
       } else {
         await addMembershipPlan({
           id: `plan-monthly-${Date.now()}`,
           name: 'Monthly Standard Membership',
           durationMonths: 1,
+          durationDays: 30,
           duration: 'Monthly',
           basePrice: feeMonthly,
           joiningFee: feeReg,
           gstPercent: 18,
-          totalPrice: calcTot(feeMonthly, feeReg, 18),
+          totalPrice: feeMonthly,
           description: 'Standard monthly gym pass with full floor access.',
           includedAddons: ['Gym Floor Access', 'Locker Access'],
           includedFeatures: { personalTraining: false, dietPlan: false, locker: true, steam: false },
@@ -171,18 +187,20 @@ export const MobileOwnerApp: React.FC = () => {
         await updateMembershipPlan(quarterlyPlanItem.id, {
           basePrice: feeQuarterly,
           joiningFee: feeReg,
-          totalPrice: calcTot(feeQuarterly, feeReg, quarterlyPlanItem.gstPercent || 18)
+          totalPrice: feeQuarterly,
+          durationDays: quarterlyPlanItem.durationDays || 90
         });
       } else {
         await addMembershipPlan({
           id: `plan-quarterly-${Date.now()}`,
           name: 'Quarterly Pro Fitness Pass',
           durationMonths: 3,
+          durationDays: 90,
           duration: 'Quarterly',
           basePrice: feeQuarterly,
           joiningFee: feeReg,
           gstPercent: 18,
-          totalPrice: calcTot(feeQuarterly, feeReg, 18),
+          totalPrice: feeQuarterly,
           description: '3-month transformation plan with trainer assessments.',
           includedAddons: ['Gym Floor Access', 'Bi-weekly Assessment', 'Locker Room'],
           includedFeatures: { personalTraining: true, dietPlan: true, locker: true, steam: false },
@@ -194,18 +212,20 @@ export const MobileOwnerApp: React.FC = () => {
         await updateMembershipPlan(yearlyPlanItem.id, {
           basePrice: feeYearly,
           joiningFee: feeReg,
-          totalPrice: calcTot(feeYearly, feeReg, yearlyPlanItem.gstPercent || 18)
+          totalPrice: feeYearly,
+          durationDays: yearlyPlanItem.durationDays || 365
         });
       } else {
         await addMembershipPlan({
           id: `plan-yearly-${Date.now()}`,
           name: 'Annual VIP All-Access Pass',
           durationMonths: 12,
+          durationDays: 365,
           duration: 'Yearly',
           basePrice: feeYearly,
           joiningFee: feeReg,
           gstPercent: 18,
-          totalPrice: calcTot(feeYearly, feeReg, 18),
+          totalPrice: feeYearly,
           description: '12-month unlimited gym floor & sauna pass.',
           includedAddons: ['All Access', 'Unlimited PT', 'Steam & Sauna', 'Diet Plan'],
           includedFeatures: { personalTraining: true, dietPlan: true, locker: true, steam: true },
@@ -330,6 +350,13 @@ export const MobileOwnerApp: React.FC = () => {
   const [autoSendWhatsApp, setAutoSendWhatsApp] = useState(true);
   const [isSubmittingMember, setIsSubmittingMember] = useState(false);
 
+  // Sync selected plan with available plans
+  useEffect(() => {
+    if (plans.length > 0 && (!memPlanId || !plans.some(p => p.id === memPlanId))) {
+      setMemPlanId(plans[0].id);
+    }
+  }, [plans, memPlanId]);
+
   // Add Trainer Form
   const [trName, setTrName] = useState('');
   const [trMobile, setTrMobile] = useState('');
@@ -422,9 +449,17 @@ export const MobileOwnerApp: React.FC = () => {
 
   const unreadNotifs = (notifications || []).filter((n) => n && !n.read);
 
-  // Financial Calculations
-  const branchTransactions = (transactions || []).filter((t) => t && t.branchId === selectedBranchId);
-  const branchExpenses = (expenses || []).filter((e) => e && e.branchId === selectedBranchId);
+  // Financial Calculations with robust branch fallback
+  const branchTransactions = (transactions || []).filter((t) => {
+    if (!t) return false;
+    if (!selectedBranchId || selectedBranchId === 'all') return true;
+    return t.branchId === selectedBranchId || !t.branchId;
+  });
+  const branchExpenses = (expenses || []).filter((e) => {
+    if (!e) return false;
+    if (!selectedBranchId || selectedBranchId === 'all') return true;
+    return e.branchId === selectedBranchId || !e.branchId;
+  });
   const totalCollections = branchTransactions.reduce((acc, t) => acc + (t?.amount || 0), 0);
   const totalExpenseAmount = branchExpenses.reduce((acc, e) => acc + (e?.amount || 0), 0);
   const netProfit = totalCollections - totalExpenseAmount;
@@ -479,8 +514,8 @@ export const MobileOwnerApp: React.FC = () => {
 
     try {
       const selectedPlan = plans.find((p) => p.id === memPlanId) || plans[0];
-      const packagePrice = selectedPlan?.totalPrice || selectedPlan?.basePrice || 1500;
-      const regFeeAmount = includeRegFee ? (feeReg || 500) : 0;
+      const packagePrice = selectedPlan?.basePrice || selectedPlan?.totalPrice || 1500;
+      const regFeeAmount = includeRegFee ? (feeReg || selectedPlan?.joiningFee || 500) : 0;
       const totalAdmissionAmount = packagePrice + regFeeAmount;
 
       const today = new Date();
@@ -761,7 +796,7 @@ export const MobileOwnerApp: React.FC = () => {
       />
 
       {/* ── 2. MAIN SCROLLABLE CONTENT ── */}
-      <main className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-24 max-w-lg mx-auto w-full relative z-10">
+      <main className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-24 max-w-lg mx-auto w-full">
 
         {/* ═══════════════════════════════════════════════════════════
             SCREEN 1: HOME OVERVIEW (EXECUTIVE DASHBOARD)
@@ -1440,11 +1475,17 @@ export const MobileOwnerApp: React.FC = () => {
                   onChange={(e) => setMemPlanId(e.target.value)}
                   className="w-full p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white focus:outline-none focus:border-[#4F7CFF]"
                 >
-                  {plans.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} — ₹{(p.totalPrice || p.basePrice || 1500).toLocaleString('en-IN')} ({p.durationDays || 30} Days)
-                    </option>
-                  ))}
+                  {plans.map((p) => {
+                    const price = p.basePrice || p.totalPrice || 1500;
+                    const durationStr = p.durationMonths 
+                      ? `${p.durationMonths} ${p.durationMonths === 1 ? 'Month' : 'Months'}`
+                      : `${p.durationDays || 30} Days`;
+                    return (
+                      <option key={p.id} value={p.id}>
+                        {p.name} — ₹{price.toLocaleString('en-IN')} ({durationStr})
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
@@ -1469,8 +1510,8 @@ export const MobileOwnerApp: React.FC = () => {
               {/* Fee Breakdown & Payment Method Section */}
               {(() => {
                 const selectedAddPlan = plans.find((p) => p.id === memPlanId) || plans[0];
-                const packagePrice = selectedAddPlan?.totalPrice || selectedAddPlan?.basePrice || 1500;
-                const regFeeAmount = includeRegFee ? (feeReg || 500) : 0;
+                const packagePrice = selectedAddPlan?.basePrice || selectedAddPlan?.totalPrice || 1500;
+                const regFeeAmount = includeRegFee ? (feeReg || selectedAddPlan?.joiningFee || 500) : 0;
                 const totalAdmissionAmount = packagePrice + regFeeAmount;
 
                 return (
@@ -1745,28 +1786,71 @@ export const MobileOwnerApp: React.FC = () => {
         {currentScreen === 'member-profile' && selectedMember && (
           <div className="space-y-4 animate-in fade-in duration-200">
             
-            {/* Header Avatar & Info */}
-            <div className="p-4 bg-[#101422] rounded-3xl border border-white/10 shadow-xl flex items-center gap-3.5">
-              <img
-                src={selectedMember.photoUrl}
-                alt={selectedMember.name}
-                className="w-14 h-14 rounded-2xl object-cover border-2 border-[#4F7CFF] shadow-lg"
-              />
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-black text-white">{selectedMember.name}</h3>
-                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
-                    selectedMember.status === 'Active'
-                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                      : 'bg-red-500/15 text-red-400 border border-red-500/30'
-                  }`}>
-                    {selectedMember.status}
-                  </span>
+            {/* Header Avatar & Info with 1-Tap Photo Update */}
+            <div className="p-4 bg-[#101422] rounded-3xl border border-white/10 shadow-xl flex items-center justify-between gap-3.5">
+              <div className="flex items-center gap-3.5">
+                <div className="relative group">
+                  <img
+                    src={selectedMember.photoUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&fit=crop&q=80'}
+                    alt={selectedMember.name}
+                    className="w-14 h-14 rounded-2xl object-cover border-2 border-[#4F7CFF] shadow-lg"
+                  />
+                  <label className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#4F7CFF] text-white flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer hover:bg-blue-400 transition-all" title="Upload Member Photo">
+                    <Camera className="w-3.5 h-3.5" />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            const img = new Image();
+                            img.onload = () => {
+                              const canvas = document.createElement('canvas');
+                              const maxDim = 480;
+                              let w = img.width;
+                              let h = img.height;
+                              if (w > h) {
+                                if (w > maxDim) { h = Math.round((h * maxDim) / w); w = maxDim; }
+                              } else {
+                                if (h > maxDim) { h = Math.round((h * maxDim) / h); h = maxDim; }
+                              }
+                              canvas.width = w;
+                              canvas.height = h;
+                              const ctx = canvas.getContext('2d');
+                              if (ctx) {
+                                ctx.drawImage(img, 0, 0, w, h);
+                                const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+                                updateMember(selectedMember.id, { photoUrl: dataUrl, faceEnrolled: true });
+                                setSelectedMember(prev => prev ? { ...prev, photoUrl: dataUrl, faceEnrolled: true } : null);
+                              }
+                            };
+                            img.src = ev.target?.result as string;
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
                 </div>
-                <div className="text-[10px] text-slate-400 mt-0.5">
-                  ID: {selectedMember.membershipNo} • {selectedMember.mobile}
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-black text-white">{selectedMember.name}</h3>
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                      selectedMember.status === 'Active'
+                        ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                        : 'bg-red-500/15 text-red-400 border border-red-500/30'
+                    }`}>
+                      {selectedMember.status}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">
+                    ID: {selectedMember.membershipNo} • {selectedMember.mobile}
+                  </div>
+                  <div className="text-[10px] text-[#4F7CFF] font-bold mt-0.5">Goal: {selectedMember.goal}</div>
                 </div>
-                <div className="text-[10px] text-[#4F7CFF] font-bold mt-0.5">Goal: {selectedMember.goal}</div>
               </div>
             </div>
 

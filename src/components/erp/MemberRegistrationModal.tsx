@@ -107,15 +107,19 @@ export const MemberRegistrationModal: React.FC<MemberRegistrationModalProps> = (
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto"
+      onClick={handleReset}
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto overscroll-contain animate-in fade-in duration-200"
       role="dialog"
       aria-modal="true"
       aria-labelledby="member-modal-title"
     >
-      <div className="relative w-full max-w-2xl bg-[#14171F] border border-gym-border rounded-[32px] shadow-2xl shadow-[#27D980]/10 overflow-hidden my-8 animate-in fade-in zoom-in-95">
+      <div 
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-2xl bg-[#14171F] border border-gym-border rounded-[32px] shadow-2xl shadow-[#27D980]/10 overflow-hidden my-auto max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95"
+      >
         
         {/* Header */}
-        <div className="px-6 py-4 border-b border-gym-border flex items-center justify-between bg-[#0B0D12]">
+        <div className="px-6 py-4 border-b border-gym-border flex items-center justify-between bg-[#0B0D12] shrink-0 z-10">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-[#27D980]/20 text-[#27D980]">
               <UserCheck className="w-5 h-5" />
@@ -127,7 +131,7 @@ export const MemberRegistrationModal: React.FC<MemberRegistrationModalProps> = (
           </div>
           <button
             onClick={handleReset}
-            className="p-1.5 rounded-xl bg-[#1E2330] text-gym-subtext hover:text-white"
+            className="p-1.5 rounded-xl bg-[#1E2330] text-gym-subtext hover:text-white cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -135,7 +139,7 @@ export const MemberRegistrationModal: React.FC<MemberRegistrationModalProps> = (
 
         {/* Modal Body */}
         {createdMember ? (
-          <div className="p-8 text-center space-y-6">
+          <div className="p-8 text-center space-y-6 overflow-y-auto overscroll-contain flex-1 min-h-0">
             <div className="w-16 h-16 rounded-full bg-[#27D980]/20 text-[#27D980] flex items-center justify-center mx-auto border-2 border-[#27D980] animate-bounce">
               <CheckCircle2 className="w-8 h-8" />
             </div>
@@ -167,13 +171,13 @@ export const MemberRegistrationModal: React.FC<MemberRegistrationModalProps> = (
 
             <button
               onClick={handleReset}
-              className="px-6 py-2.5 rounded-xl bg-[#27D980] text-gym-dark font-extrabold text-xs shadow-lg"
+              className="px-6 py-2.5 rounded-xl bg-[#27D980] text-gym-dark font-extrabold text-xs shadow-lg cursor-pointer"
             >
               Done & Return to Console
             </button>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="p-6 space-y-5 text-xs max-h-[80vh] overflow-y-auto">
+          <form onSubmit={handleSubmit} className="p-6 space-y-5 text-xs overflow-y-auto overscroll-contain flex-1 min-h-0">
             
             {/* Section 1: Basic Profile */}
             <div className="space-y-3">
@@ -344,6 +348,28 @@ export const MemberRegistrationModal: React.FC<MemberRegistrationModalProps> = (
                   </select>
                 </div>
               </div>
+
+              {/* Fee Structure Summary Preview */}
+              {(() => {
+                const p = plans.find((x) => x.id === formData.planId) || plans[0];
+                if (!p) return null;
+                const base = p.basePrice || p.totalPrice || 0;
+                const joinFee = p.joiningFee || 0;
+                return (
+                  <div className="p-3 rounded-2xl bg-purple-500/10 border border-purple-500/25 flex items-center justify-between text-xs">
+                    <div className="space-y-0.5">
+                      <span className="font-extrabold text-white">{p.name} ({p.durationMonths} Months)</span>
+                      <p className="text-[10px] text-purple-300">
+                        Base Price: ₹{base.toLocaleString('en-IN')} {joinFee > 0 && `+ Admission Fee: ₹${joinFee.toLocaleString('en-IN')}`}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[9px] uppercase font-bold text-slate-400 block">Total Due</span>
+                      <span className="text-sm font-black text-emerald-400">₹{p.totalPrice.toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Submit Button */}
