@@ -369,7 +369,7 @@ export const MemberRegistrationModal: React.FC<MemberRegistrationModalProps> = (
                     onChange={(e) => setFormData({ ...formData, planId: e.target.value })}
                     className="w-full bg-[#0B0D12] border border-gym-border rounded-xl px-3 py-2 text-white font-bold outline-none focus:border-purple-400"
                   >
-                    {plans.map((p) => (
+                    {plans.filter(p => p.durationMonths !== 6 && p.duration !== 'Half-Yearly').map((p) => (
                       <option key={p.id} value={p.id}>{p.name} (₹{p.totalPrice.toLocaleString('en-IN')})</option>
                     ))}
                   </select>

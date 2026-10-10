@@ -286,7 +286,7 @@ export const TrainerAddMemberModal: React.FC<TrainerAddMemberModalProps> = ({ is
                 onChange={(e) => setSelectedPlanId(e.target.value)}
                 className="w-full bg-[#0A0D15] border border-white/10 focus:border-[#4F7CFF] rounded-2xl px-3 py-2 text-white outline-none font-medium"
               >
-                {plans.map((p) => (
+                {plans.filter(p => p.durationMonths !== 6 && p.duration !== 'Half-Yearly').map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name} — ₹{p.totalPrice.toLocaleString('en-IN')} ({p.durationMonths} Months)
                   </option>

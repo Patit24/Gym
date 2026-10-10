@@ -70,21 +70,6 @@ export const INITIAL_PLANS: MembershipPlan[] = [
     includedAddons: ['Gym Floor Access', 'Locker Access'],
     includedFeatures: { personalTraining: false, dietPlan: false, locker: true, steam: false },
     isActive: true
-  },
-  {
-    id: 'plan-4',
-    name: 'Half-Yearly Elite Pass',
-    durationMonths: 6,
-    durationDays: 180,
-    duration: 'Half-Yearly',
-    basePrice: 7000,
-    joiningFee: 500,
-    gstPercent: 18,
-    totalPrice: 7000,
-    description: '6-month balanced fitness & strength program with nutrition consulting.',
-    includedAddons: ['Gym Floor Access', 'Diet Consultation', 'Dedicated Locker'],
-    includedFeatures: { personalTraining: true, dietPlan: true, locker: true, steam: false },
-    isActive: true
   }
 ];
 

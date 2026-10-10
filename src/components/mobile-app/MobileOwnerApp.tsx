@@ -51,7 +51,9 @@ import {
   Building2,
   ChevronDown,
   AlertTriangle,
-  Camera
+  Camera,
+  CalendarRange,
+  Hash
 } from 'lucide-react';
 
 type OwnerScreen =
@@ -341,6 +343,11 @@ export const MobileOwnerApp: React.FC = () => {
   const [memGender, setMemGender] = useState<Gender>('Male');
   const [memGoal, setMemGoal] = useState<GoalType>('Muscle Building');
   const [memPlanId, setMemPlanId] = useState(plans[0]?.id || 'plan-annual-vip');
+  const [isMemCustomDuration, setIsMemCustomDuration] = useState(false);
+  const [memCustomMonths, setMemCustomMonths] = useState(5);
+  const [memCustomStartDate, setMemCustomStartDate] = useState(
+    () => new Date().toISOString().split('T')[0]
+  );
   const [memHeight, setMemHeight] = useState(175);
   const [memWeight, setMemWeight] = useState(75);
   const [memTrainerId, setMemTrainerId] = useState('');
@@ -352,8 +359,9 @@ export const MobileOwnerApp: React.FC = () => {
 
   // Sync selected plan with available plans
   useEffect(() => {
-    if (plans.length > 0 && (!memPlanId || !plans.some(p => p.id === memPlanId))) {
-      setMemPlanId(plans[0].id);
+    const validPlans = plans.filter(p => p.durationMonths !== 6 && p.duration !== 'Half-Yearly');
+    if (validPlans.length > 0 && (!memPlanId || !validPlans.some(p => p.id === memPlanId))) {
+      setMemPlanId(validPlans[0].id);
     }
   }, [plans, memPlanId]);
 
@@ -514,13 +522,25 @@ export const MobileOwnerApp: React.FC = () => {
 
     try {
       const selectedPlan = plans.find((p) => p.id === memPlanId) || plans[0];
-      const packagePrice = selectedPlan?.basePrice || selectedPlan?.totalPrice || 1500;
+      const planMonths = selectedPlan?.durationMonths || 1;
+      const effectiveMonths = isMemCustomDuration ? memCustomMonths : planMonths;
+
+      const basePerMonth = (selectedPlan?.basePrice || selectedPlan?.totalPrice || 1500) / planMonths;
+      const packagePrice = isMemCustomDuration
+        ? Math.round(basePerMonth * memCustomMonths)
+        : (selectedPlan?.basePrice || selectedPlan?.totalPrice || 1500);
       const regFeeAmount = includeRegFee ? (feeReg || selectedPlan?.joiningFee || 500) : 0;
       const totalAdmissionAmount = packagePrice + regFeeAmount;
 
-      const today = new Date();
-      const expiry = new Date();
-      expiry.setDate(today.getDate() + (selectedPlan?.durationDays || (selectedPlan?.durationMonths ? selectedPlan.durationMonths * 30 : 30)));
+      const startDateStr = isMemCustomDuration ? memCustomStartDate : new Date().toISOString().split('T')[0];
+      const startObj = new Date(startDateStr);
+      const expiry = new Date(startObj);
+      expiry.setMonth(expiry.getMonth() + effectiveMonths);
+      const endDateStr = expiry.toISOString().split('T')[0];
+
+      const customPlanName = isMemCustomDuration
+        ? `${selectedPlan?.name || 'Custom'} (${effectiveMonths} Months)`
+        : selectedPlan.name;
 
       const res = await provisionMemberWithAccount({
         name: memName.trim(),
@@ -545,11 +565,11 @@ export const MobileOwnerApp: React.FC = () => {
         goal: memGoal,
         referralSource: 'Mobile App Admission',
         branchId: selectedBranchId,
-        planId: selectedPlan.id,
-        planName: selectedPlan.name,
-        startDate: today.toISOString().split('T')[0],
-        endDate: expiry.toISOString().split('T')[0],
-        expiryDate: expiry.toISOString().split('T')[0],
+        planId: isMemCustomDuration ? `${selectedPlan.id}-custom-${effectiveMonths}m` : selectedPlan.id,
+        planName: customPlanName,
+        startDate: startDateStr,
+        endDate: endDateStr,
+        expiryDate: endDateStr,
         paymentStatus: 'Paid',
         paymentMethod: memPaymentMethod,
         assignedTrainerId: memTrainerId || (trainers[0]?.id || 'emp-trainer-1'),
@@ -1475,7 +1495,7 @@ export const MobileOwnerApp: React.FC = () => {
                   onChange={(e) => setMemPlanId(e.target.value)}
                   className="w-full p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white focus:outline-none focus:border-[#4F7CFF]"
                 >
-                  {plans.map((p) => {
+                  {plans.filter(p => p.durationMonths !== 6 && p.duration !== 'Half-Yearly').map((p) => {
                     const price = p.basePrice || p.totalPrice || 1500;
                     const durationStr = p.durationMonths 
                       ? `${p.durationMonths} ${p.durationMonths === 1 ? 'Month' : 'Months'}`
@@ -1487,6 +1507,77 @@ export const MobileOwnerApp: React.FC = () => {
                     );
                   })}
                 </select>
+              </div>
+
+              {/* Custom Duration Toggle & Settings */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsMemCustomDuration(!isMemCustomDuration)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[10px] font-bold transition-all cursor-pointer ${
+                      isMemCustomDuration
+                        ? 'bg-orange-500/20 border-orange-500/60 text-orange-300'
+                        : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <CalendarRange className="w-3.5 h-3.5" />
+                    <span>{isMemCustomDuration ? 'Custom Duration: ON' : 'Set Custom Months / Duration'}</span>
+                  </button>
+                  {isMemCustomDuration && (
+                    <span className="text-[10px] text-orange-300">
+                      Prorated from monthly tariff
+                    </span>
+                  )}
+                </div>
+
+                {isMemCustomDuration && (
+                  <div className="p-3 bg-orange-500/10 border border-orange-500/25 rounded-2xl space-y-2.5">
+                    <div className="flex items-center gap-1.5 text-[10px] font-black text-orange-300 uppercase tracking-wider">
+                      <Hash className="w-3.5 h-3.5" />
+                      <span>Custom Subscription Window</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">
+                          Months Count *
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={36}
+                          value={memCustomMonths}
+                          onChange={(e) => setMemCustomMonths(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="w-full p-2 bg-[#07090E] rounded-xl border border-orange-500/40 text-xs text-orange-300 font-bold outline-none focus:border-orange-400"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">
+                          Subscription Start *
+                        </label>
+                        <input
+                          type="date"
+                          value={memCustomStartDate}
+                          onChange={(e) => setMemCustomStartDate(e.target.value)}
+                          className="w-full p-2 bg-[#07090E] rounded-xl border border-orange-500/40 text-xs text-white outline-none focus:border-orange-400"
+                        />
+                      </div>
+                    </div>
+
+                    {(() => {
+                      const startObj = new Date(memCustomStartDate || new Date());
+                      const endObj = new Date(startObj);
+                      endObj.setMonth(endObj.getMonth() + memCustomMonths);
+                      return (
+                        <div className="text-[10px] text-slate-300 flex items-center justify-between px-1">
+                          <span>Validity: <strong className="text-orange-300">{memCustomStartDate}</strong> → <strong className="text-orange-300">{endObj.toISOString().split('T')[0]}</strong></span>
+                          <span className="text-slate-400 font-semibold">({memCustomMonths} month{memCustomMonths !== 1 ? 's' : ''})</span>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -1510,7 +1601,12 @@ export const MobileOwnerApp: React.FC = () => {
               {/* Fee Breakdown & Payment Method Section */}
               {(() => {
                 const selectedAddPlan = plans.find((p) => p.id === memPlanId) || plans[0];
-                const packagePrice = selectedAddPlan?.basePrice || selectedAddPlan?.totalPrice || 1500;
+                const planMonths = selectedAddPlan?.durationMonths || 1;
+                const effectiveMonths = isMemCustomDuration ? memCustomMonths : planMonths;
+                const basePerMonth = (selectedAddPlan?.basePrice || selectedAddPlan?.totalPrice || 1500) / planMonths;
+                const packagePrice = isMemCustomDuration
+                  ? Math.round(basePerMonth * memCustomMonths)
+                  : (selectedAddPlan?.basePrice || selectedAddPlan?.totalPrice || 1500);
                 const regFeeAmount = includeRegFee ? (feeReg || selectedAddPlan?.joiningFee || 500) : 0;
                 const totalAdmissionAmount = packagePrice + regFeeAmount;
 
@@ -1544,16 +1640,27 @@ export const MobileOwnerApp: React.FC = () => {
                       {/* Selected Plan row */}
                       <div className="flex items-center justify-between p-2.5 bg-[#07090E] rounded-2xl border border-white/5">
                         <div>
-                          <span className="text-white font-bold block">{selectedAddPlan?.name || 'Standard Plan'}</span>
-                          <span className="text-[10px] text-slate-400">Duration: {selectedAddPlan?.durationMonths || 1} Month(s)</span>
+                          <span className="text-white font-bold block">
+                            {selectedAddPlan?.name || 'Standard Plan'}
+                            {isMemCustomDuration && ` — ${effectiveMonths} Months (Custom)`}
+                          </span>
+                          <span className="text-[10px] text-slate-400">
+                            {isMemCustomDuration 
+                              ? `₹${Math.round(basePerMonth).toLocaleString('en-IN')}/mo × ${effectiveMonths} month(s)`
+                              : `Duration: ${selectedAddPlan?.durationMonths || 1} Month(s)`}
+                          </span>
                         </div>
-                        <span className="text-cyan-300 font-black">₹{packagePrice.toLocaleString('en-IN')}</span>
+                        <span className={`font-black ${isMemCustomDuration ? 'text-orange-400' : 'text-cyan-300'}`}>
+                          ₹{packagePrice.toLocaleString('en-IN')}
+                        </span>
                       </div>
 
                       {/* Total Due Row */}
                       <div className="flex items-center justify-between p-3 bg-cyan-950/40 rounded-2xl border border-cyan-500/40">
                         <span className="text-xs font-black text-white uppercase">Total Payable Amount</span>
-                        <strong className="text-base font-black text-emerald-400">₹{totalAdmissionAmount.toLocaleString('en-IN')}</strong>
+                        <strong className={`text-base font-black ${isMemCustomDuration ? 'text-orange-400' : 'text-emerald-400'}`}>
+                          ₹{totalAdmissionAmount.toLocaleString('en-IN')}
+                        </strong>
                       </div>
                     </div>
 
