@@ -5,7 +5,9 @@ import {
   X,
   UserCheck,
   CheckCircle2,
-  Dumbbell
+  Dumbbell,
+  CalendarRange,
+  Hash,
 } from 'lucide-react';
 
 interface MemberRegistrationModalProps {
@@ -37,6 +39,13 @@ export const MemberRegistrationModal: React.FC<MemberRegistrationModalProps> = (
     assignedDietitianId: dietitians[0]?.id || '',
   });
 
+  // Custom duration state
+  const [isCustomDuration, setIsCustomDuration] = useState(false);
+  const [customMonths, setCustomMonths] = useState(3);
+  const [customStartDate, setCustomStartDate] = useState(
+    () => new Date().toISOString().split('T')[0]
+  );
+
   const [createdMember, setCreatedMember] = useState<Member | null>(null);
 
   useEffect(() => {
@@ -51,18 +60,41 @@ export const MemberRegistrationModal: React.FC<MemberRegistrationModalProps> = (
 
   if (!isOpen) return null;
 
+  // Derive the effective plan and dates
+  const selectedPlan = plans.find((p) => p.id === formData.planId) || plans[0];
+
+  const getEffectiveDates = () => {
+    const startStr = isCustomDuration ? customStartDate : new Date().toISOString().split('T')[0];
+    const months = isCustomDuration ? customMonths : (selectedPlan?.durationMonths || 12);
+    const endObj = new Date(startStr);
+    endObj.setMonth(endObj.getMonth() + months);
+    return { startStr, endStr: endObj.toISOString().split('T')[0], months };
+  };
+
+  const getEffectivePrice = () => {
+    if (!selectedPlan) return 0;
+    if (!isCustomDuration) return selectedPlan.totalPrice || 0;
+    // Prorate: (base price / plan months) × custom months + joining fee
+    const planMonths = selectedPlan.durationMonths || 1;
+    const basePerMonth = (selectedPlan.basePrice || selectedPlan.totalPrice || 0) / planMonths;
+    const joiningFee = selectedPlan.joiningFee || 0;
+    return Math.round(basePerMonth * customMonths) + joiningFee;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const selectedPlan = plans.find((p) => p.id === formData.planId) || plans[0];
-    
+
     // Auto-calculate BMI
     const heightInM = Math.max(1, formData.heightCm) / 100;
     const bmiVal = Number((formData.weightKg / (heightInM * heightInM)).toFixed(1));
 
-    const startDateStr = new Date().toISOString().split('T')[0];
-    const endDateObj = new Date();
-    endDateObj.setMonth(endDateObj.getMonth() + (selectedPlan?.durationMonths || 12));
-    const endDateStr = endDateObj.toISOString().split('T')[0];
+    const { startStr, endStr } = getEffectiveDates();
+    const effectivePrice = getEffectivePrice();
+    const effectiveMonths = isCustomDuration ? customMonths : (selectedPlan?.durationMonths || 12);
+
+    const customPlanName = isCustomDuration
+      ? `${selectedPlan?.name || 'Custom'} (${effectiveMonths} Months)`
+      : selectedPlan?.name || 'Standard Plan';
 
     const newMem = await addMember({
       name: formData.name.trim() || 'New Member',
@@ -88,10 +120,13 @@ export const MemberRegistrationModal: React.FC<MemberRegistrationModalProps> = (
       goal: 'Muscle Building',
       referralSource: 'Direct',
       branchId: formData.branchId,
-      planId: formData.planId,
-      planName: selectedPlan?.name || 'Standard Plan',
-      startDate: startDateStr,
-      endDate: endDateStr,
+      planId: isCustomDuration ? `${formData.planId}-custom-${effectiveMonths}m` : formData.planId,
+      planName: customPlanName,
+      startDate: startStr,
+      endDate: endStr,
+      expiryDate: endStr,
+      paidAmount: effectivePrice,
+      totalPlanAmount: effectivePrice,
       assignedTrainerId: formData.assignedTrainerId,
       assignedDietitianId: formData.assignedDietitianId,
       pendingDues: 0,
@@ -105,19 +140,22 @@ export const MemberRegistrationModal: React.FC<MemberRegistrationModalProps> = (
     onClose();
   };
 
+  const effectivePrice = getEffectivePrice();
+  const { startStr, endStr, months: effMonths } = getEffectiveDates();
+
   return (
-    <div 
+    <div
       onClick={handleReset}
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto overscroll-contain animate-in fade-in duration-200"
       role="dialog"
       aria-modal="true"
       aria-labelledby="member-modal-title"
     >
-      <div 
+      <div
         onClick={(e) => e.stopPropagation()}
         className="relative w-full max-w-2xl bg-[#14171F] border border-gym-border rounded-[32px] shadow-2xl shadow-[#27D980]/10 overflow-hidden my-auto max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95"
       >
-        
+
         {/* Header */}
         <div className="px-6 py-4 border-b border-gym-border flex items-center justify-between bg-[#0B0D12] shrink-0 z-10">
           <div className="flex items-center gap-2.5">
@@ -164,6 +202,9 @@ export const MemberRegistrationModal: React.FC<MemberRegistrationModalProps> = (
               <div className="flex justify-between">
                 <span className="text-slate-400">Assigned Plan:</span> <strong className="text-[#4F7CFF]">{createdMember.planName}</strong>
               </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Valid:</span> <strong className="text-emerald-400">{createdMember.startDate} → {createdMember.endDate}</strong>
+              </div>
               <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-300 mt-2">
                 ✓ Temporary password auto-generated and dispatched via WhatsApp.
               </div>
@@ -173,16 +214,16 @@ export const MemberRegistrationModal: React.FC<MemberRegistrationModalProps> = (
               onClick={handleReset}
               className="px-6 py-2.5 rounded-xl bg-[#27D980] text-gym-dark font-extrabold text-xs shadow-lg cursor-pointer"
             >
-              Done & Return to Console
+              Done &amp; Return to Console
             </button>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="p-6 space-y-5 text-xs overflow-y-auto overscroll-contain flex-1 min-h-0">
-            
+
             {/* Section 1: Basic Profile */}
             <div className="space-y-3">
               <h4 className="text-xs font-extrabold text-[#27D980] uppercase tracking-wider border-b border-gym-border/60 pb-1">
-                1. Member Personal & Contact Information
+                1. Member Personal &amp; Contact Information
               </h4>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -304,7 +345,7 @@ export const MemberRegistrationModal: React.FC<MemberRegistrationModalProps> = (
             {/* Section 3: Branch, Plan & Staff Assignment */}
             <div className="space-y-3">
               <h4 className="text-xs font-extrabold text-purple-400 uppercase tracking-wider border-b border-gym-border/60 pb-1">
-                3. Branch & Membership Plan
+                3. Branch &amp; Membership Plan
               </h4>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -349,27 +390,86 @@ export const MemberRegistrationModal: React.FC<MemberRegistrationModalProps> = (
                 </div>
               </div>
 
-              {/* Fee Structure Summary Preview */}
-              {(() => {
-                const p = plans.find((x) => x.id === formData.planId) || plans[0];
-                if (!p) return null;
-                const base = p.basePrice || p.totalPrice || 0;
-                const joinFee = p.joiningFee || 0;
-                return (
-                  <div className="p-3 rounded-2xl bg-purple-500/10 border border-purple-500/25 flex items-center justify-between text-xs">
-                    <div className="space-y-0.5">
-                      <span className="font-extrabold text-white">{p.name} ({p.durationMonths} Months)</span>
-                      <p className="text-[10px] text-purple-300">
-                        Base Price: ₹{base.toLocaleString('en-IN')} {joinFee > 0 && `+ Admission Fee: ₹${joinFee.toLocaleString('en-IN')}`}
-                      </p>
+              {/* Custom Duration Toggle */}
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsCustomDuration(!isCustomDuration)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-[10px] font-bold transition-all cursor-pointer ${
+                    isCustomDuration
+                      ? 'bg-orange-500/20 border-orange-500/50 text-orange-300'
+                      : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <CalendarRange className="w-3.5 h-3.5" />
+                  {isCustomDuration ? 'Custom Duration ON' : 'Set Custom Duration'}
+                </button>
+                {isCustomDuration && (
+                  <span className="text-[10px] text-orange-300">
+                    Pricing is prorated from the selected plan's monthly rate
+                  </span>
+                )}
+              </div>
+
+              {/* Custom Duration Inputs */}
+              {isCustomDuration && (
+                <div className="p-3 rounded-2xl bg-orange-500/10 border border-orange-500/25 space-y-3">
+                  <div className="flex items-center gap-2 text-[10px] font-black text-orange-300 uppercase tracking-wider">
+                    <Hash className="w-3.5 h-3.5" />
+                    Custom Subscription Period
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] text-slate-400 mb-1">Number of Months *</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={36}
+                        required
+                        value={customMonths}
+                        onChange={(e) => setCustomMonths(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-full bg-[#0B0D12] border border-orange-500/40 rounded-xl px-3 py-2 text-white font-bold text-orange-300 outline-none focus:border-orange-400"
+                      />
                     </div>
-                    <div className="text-right">
-                      <span className="text-[9px] uppercase font-bold text-slate-400 block">Total Due</span>
-                      <span className="text-sm font-black text-emerald-400">₹{p.totalPrice.toLocaleString('en-IN')}</span>
+                    <div>
+                      <label className="block text-[10px] text-slate-400 mb-1">Start Date *</label>
+                      <input
+                        type="date"
+                        required
+                        value={customStartDate}
+                        onChange={(e) => setCustomStartDate(e.target.value)}
+                        className="w-full bg-[#0B0D12] border border-orange-500/40 rounded-xl px-3 py-2 text-white outline-none focus:border-orange-400"
+                      />
                     </div>
                   </div>
-                );
-              })()}
+                  {/* Custom date range preview */}
+                  <div className="flex items-center justify-between text-[10px] text-slate-300 px-1">
+                    <span>Subscription: <strong className="text-orange-300">{startStr}</strong> → <strong className="text-orange-300">{endStr}</strong></span>
+                    <span className="text-[10px] text-slate-400">({effMonths} month{effMonths !== 1 ? 's' : ''})</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Fee Structure Summary Preview */}
+              <div className="p-3 rounded-2xl bg-purple-500/10 border border-purple-500/25 flex items-center justify-between text-xs">
+                <div className="space-y-0.5">
+                  <span className="font-extrabold text-white">
+                    {selectedPlan?.name}{isCustomDuration ? ` — ${effMonths} Month${effMonths !== 1 ? 's' : ''} (Custom)` : ` (${selectedPlan?.durationMonths} Months)`}
+                  </span>
+                  <p className="text-[10px] text-purple-300">
+                    {isCustomDuration
+                      ? `₹${Math.round((selectedPlan?.basePrice || selectedPlan?.totalPrice || 0) / (selectedPlan?.durationMonths || 1)).toLocaleString('en-IN')}/mo × ${effMonths} months${(selectedPlan?.joiningFee || 0) > 0 ? ` + Admission ₹${(selectedPlan?.joiningFee || 0).toLocaleString('en-IN')}` : ''}`
+                      : `Base: ₹${(selectedPlan?.basePrice || selectedPlan?.totalPrice || 0).toLocaleString('en-IN')}${(selectedPlan?.joiningFee || 0) > 0 ? ` + Admission ₹${(selectedPlan?.joiningFee || 0).toLocaleString('en-IN')}` : ''}`
+                    }
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="text-[9px] uppercase font-bold text-slate-400 block">Total Due</span>
+                  <span className={`text-sm font-black ${isCustomDuration ? 'text-orange-400' : 'text-emerald-400'}`}>
+                    ₹{effectivePrice.toLocaleString('en-IN')}
+                  </span>
+                </div>
+              </div>
             </div>
 
             {/* Submit Button */}
@@ -377,7 +477,7 @@ export const MemberRegistrationModal: React.FC<MemberRegistrationModalProps> = (
               type="submit"
               className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#4F7CFF] via-[#27D980] to-emerald-400 text-gym-dark font-black text-sm shadow-xl shadow-[#27D980]/20 hover:scale-[1.01] transition-all cursor-pointer active:scale-95"
             >
-              ENROLL MEMBER & AUTO-DISPATCH WHATSAPP PASS 🚀
+              ENROLL MEMBER &amp; AUTO-DISPATCH WHATSAPP PASS 🚀
             </button>
 
           </form>
