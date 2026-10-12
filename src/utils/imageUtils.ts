@@ -62,6 +62,46 @@ export const capturePhoto = async (
   // If running in native Capacitor (Android APK) or Capacitor Camera is available
   if (Capacitor.isNativePlatform()) {
     try {
+      // Proactively check and request permissions if needed
+      try {
+        const perms = await Camera.checkPermissions();
+        if (source === 'camera' && perms.camera !== 'granted') {
+          const req = await Camera.requestPermissions({ permissions: ['camera'] });
+          if (req.camera !== 'granted') {
+            console.warn('Camera permission not granted:', req.camera);
+            return null;
+          }
+        }
+      } catch (permErr) {
+        console.warn('Permission query notice:', permErr);
+      }
+
+      // Try takePhoto first for direct camera hardware if source is camera
+      if (source === 'camera' && typeof (Camera as any).takePhoto === 'function') {
+        try {
+          const res = await (Camera as any).takePhoto({
+            quality,
+            targetWidth: maxDim,
+            targetHeight: maxDim,
+            correctOrientation: true,
+          });
+          if (res?.thumbnail) {
+            return res.thumbnail.startsWith('data:') ? res.thumbnail : `data:image/jpeg;base64,${res.thumbnail}`;
+          }
+          if (res?.webPath) {
+            const blob = await fetch(res.webPath).then(r => r.blob());
+            const file = new File([blob], 'camera.jpg', { type: 'image/jpeg' });
+            return await compressImage(file, maxDim, quality / 100);
+          }
+        } catch (takePhotoErr: any) {
+          if (takePhotoErr?.message?.includes('cancelled') || takePhotoErr?.message?.includes('User cancelled')) {
+            return null;
+          }
+          console.warn('takePhoto notice, trying getPhoto:', takePhotoErr);
+        }
+      }
+
+      // Standard getPhoto method with CameraSource.Camera or CameraSource.Photos
       const photo = await Camera.getPhoto({
         quality,
         allowEditing: false,
@@ -74,11 +114,25 @@ export const capturePhoto = async (
       if (photo.dataUrl) {
         return photo.dataUrl;
       }
+      if (photo.webPath) {
+        const blob = await fetch(photo.webPath).then(r => r.blob());
+        const file = new File([blob], 'photo.jpg', { type: 'image/jpeg' });
+        return await compressImage(file, maxDim, quality / 100);
+      }
+      return null;
     } catch (nativeErr: any) {
-      if (nativeErr?.message?.includes('cancelled') || nativeErr?.message?.includes('User cancelled')) {
+      if (
+        nativeErr?.message?.includes('cancelled') ||
+        nativeErr?.message?.includes('User cancelled') ||
+        nativeErr?.message?.includes('Canceled') ||
+        nativeErr?.message?.includes('denied')
+      ) {
         return null;
       }
-      console.warn('Native camera capture notice, trying fallback picker:', nativeErr);
+      console.error('Native camera capture error:', nativeErr);
+      // On mobile native, do NOT fall back to standard HTML file input because on Android WebViews
+      // that defaults to gallery/document picker instead of hardware camera!
+      return null;
     }
   }
 
