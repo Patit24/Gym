@@ -1933,71 +1933,43 @@ export const MobileTrainerApp: React.FC = () => {
                     alt="Client Preview"
                     className="w-14 h-14 rounded-2xl object-cover border-2 border-[#4F7CFF] bg-[#141722]"
                   />
-                  <label className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#4F7CFF] text-white flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer hover:bg-blue-400 transition-all" title="Direct Camera Capture">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const dataUrl = await capturePhoto('camera');
+                      if (dataUrl) setClPhotoUrl(dataUrl);
+                    }}
+                    className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#4F7CFF] text-white flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer hover:bg-blue-400 transition-all"
+                    title="Direct Camera Capture"
+                  >
                     <Camera className="w-3.5 h-3.5" />
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      className="hidden"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          try {
-                            const dataUrl = await compressImage(file);
-                            setClPhotoUrl(dataUrl);
-                          } catch (err: any) {
-                            console.warn('Image processing error:', err);
-                          }
-                        }
-                      }}
-                    />
-                  </label>
+                  </button>
                 </div>
                 <div className="flex-1 min-w-0">
                   <span className="text-xs font-black text-white block">Client Profile Picture</span>
                   <div className="flex items-center gap-2 mt-1">
-                    <label className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#4F7CFF]/20 border border-[#4F7CFF]/40 text-[#4F7CFF] text-[10px] font-bold cursor-pointer active:scale-95 hover:bg-[#4F7CFF]/30 transition-all">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const dataUrl = await capturePhoto('camera');
+                        if (dataUrl) setClPhotoUrl(dataUrl);
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#4F7CFF]/20 border border-[#4F7CFF]/40 text-[#4F7CFF] text-[10px] font-bold cursor-pointer active:scale-95 hover:bg-[#4F7CFF]/30 transition-all"
+                    >
                       <Camera className="w-3 h-3" />
                       <span>Take Photo</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        className="hidden"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            try {
-                              const dataUrl = await compressImage(file);
-                              setClPhotoUrl(dataUrl);
-                            } catch (err: any) {
-                              console.warn('Image processing error:', err);
-                            }
-                          }
-                        }}
-                      />
-                    </label>
-                    <label className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-slate-300 text-[10px] font-bold cursor-pointer active:scale-95 hover:bg-white/10 transition-all">
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const dataUrl = await capturePhoto('photos');
+                        if (dataUrl) setClPhotoUrl(dataUrl);
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-slate-300 text-[10px] font-bold cursor-pointer active:scale-95 hover:bg-white/10 transition-all"
+                    >
                       <ImageIcon className="w-3 h-3 text-slate-400" />
                       <span>Gallery</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            try {
-                              const dataUrl = await compressImage(file);
-                              setClPhotoUrl(dataUrl);
-                            } catch (err: any) {
-                              console.warn('Image processing error:', err);
-                            }
-                          }
-                        }}
-                      />
-                    </label>
+                    </button>
                     {clPhotoUrl && (
                       <button
                         type="button"
