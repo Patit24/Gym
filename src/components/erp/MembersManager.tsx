@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useGym } from '../../context/GymContext';
 import { Member, GoalType } from '../../types/gym';
 import { PrivilegePassCard } from '../shared/PrivilegePassCard';
-import { compressImage } from '../../utils/imageUtils';
+import { compressImage, capturePhoto } from '../../utils/imageUtils';
 import {
   Search,
   UserPlus,
@@ -32,6 +32,7 @@ import {
   Printer,
   ChevronDown,
   Camera,
+  Image as ImageIcon,
   Edit3,
   X
 } from 'lucide-react';
@@ -110,6 +111,7 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
     planId: string;
     assignedTrainerId: string;
     status: Member['status'];
+    photoUrl?: string;
   }>({
     name: '',
     mobile: '',
@@ -128,6 +130,7 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
     planId: '',
     assignedTrainerId: '',
     status: 'Active',
+    photoUrl: '',
   });
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editToast, setEditToast] = useState<string | null>(null);
@@ -151,6 +154,7 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
       planId: member.planId || '',
       assignedTrainerId: member.assignedTrainerId || '',
       status: member.status || 'Active',
+      photoUrl: member.photoUrl || '',
     });
     setIsEditModalOpen(true);
   };
@@ -163,6 +167,8 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
       const selectedPlan = plans.find(p => p.id === editFormData.planId);
       const updates: Partial<Member> = {
         name: editFormData.name.trim(),
+        photoUrl: editFormData.photoUrl || selectedMember.photoUrl,
+        faceEnrolled: !!(editFormData.photoUrl || selectedMember.photoUrl),
         mobile: editFormData.mobile.trim(),
         email: editFormData.email.trim(),
         dob: editFormData.dob,
@@ -645,7 +651,7 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
                 )}
 
                 {/* Member Profile Photo Management */}
-                <div className="flex items-center justify-between gap-4 p-3.5 rounded-2xl bg-[#0B0D12] border border-gym-border/80">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-3.5 rounded-2xl bg-[#0B0D12] border border-gym-border/80">
                   <div className="flex items-center gap-4 flex-1 min-w-0">
                     <div className="relative group shrink-0">
                       <img
@@ -653,32 +659,60 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
                         alt={selectedMember.name}
                         className="w-16 h-16 rounded-2xl object-cover border-2 border-cyan-400 bg-[#141722] shadow-md"
                       />
-                      <label className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-cyan-500 hover:bg-cyan-400 text-black flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer transition-all" title="Upload New Profile Picture">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const dataUrl = await capturePhoto('camera');
+                          if (dataUrl) {
+                            await updateMember(selectedMember.id, { photoUrl: dataUrl, faceEnrolled: true });
+                            setSelectedMember(prev => prev ? { ...prev, photoUrl: dataUrl, faceEnrolled: true } : null);
+                          }
+                        }}
+                        className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-cyan-500 hover:bg-cyan-400 text-black flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer transition-all"
+                        title="Take Photo with Camera"
+                      >
                         <Camera className="w-3.5 h-3.5" />
-                        <input
-                          type="file"
-                          accept="image/*"
-                          capture="environment"
-                          className="hidden"
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              try {
-                                const dataUrl = await compressImage(file);
-                                await updateMember(selectedMember.id, { photoUrl: dataUrl, faceEnrolled: true });
-                                setSelectedMember(prev => prev ? { ...prev, photoUrl: dataUrl, faceEnrolled: true } : null);
-                              } catch (err) {
-                                console.warn('Failed to update member image:', err);
-                              }
-                            }
-                          }}
-                        />
-                      </label>
+                      </button>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h4 className="text-sm font-black text-white truncate">{selectedMember.name}</h4>
-                      <span className="text-[10px] text-cyan-400 font-mono block">Membership: {selectedMember.membershipNo}</span>
-                      <span className="text-[10px] text-slate-400 block mt-0.5">Click camera icon to change profile photo for digital card</span>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-black text-white truncate">{selectedMember.name}</h4>
+                        <span className="text-[10px] text-cyan-400 font-mono px-2 py-0.5 rounded-md bg-cyan-500/10 border border-cyan-500/20">
+                          {selectedMember.membershipNo}
+                        </span>
+                      </div>
+                      
+                      {/* Direct Camera and Gallery upload buttons */}
+                      <div className="flex items-center gap-2 mt-2">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const dataUrl = await capturePhoto('camera');
+                            if (dataUrl) {
+                              await updateMember(selectedMember.id, { photoUrl: dataUrl, faceEnrolled: true });
+                              setSelectedMember(prev => prev ? { ...prev, photoUrl: dataUrl, faceEnrolled: true } : null);
+                            }
+                          }}
+                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-[10px] font-bold active:scale-95 transition-all cursor-pointer"
+                        >
+                          <Camera className="w-3 h-3" />
+                          <span>Camera</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const dataUrl = await capturePhoto('photos');
+                            if (dataUrl) {
+                              await updateMember(selectedMember.id, { photoUrl: dataUrl, faceEnrolled: true });
+                              setSelectedMember(prev => prev ? { ...prev, photoUrl: dataUrl, faceEnrolled: true } : null);
+                            }
+                          }}
+                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 text-[10px] font-bold active:scale-95 transition-all cursor-pointer"
+                        >
+                          <ImageIcon className="w-3 h-3 text-slate-400" />
+                          <span>Gallery</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -1339,6 +1373,62 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
             </div>
 
             <form onSubmit={handleSaveMemberEdit} className="space-y-3.5 pt-1">
+              {/* Profile Photo */}
+              <div className="flex items-center gap-3.5 p-3 rounded-2xl bg-[#0B0D12] border border-gym-border">
+                <div className="relative shrink-0">
+                  <img
+                    src={editFormData.photoUrl || selectedMember.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedMember.id}`}
+                    alt="Preview"
+                    className="w-14 h-14 rounded-2xl object-cover border-2 border-cyan-400 bg-[#141722]"
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const dataUrl = await capturePhoto('camera');
+                      if (dataUrl) {
+                        setEditFormData(prev => ({ ...prev, photoUrl: dataUrl }));
+                      }
+                    }}
+                    className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-cyan-500 hover:bg-cyan-400 text-black flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer"
+                    title="Take Photo with Camera"
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="text-xs font-black text-white block">Profile Picture</span>
+                  <p className="text-[10px] text-slate-400">Direct camera or gallery photo</p>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const dataUrl = await capturePhoto('camera');
+                        if (dataUrl) {
+                          setEditFormData(prev => ({ ...prev, photoUrl: dataUrl }));
+                        }
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-[10px] font-bold active:scale-95 cursor-pointer"
+                    >
+                      <Camera className="w-3 h-3" />
+                      <span>Take Photo</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const dataUrl = await capturePhoto('photos');
+                        if (dataUrl) {
+                          setEditFormData(prev => ({ ...prev, photoUrl: dataUrl }));
+                        }
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 text-[10px] font-bold active:scale-95 cursor-pointer"
+                    >
+                      <ImageIcon className="w-3 h-3 text-slate-400" />
+                      <span>Gallery</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               {/* Full Name */}
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">

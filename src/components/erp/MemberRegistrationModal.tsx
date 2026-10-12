@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useGym } from '../../context/GymContext';
 import { Member, BranchId } from '../../types/gym';
-import { compressImage } from '../../utils/imageUtils';
+import { compressImage, capturePhoto } from '../../utils/imageUtils';
 import {
   X,
   UserCheck,
@@ -251,71 +251,43 @@ export const MemberRegistrationModal: React.FC<MemberRegistrationModalProps> = (
                     alt="Member Preview"
                     className="w-14 h-14 rounded-2xl object-cover border-2 border-[#27D980] bg-[#141722]"
                   />
-                  <label className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#27D980] text-black flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer hover:bg-emerald-400 transition-all" title="Direct Camera Capture">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const photo = await capturePhoto('camera');
+                      if (photo) setPhotoUrl(photo);
+                    }}
+                    className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#27D980] text-black flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer hover:bg-emerald-400 transition-all"
+                    title="Direct Camera Capture"
+                  >
                     <Camera className="w-3.5 h-3.5" />
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      className="hidden"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          try {
-                            const dataUrl = await compressImage(file);
-                            setPhotoUrl(dataUrl);
-                          } catch (err: any) {
-                            console.warn('Image compression failed:', err);
-                          }
-                        }
-                      }}
-                    />
-                  </label>
+                  </button>
                 </div>
                 <div className="flex-1 min-w-0">
                   <span className="text-xs font-black text-white block">Member Profile Photo</span>
                   <div className="flex items-center gap-2 mt-1">
-                    <label className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#27D980]/20 border border-[#27D980]/40 text-[#27D980] text-[10px] font-bold cursor-pointer active:scale-95 hover:bg-[#27D980]/30 transition-all">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const photo = await capturePhoto('camera');
+                        if (photo) setPhotoUrl(photo);
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#27D980]/20 border border-[#27D980]/40 text-[#27D980] text-[10px] font-bold cursor-pointer active:scale-95 hover:bg-[#27D980]/30 transition-all"
+                    >
                       <Camera className="w-3 h-3" />
                       <span>Take Photo</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        className="hidden"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            try {
-                              const dataUrl = await compressImage(file);
-                              setPhotoUrl(dataUrl);
-                            } catch (err: any) {
-                              console.warn('Image compression failed:', err);
-                            }
-                          }
-                        }}
-                      />
-                    </label>
-                    <label className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-slate-300 text-[10px] font-bold cursor-pointer active:scale-95 hover:bg-white/10 transition-all">
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const photo = await capturePhoto('photos');
+                        if (photo) setPhotoUrl(photo);
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-slate-300 text-[10px] font-bold cursor-pointer active:scale-95 hover:bg-white/10 transition-all"
+                    >
                       <ImageIcon className="w-3 h-3 text-slate-400" />
                       <span>Gallery</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            try {
-                              const dataUrl = await compressImage(file);
-                              setPhotoUrl(dataUrl);
-                            } catch (err: any) {
-                              console.warn('Image compression failed:', err);
-                            }
-                          }
-                        }}
-                      />
-                    </label>
+                    </button>
                     {photoUrl && (
                       <button
                         type="button"

@@ -7,7 +7,7 @@ import { MobileAppHeader } from './MobileAppHeader';
 import { MobileBottomNav, MobileNavTab } from './MobileBottomNav';
 import { PrivilegePassCard } from '../shared/PrivilegePassCard';
 import { MobileFinanceScreen } from '../mobile/MobileFinanceScreen';
-import { compressImage } from '../../utils/imageUtils';
+import { compressImage, capturePhoto } from '../../utils/imageUtils';
 import {
   Home,
   Users,
@@ -453,6 +453,7 @@ export const MobileOwnerApp: React.FC = () => {
     planId: string;
     assignedTrainerId: string;
     status: Member['status'];
+    photoUrl?: string;
   }>({
     name: '',
     mobile: '',
@@ -471,6 +472,7 @@ export const MobileOwnerApp: React.FC = () => {
     planId: '',
     assignedTrainerId: '',
     status: 'Active',
+    photoUrl: '',
   });
   const [isSavingMemberEdit, setIsSavingMemberEdit] = useState(false);
   const [memberEditToast, setMemberEditToast] = useState<string | null>(null);
@@ -494,6 +496,7 @@ export const MobileOwnerApp: React.FC = () => {
       planId: member.planId || '',
       assignedTrainerId: member.assignedTrainerId || '',
       status: member.status || 'Active',
+      photoUrl: member.photoUrl || '',
     });
     setIsEditMemberModalOpen(true);
   };
@@ -506,6 +509,8 @@ export const MobileOwnerApp: React.FC = () => {
       const selectedPlan = plans.find(p => p.id === editMemData.planId);
       const updates: Partial<Member> = {
         name: editMemData.name.trim(),
+        photoUrl: editMemData.photoUrl || selectedMember.photoUrl,
+        faceEnrolled: !!(editMemData.photoUrl || selectedMember.photoUrl),
         mobile: editMemData.mobile.trim(),
         email: editMemData.email.trim(),
         dob: editMemData.dob,
@@ -2205,46 +2210,20 @@ export const MobileOwnerApp: React.FC = () => {
                     alt={selectedMember.name}
                     className="w-14 h-14 rounded-2xl object-cover border-2 border-[#4F7CFF] shadow-lg"
                   />
-                  <label className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#4F7CFF] text-white flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer hover:bg-blue-400 transition-all" title="Upload Member Photo">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const dataUrl = await capturePhoto('camera');
+                      if (dataUrl) {
+                        await updateMember(selectedMember.id, { photoUrl: dataUrl, faceEnrolled: true });
+                        setSelectedMember(prev => prev ? { ...prev, photoUrl: dataUrl, faceEnrolled: true } : null);
+                      }
+                    }}
+                    className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#4F7CFF] text-white flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer hover:bg-blue-400 transition-all"
+                    title="Take Photo with Camera"
+                  >
                     <Camera className="w-3.5 h-3.5" />
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onload = (ev) => {
-                            const img = new Image();
-                            img.onload = () => {
-                              const canvas = document.createElement('canvas');
-                              const maxDim = 480;
-                              let w = img.width;
-                              let h = img.height;
-                              if (w > h) {
-                                if (w > maxDim) { h = Math.round((h * maxDim) / w); w = maxDim; }
-                              } else {
-                                if (h > maxDim) { h = Math.round((h * maxDim) / h); h = maxDim; }
-                              }
-                              canvas.width = w;
-                              canvas.height = h;
-                              const ctx = canvas.getContext('2d');
-                              if (ctx) {
-                                ctx.drawImage(img, 0, 0, w, h);
-                                const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-                                updateMember(selectedMember.id, { photoUrl: dataUrl, faceEnrolled: true });
-                                setSelectedMember(prev => prev ? { ...prev, photoUrl: dataUrl, faceEnrolled: true } : null);
-                              }
-                            };
-                            img.src = ev.target?.result as string;
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      }}
-                    />
-                  </label>
+                  </button>
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -2260,7 +2239,36 @@ export const MobileOwnerApp: React.FC = () => {
                   <div className="text-[10px] text-slate-400 mt-0.5 truncate">
                     ID: {selectedMember.membershipNo} • {selectedMember.mobile}
                   </div>
-                  <div className="text-[10px] text-[#4F7CFF] font-bold mt-0.5 truncate">Goal: {selectedMember.goal}</div>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const dataUrl = await capturePhoto('camera');
+                        if (dataUrl) {
+                          await updateMember(selectedMember.id, { photoUrl: dataUrl, faceEnrolled: true });
+                          setSelectedMember(prev => prev ? { ...prev, photoUrl: dataUrl, faceEnrolled: true } : null);
+                        }
+                      }}
+                      className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#4F7CFF]/20 hover:bg-[#4F7CFF]/30 text-[#4F7CFF] border border-[#4F7CFF]/40 text-[9px] font-bold active:scale-95 cursor-pointer transition-all"
+                    >
+                      <Camera className="w-3 h-3" />
+                      <span>Camera</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const dataUrl = await capturePhoto('photos');
+                        if (dataUrl) {
+                          await updateMember(selectedMember.id, { photoUrl: dataUrl, faceEnrolled: true });
+                          setSelectedMember(prev => prev ? { ...prev, photoUrl: dataUrl, faceEnrolled: true } : null);
+                        }
+                      }}
+                      className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 text-[9px] font-bold active:scale-95 cursor-pointer transition-all"
+                    >
+                      <ImageIcon className="w-3 h-3 text-slate-400" />
+                      <span>Gallery</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -4172,6 +4180,62 @@ export const MobileOwnerApp: React.FC = () => {
             </div>
 
             <form onSubmit={handleSaveMemberEdit} className="space-y-3.5 pt-1">
+              {/* Profile Photo */}
+              <div className="flex items-center gap-3.5 p-3 rounded-2xl bg-[#080C14] border border-white/10">
+                <div className="relative shrink-0">
+                  <img
+                    src={editMemData.photoUrl || selectedMember.photoUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&fit=crop&q=80'}
+                    alt="Preview"
+                    className="w-14 h-14 rounded-2xl object-cover border-2 border-[#4F7CFF] bg-[#141722]"
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const dataUrl = await capturePhoto('camera');
+                      if (dataUrl) {
+                        setEditMemData(prev => ({ ...prev, photoUrl: dataUrl }));
+                      }
+                    }}
+                    className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#4F7CFF] text-white flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer hover:bg-blue-400"
+                    title="Take Photo with Camera"
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="text-xs font-black text-white block">Profile Picture</span>
+                  <p className="text-[10px] text-slate-400">Direct camera or gallery photo</p>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const dataUrl = await capturePhoto('camera');
+                        if (dataUrl) {
+                          setEditMemData(prev => ({ ...prev, photoUrl: dataUrl }));
+                        }
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#4F7CFF]/20 hover:bg-[#4F7CFF]/30 text-[#4F7CFF] border border-[#4F7CFF]/40 text-[10px] font-bold active:scale-95 cursor-pointer"
+                    >
+                      <Camera className="w-3 h-3" />
+                      <span>Take Photo</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const dataUrl = await capturePhoto('photos');
+                        if (dataUrl) {
+                          setEditMemData(prev => ({ ...prev, photoUrl: dataUrl }));
+                        }
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 text-[10px] font-bold active:scale-95 cursor-pointer"
+                    >
+                      <ImageIcon className="w-3 h-3 text-slate-400" />
+                      <span>Gallery</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               {/* Full Name */}
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">

@@ -13,6 +13,7 @@ import {
   Image as ImageIcon,
   Check
 } from 'lucide-react';
+import { capturePhoto } from '../../utils/imageUtils';
 
 interface ProfilePhotoModalProps {
   isOpen: boolean;
@@ -279,7 +280,17 @@ export const ProfilePhotoModal: React.FC<ProfilePhotoModalProps> = ({ isOpen, on
                 {/* Take Selfie Button */}
                 <button
                   type="button"
-                  onClick={() => cameraInputRef.current?.click()}
+                  onClick={async () => {
+                    setIsProcessing(true);
+                    try {
+                      const photo = await capturePhoto('camera');
+                      if (photo) setSelectedPhoto(photo);
+                    } catch (err: any) {
+                      setErrorMessage(err?.message || 'Failed to capture photo');
+                    } finally {
+                      setIsProcessing(false);
+                    }
+                  }}
                   disabled={isProcessing}
                   className="p-4 rounded-2xl bg-gradient-to-b from-[#141B2D] to-[#0D1220] border border-cyan-500/30 hover:border-cyan-400 flex flex-col items-center text-center gap-2 cursor-pointer transition-all active:scale-95 shadow-lg group"
                 >
@@ -295,7 +306,17 @@ export const ProfilePhotoModal: React.FC<ProfilePhotoModalProps> = ({ isOpen, on
                 {/* Upload from Gallery Button */}
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={async () => {
+                    setIsProcessing(true);
+                    try {
+                      const photo = await capturePhoto('photos');
+                      if (photo) setSelectedPhoto(photo);
+                    } catch (err: any) {
+                      setErrorMessage(err?.message || 'Failed to choose photo');
+                    } finally {
+                      setIsProcessing(false);
+                    }
+                  }}
                   disabled={isProcessing}
                   className="p-4 rounded-2xl bg-gradient-to-b from-[#141B2D] to-[#0D1220] border border-emerald-500/30 hover:border-emerald-400 flex flex-col items-center text-center gap-2 cursor-pointer transition-all active:scale-95 shadow-lg group"
                 >

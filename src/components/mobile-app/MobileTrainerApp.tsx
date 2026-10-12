@@ -6,7 +6,7 @@ import { MobileBottomNav, MobileNavTab } from './MobileBottomNav';
 import { PrivilegePassCard } from '../shared/PrivilegePassCard';
 import { TrainerCollectPaymentModal } from '../trainer/TrainerCollectPaymentModal';
 import { TrainerAddExpenseModal } from '../trainer/TrainerAddExpenseModal';
-import { compressImage } from '../../utils/imageUtils';
+import { compressImage, capturePhoto } from '../../utils/imageUtils';
 import {
   Home,
   Users,
@@ -149,6 +149,7 @@ export const MobileTrainerApp: React.FC = () => {
     address: string;
     medicalHistory: string;
     status: Member['status'];
+    photoUrl?: string;
   }>({
     name: '',
     mobile: '',
@@ -165,6 +166,7 @@ export const MobileTrainerApp: React.FC = () => {
     address: '',
     medicalHistory: '',
     status: 'Active',
+    photoUrl: '',
   });
   const [isSavingClientEdit, setIsSavingClientEdit] = useState(false);
   const [clientEditToast, setClientEditToast] = useState<string | null>(null);
@@ -186,6 +188,7 @@ export const MobileTrainerApp: React.FC = () => {
       address: client.address || '',
       medicalHistory: client.medicalHistory || '',
       status: client.status || 'Active',
+      photoUrl: client.photoUrl || '',
     });
     setIsEditClientModalOpen(true);
   };
@@ -197,6 +200,8 @@ export const MobileTrainerApp: React.FC = () => {
     try {
       const updates: Partial<Member> = {
         name: editClientData.name.trim(),
+        photoUrl: editClientData.photoUrl || selectedClient.photoUrl,
+        faceEnrolled: !!(editClientData.photoUrl || selectedClient.photoUrl),
         mobile: editClientData.mobile.trim(),
         email: editClientData.email.trim(),
         dob: editClientData.dob,
@@ -2425,27 +2430,20 @@ export const MobileTrainerApp: React.FC = () => {
                     alt={selectedClient.name}
                     className="w-14 h-14 rounded-2xl object-cover border-2 border-[#4F7CFF] shadow-lg"
                   />
-                  <label className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#4F7CFF] text-white flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer hover:bg-blue-400 transition-all" title="Update Client Photo">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const dataUrl = await capturePhoto('camera');
+                      if (dataUrl) {
+                        await updateMember(selectedClient.id, { photoUrl: dataUrl, faceEnrolled: true });
+                        setSelectedClient(prev => prev ? { ...prev, photoUrl: dataUrl, faceEnrolled: true } : null);
+                      }
+                    }}
+                    className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#4F7CFF] text-white flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer hover:bg-blue-400 transition-all"
+                    title="Take Photo with Camera"
+                  >
                     <Camera className="w-3.5 h-3.5" />
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      className="hidden"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          try {
-                            const dataUrl = await compressImage(file);
-                            await updateMember(selectedClient.id, { photoUrl: dataUrl, faceEnrolled: true });
-                            setSelectedClient(prev => prev ? { ...prev, photoUrl: dataUrl, faceEnrolled: true } : null);
-                          } catch (err: any) {
-                            console.warn('Failed to update photo:', err);
-                          }
-                        }
-                      }}
-                    />
-                  </label>
+                  </button>
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -2455,7 +2453,36 @@ export const MobileTrainerApp: React.FC = () => {
                     </span>
                   </div>
                   <div className="text-[10px] text-slate-400 mt-0.5 truncate">ID: {selectedClient.membershipNo} • {selectedClient.mobile}</div>
-                  <div className="text-[10px] text-[#4F7CFF] font-bold mt-0.5 truncate">Target: {selectedClient.goal}</div>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const dataUrl = await capturePhoto('camera');
+                        if (dataUrl) {
+                          await updateMember(selectedClient.id, { photoUrl: dataUrl, faceEnrolled: true });
+                          setSelectedClient(prev => prev ? { ...prev, photoUrl: dataUrl, faceEnrolled: true } : null);
+                        }
+                      }}
+                      className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#4F7CFF]/20 hover:bg-[#4F7CFF]/30 text-[#4F7CFF] border border-[#4F7CFF]/40 text-[9px] font-bold active:scale-95 cursor-pointer transition-all"
+                    >
+                      <Camera className="w-3 h-3" />
+                      <span>Camera</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const dataUrl = await capturePhoto('photos');
+                        if (dataUrl) {
+                          await updateMember(selectedClient.id, { photoUrl: dataUrl, faceEnrolled: true });
+                          setSelectedClient(prev => prev ? { ...prev, photoUrl: dataUrl, faceEnrolled: true } : null);
+                        }
+                      }}
+                      className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 text-[9px] font-bold active:scale-95 cursor-pointer transition-all"
+                    >
+                      <ImageIcon className="w-3 h-3 text-slate-400" />
+                      <span>Gallery</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -3174,6 +3201,53 @@ export const MobileTrainerApp: React.FC = () => {
             </div>
 
             <form onSubmit={handleSaveClientEdit} className="space-y-3.5 pt-1">
+              {/* Profile Photo */}
+              <div className="flex items-center gap-3 p-3 bg-white/5 border border-white/10 rounded-2xl">
+                <div className="relative w-14 h-14 rounded-2xl bg-gradient-to-tr from-[#4F7CFF] to-indigo-500 overflow-hidden flex items-center justify-center shrink-0 border border-white/20">
+                  {editClientData.photoUrl ? (
+                    <img src={editClientData.photoUrl} alt="Preview" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-lg font-black text-white">{(editClientData.name || 'C')[0]}</span>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <p className="text-[11px] font-bold text-white mb-1.5">Client Profile Picture</p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const photo = await capturePhoto('camera');
+                        if (photo) setEditClientData(prev => ({ ...prev, photoUrl: photo }));
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-[#4F7CFF] hover:bg-[#3D68E5] text-white rounded-lg text-[10px] font-bold shadow-md cursor-pointer transition-all active:scale-95"
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                      Camera
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const photo = await capturePhoto('photos');
+                        if (photo) setEditClientData(prev => ({ ...prev, photoUrl: photo }));
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-slate-200 rounded-lg text-[10px] font-bold border border-white/10 cursor-pointer transition-all active:scale-95"
+                    >
+                      <ImageIcon className="w-3.5 h-3.5" />
+                      Gallery
+                    </button>
+                    {editClientData.photoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setEditClientData(prev => ({ ...prev, photoUrl: '' }))}
+                        className="px-2 py-1.5 bg-rose-500/20 text-rose-300 rounded-lg text-[10px] font-bold hover:bg-rose-500/30 transition-all cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               {/* Full Name */}
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
