@@ -62,7 +62,8 @@ import {
   X,
   Save,
   ZoomIn,
-  Trash2
+  Trash2,
+  IndianRupee
 } from 'lucide-react';
 
 type OwnerScreen =
@@ -143,6 +144,34 @@ export const MobileOwnerApp: React.FC = () => {
   const [mobileRenewCustomExpiry, setMobileRenewCustomExpiry] = useState<string>('');
   const [isMobileRenewing, setIsMobileRenewing] = useState(false);
   const [mobileRenewSuccessToast, setMobileRenewSuccessToast] = useState<string | null>(null);
+  const [mobileRenewAmount, setMobileRenewAmount] = useState<string>('500');
+  const [showPackageSelector, setShowPackageSelector] = useState(false);
+
+  const openMobileRenewModal = (member: Member) => {
+    setSelectedMember(member);
+    setMobileRenewPlanId(member.planId || plans[0]?.id || '');
+    setShowPackageSelector(false);
+
+    // Default amount: member's last paid amount or plan price or 500
+    const matchedPlan = plans.find((p) => p.id === member.planId);
+    const defaultAmt = member.paidAmount || matchedPlan?.totalPrice || matchedPlan?.basePrice || 500;
+    setMobileRenewAmount(String(defaultAmt));
+
+    // Default smart expiry date: 1st of next month
+    const today = new Date();
+    let targetDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    if (member.expiryDate || member.endDate) {
+      const curExp = new Date(member.expiryDate || member.endDate || '');
+      if (!isNaN(curExp.getTime()) && curExp > today) {
+        targetDate = new Date(curExp.getFullYear(), curExp.getMonth() + 1, 1);
+      }
+    }
+    const yyyy = targetDate.getFullYear();
+    const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(targetDate.getDate()).padStart(2, '0');
+    setMobileRenewCustomExpiry(`${yyyy}-${mm}-${dd}`);
+    setIsMobileRenewOpen(true);
+  };
 
   // Fee Matrix State
   const monthlyPlanItem = plans.find(p => p.durationMonths === 1 || p.duration === 'Monthly');
@@ -1357,9 +1386,7 @@ export const MobileOwnerApp: React.FC = () => {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          setSelectedMember(member);
-                          setMobileRenewPlanId(member.planId || plans[0]?.id || '');
-                          setIsMobileRenewOpen(true);
+                          openMobileRenewModal(member);
                         }}
                         className="px-2.5 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 font-bold text-[10px] flex items-center gap-1 active:scale-95 cursor-pointer"
                         title="Extend / Renew Plan"
@@ -1565,9 +1592,7 @@ export const MobileOwnerApp: React.FC = () => {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        setSelectedMember(member);
-                        setMobileRenewPlanId(member.planId || plans[0]?.id || '');
-                        setIsMobileRenewOpen(true);
+                        openMobileRenewModal(member);
                       }}
                       className="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500/20 to-blue-500/20 hover:from-cyan-500/30 hover:to-blue-500/30 border border-cyan-500/40 text-cyan-300 font-bold text-[10px] flex items-center gap-1 active:scale-95 cursor-pointer shadow-sm"
                       title="Extend / Renew Plan"
@@ -2652,13 +2677,12 @@ export const MobileOwnerApp: React.FC = () => {
               {/* Full Renewal Bottom Sheet Trigger */}
               <button
                 onClick={() => {
-                  setMobileRenewPlanId(selectedMember.planId || plans[0]?.id || '');
-                  setIsMobileRenewOpen(true);
+                  if (selectedMember) openMobileRenewModal(selectedMember);
                 }}
                 className="w-full py-3 rounded-2xl bg-gradient-to-r from-[#00D4FF] via-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-black font-black text-xs flex items-center justify-center gap-2 shadow-xl shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer"
               >
                 <Sparkles className="w-4 h-4" />
-                <span>Custom Plan & Payment Mode Renewal</span>
+                <span>Extend / Renew Pass</span>
               </button>
             </div>
 
@@ -4184,22 +4208,29 @@ export const MobileOwnerApp: React.FC = () => {
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
-                if (!mobileRenewPlanId) return;
+                const parsedAmount = parseFloat(mobileRenewAmount);
+                if (isNaN(parsedAmount) || parsedAmount < 0) {
+                  alert('Please enter a valid payment amount (e.g. 500 or 600)');
+                  return;
+                }
+                if (!mobileRenewCustomExpiry) {
+                  alert('Please select an expiry date');
+                  return;
+                }
                 setIsMobileRenewing(true);
                 try {
                   await renewSubscription(
                     selectedMember.id,
-                    mobileRenewPlanId,
+                    mobileRenewPlanId || undefined,
                     mobileRenewPaymentMethod,
+                    parsedAmount,
                     undefined,
-                    undefined,
-                    undefined,
+                    `Pass extended to ${mobileRenewCustomExpiry}`,
                     mobileRenewCustomExpiry
                   );
                   const updated = members.find((m) => m.id === selectedMember.id);
                   if (updated) setSelectedMember(updated);
-                  setMobileRenewSuccessToast('Subscription renewed successfully!');
-                  setMobileRenewCustomExpiry('');
+                  setMobileRenewSuccessToast(`Pass extended successfully! ₹${parsedAmount} received`);
                   setTimeout(() => {
                     setMobileRenewSuccessToast(null);
                     setIsMobileRenewOpen(false);
@@ -4210,52 +4241,73 @@ export const MobileOwnerApp: React.FC = () => {
                   setIsMobileRenewing(false);
                 }
               }}
-              className="space-y-3 pt-1"
+              className="space-y-4 pt-1"
             >
+              {/* 1. MANUAL PAYMENT AMOUNT */}
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
-                  Select Renewal Package *
+                <label className="block text-[11px] font-black text-cyan-300 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                  <span>1. Payment Amount Received (₹) *</span>
+                  <span className="text-[10px] text-slate-400 font-normal">Enter any amount manually</span>
                 </label>
-                <select
-                  value={mobileRenewPlanId}
-                  onChange={(e) => setMobileRenewPlanId(e.target.value)}
-                  required
-                  className="w-full bg-[#080C14] border border-white/10 rounded-2xl px-3.5 py-3 text-xs text-white font-bold outline-none focus:border-cyan-400"
-                >
-                  {plans.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({p.durationMonths}M) — ₹{p.totalPrice.toLocaleString('en-IN')}
-                    </option>
+                <div className="relative">
+                  <div className="absolute left-3.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-black text-sm">
+                    ₹
+                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    required
+                    value={mobileRenewAmount}
+                    onChange={(e) => setMobileRenewAmount(e.target.value)}
+                    placeholder="e.g. 500 or 600"
+                    className="w-full bg-[#080C14] border-2 border-cyan-500/40 focus:border-cyan-400 rounded-2xl pl-12 pr-4 py-3 text-base font-black text-white outline-none shadow-inner"
+                  />
+                </div>
+
+                {/* Quick preset chips */}
+                <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                  <span className="text-[10px] text-slate-400 font-semibold mr-1">Quick:</span>
+                  {['500', '600', '1000', '1200', '1500'].map((amt) => (
+                    <button
+                      key={amt}
+                      type="button"
+                      onClick={() => setMobileRenewAmount(amt)}
+                      className={`px-3 py-1 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                        mobileRenewAmount === amt
+                          ? 'bg-cyan-500 text-black shadow-lg shadow-cyan-500/30 scale-105'
+                          : 'bg-[#080C14] hover:bg-white/5 border border-white/10 text-slate-300'
+                      }`}
+                    >
+                      ₹{amt}
+                    </button>
                   ))}
-                </select>
+                </div>
               </div>
 
-              {/* Custom Expiry Date Override */}
-              <div className="p-3 bg-[#080C14] rounded-2xl border border-white/10 space-y-2">
+              {/* 2. SELECT EXPIRY DATE */}
+              <div className="p-3.5 bg-[#080C14] rounded-2xl border border-white/10 space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-black text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <label className="text-[11px] font-black text-cyan-300 uppercase tracking-wider flex items-center gap-1.5">
                     <Calendar className="w-3.5 h-3.5 text-cyan-400" />
-                    <span>Custom Expiry Date Override</span>
+                    <span>2. Select New Expiry Date *</span>
                   </label>
                   {mobileRenewCustomExpiry && (
-                    <button
-                      type="button"
-                      onClick={() => setMobileRenewCustomExpiry('')}
-                      className="text-[9px] text-amber-400 hover:underline font-bold cursor-pointer"
-                    >
-                      Reset to Standard
-                    </button>
+                    <span className="text-[10px] text-cyan-400 font-bold font-mono">
+                      {mobileRenewCustomExpiry}
+                    </span>
                   )}
                 </div>
 
                 <input
                   type="date"
+                  required
                   value={mobileRenewCustomExpiry}
                   onChange={(e) => setMobileRenewCustomExpiry(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#101422] rounded-xl border border-white/15 text-xs font-mono font-bold text-white focus:outline-none focus:border-cyan-400"
+                  className="w-full px-3.5 py-2.5 bg-[#101422] rounded-xl border border-white/15 text-sm font-mono font-bold text-white focus:outline-none focus:border-cyan-400"
                 />
 
-                <div className="flex items-center gap-1.5 flex-wrap">
+                <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
                   <button
                     type="button"
                     onClick={() => {
@@ -4265,16 +4317,49 @@ export const MobileOwnerApp: React.FC = () => {
                       const mm = String(d.getMonth() + 1).padStart(2, '0');
                       setMobileRenewCustomExpiry(`${yyyy}-${mm}-01`);
                     }}
-                    className="px-2.5 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-[10px] font-black text-cyan-300 flex items-center gap-1 transition-all cursor-pointer"
+                    className="px-2.5 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-[10px] font-black text-cyan-300 flex items-center gap-1 transition-all cursor-pointer"
                   >
                     <span>📅 1st of Next Month</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const base = (selectedMember?.expiryDate && new Date(selectedMember.expiryDate) > new Date())
+                        ? new Date(selectedMember.expiryDate)
+                        : new Date();
+                      base.setMonth(base.getMonth() + 1);
+                      const yyyy = base.getFullYear();
+                      const mm = String(base.getMonth() + 1).padStart(2, '0');
+                      const dd = String(base.getDate()).padStart(2, '0');
+                      setMobileRenewCustomExpiry(`${yyyy}-${mm}-${dd}`);
+                    }}
+                    className="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-[10px] font-black text-emerald-300 flex items-center gap-1 transition-all cursor-pointer"
+                  >
+                    <span>+1 Month</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const base = (selectedMember?.expiryDate && new Date(selectedMember.expiryDate) > new Date())
+                        ? new Date(selectedMember.expiryDate)
+                        : new Date();
+                      base.setMonth(base.getMonth() + 3);
+                      const yyyy = base.getFullYear();
+                      const mm = String(base.getMonth() + 1).padStart(2, '0');
+                      const dd = String(base.getDate()).padStart(2, '0');
+                      setMobileRenewCustomExpiry(`${yyyy}-${mm}-${dd}`);
+                    }}
+                    className="px-2.5 py-1.5 rounded-xl bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/30 text-[10px] font-black text-blue-300 flex items-center gap-1 transition-all cursor-pointer"
+                  >
+                    <span>+3 Months</span>
                   </button>
                 </div>
               </div>
 
+              {/* 3. PAYMENT METHOD */}
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
-                  Payment Method *
+                <label className="block text-[11px] font-black text-slate-300 uppercase tracking-wider mb-1.5">
+                  3. Payment Method *
                 </label>
                 <div className="grid grid-cols-4 gap-1.5">
                   {(['UPI', 'Cash', 'Card', 'Bank Transfer'] as const).map((m) => (
@@ -4284,7 +4369,7 @@ export const MobileOwnerApp: React.FC = () => {
                       onClick={() => setMobileRenewPaymentMethod(m)}
                       className={`py-2.5 rounded-xl text-[10px] font-bold border transition-all cursor-pointer ${
                         mobileRenewPaymentMethod === m
-                          ? 'bg-cyan-500/25 border-cyan-500 text-cyan-300 shadow-md font-black'
+                          ? 'bg-cyan-500 text-black border-cyan-400 font-black shadow-lg shadow-cyan-500/20'
                           : 'bg-[#080C14] border-white/10 text-slate-400 hover:text-white'
                       }`}
                     >
@@ -4294,13 +4379,57 @@ export const MobileOwnerApp: React.FC = () => {
                 </div>
               </div>
 
+              {/* 4. OPTIONAL PACKAGE SWITCH (NOT REQUIRED) */}
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowPackageSelector(!showPackageSelector)}
+                  className="text-[11px] font-bold text-slate-400 hover:text-cyan-300 flex items-center gap-1.5 cursor-pointer py-1"
+                >
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showPackageSelector ? 'rotate-180 text-cyan-400' : ''}`} />
+                  <span>{showPackageSelector ? 'Hide Package Selection' : '▸ (Optional) Change Linked Package'}</span>
+                </button>
+
+                {showPackageSelector && (
+                  <div className="mt-2 p-3 bg-[#080C14] rounded-2xl border border-white/10 space-y-2 animate-in fade-in">
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                      Linked Plan Template (Optional)
+                    </label>
+                    <select
+                      value={mobileRenewPlanId}
+                      onChange={(e) => {
+                        setMobileRenewPlanId(e.target.value);
+                        const chosen = plans.find(p => p.id === e.target.value);
+                        if (chosen) {
+                          setMobileRenewAmount(String(chosen.totalPrice || chosen.basePrice || 500));
+                        }
+                      }}
+                      className="w-full bg-[#101422] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white font-bold outline-none focus:border-cyan-400"
+                    >
+                      {plans.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} ({p.durationMonths}M) — ₹{p.totalPrice.toLocaleString('en-IN')}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-slate-400">
+                      Not required. Leave untouched to keep the member's current package profile.
+                    </p>
+                  </div>
+                )}
+              </div>
+
               <button
                 type="submit"
-                disabled={isMobileRenewing}
-                className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#00D4FF] via-cyan-500 to-blue-600 text-black font-black text-xs flex items-center justify-center gap-2 shadow-2xl shadow-cyan-500/30 active:scale-95 transition-all cursor-pointer disabled:opacity-50 mt-3"
+                disabled={isMobileRenewing || !mobileRenewAmount || Number(mobileRenewAmount) < 0}
+                className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#00D4FF] via-cyan-500 to-blue-600 text-black font-black text-sm flex items-center justify-center gap-2 shadow-2xl shadow-cyan-500/30 active:scale-95 transition-all cursor-pointer disabled:opacity-50 mt-2"
               >
-                <Check className="w-4 h-4" />
-                <span>{isMobileRenewing ? 'Processing Renewal...' : 'Confirm & Renew Pass'}</span>
+                <Check className="w-5 h-5 stroke-[3]" />
+                <span>
+                  {isMobileRenewing
+                    ? 'Processing Extension...'
+                    : `Confirm & Extend Pass (₹${mobileRenewAmount || 0})`}
+                </span>
               </button>
             </form>
           </div>

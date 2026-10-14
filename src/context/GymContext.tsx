@@ -217,7 +217,7 @@ interface GymContextType {
   sendBulkNotification: (targetFilter: 'all' | 'unpaid' | 'expiring' | 'expired' | 'single', title: string, message: string, singleMemberId?: string) => Promise<void>;
   renewSubscription: (
     memberId: string,
-    planId: string,
+    planId?: string,
     paymentMethod?: 'UPI' | 'Cash' | 'Card' | 'Bank Transfer',
     customAmount?: number,
     customDurationMonths?: number,
@@ -3090,16 +3090,18 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const renewSubscription = async (
     memberId: string,
-    planId: string,
+    planId?: string,
     paymentMethod: 'UPI' | 'Cash' | 'Card' | 'Bank Transfer' = 'UPI',
     customAmount?: number,
     customDurationMonths?: number,
     notes?: string,
     customExpiryDate?: string
   ) => {
-    const targetPlan = plans.find((p) => p.id === planId) || plans[0];
     const targetMemberId = memberId || activeMemberId;
     const existingMember = members.find((m) => m.id === targetMemberId);
+    const targetPlan = (planId ? plans.find((p) => p.id === planId) : null)
+      || (existingMember?.planId ? plans.find((p) => p.id === existingMember.planId) : null)
+      || plans[0];
 
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
@@ -3132,12 +3134,12 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ? Math.round(customAmount)
       : (targetPlan?.totalPrice || targetPlan?.basePrice || 1500);
 
-    const resolvedPlanName = customDurationMonths && targetPlan && customDurationMonths !== targetPlan.durationMonths
-      ? `${customDurationMonths}-Month Subscription Pass`
-      : (targetPlan?.name || `${durationMonthsToAdd}-Month Plan`);
+    const resolvedPlanName = (planId && planId !== existingMember?.planId && targetPlan)
+      ? targetPlan.name
+      : (existingMember?.planName || targetPlan?.name || `${durationMonthsToAdd}-Month Plan`);
 
     const updatedData = {
-      planId: targetPlan?.id || 'custom-plan',
+      planId: targetPlan?.id || existingMember?.planId || 'custom-plan',
       planName: resolvedPlanName,
       startDate: effectiveStartDate,
       endDate: newEndDate,

@@ -604,6 +604,20 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
               <button
                 onClick={() => {
                   setRenewalPlanId(selectedMember.planId || plans[0]?.id || '');
+                  const matchedPlan = plans.find((p) => p.id === selectedMember.planId);
+                  setRenewalAmount(selectedMember.paidAmount || matchedPlan?.totalPrice || 500);
+                  const today = new Date();
+                  let targetDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+                  if (selectedMember.expiryDate || selectedMember.endDate) {
+                    const curExp = new Date(selectedMember.expiryDate || selectedMember.endDate || '');
+                    if (!isNaN(curExp.getTime()) && curExp > today) {
+                      targetDate = new Date(curExp.getFullYear(), curExp.getMonth() + 1, 1);
+                    }
+                  }
+                  const yyyy = targetDate.getFullYear();
+                  const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
+                  const dd = String(targetDate.getDate()).padStart(2, '0');
+                  setRenewalCustomExpiry(`${yyyy}-${mm}-${dd}`);
                   setShowRenewalModal(true);
                 }}
                 className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-black font-black text-xs shadow-md transition-all active:scale-95 cursor-pointer"
@@ -1391,7 +1405,10 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
 
               {/* Amount Input */}
               <div>
-                <label className="block text-[10px] font-black text-slate-300 uppercase mb-1">Payment Amount (₹) *</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[10px] font-black text-slate-300 uppercase">Payment Amount (₹) *</label>
+                  <span className="text-[10px] text-slate-400">Enter manually (e.g. 500 or 600)</span>
+                </div>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₹</span>
                   <input
@@ -1403,6 +1420,23 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
                     onChange={(e) => setRenewalAmount(Number(e.target.value))}
                     className="w-full bg-[#0B0D12] border border-gym-border rounded-xl pl-7 pr-3 py-2.5 text-white font-black text-sm outline-none focus:border-cyan-400"
                   />
+                </div>
+                <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                  <span className="text-[10px] text-slate-400 font-semibold mr-1">Quick:</span>
+                  {[500, 600, 1000, 1200, 1500].map((amt) => (
+                    <button
+                      key={amt}
+                      type="button"
+                      onClick={() => setRenewalAmount(amt)}
+                      className={`px-2.5 py-1 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                        renewalAmount === amt
+                          ? 'bg-cyan-500 text-black shadow-md scale-105'
+                          : 'bg-[#0B0D12] hover:bg-white/5 border border-gym-border text-slate-300'
+                      }`}
+                    >
+                      ₹{amt}
+                    </button>
+                  ))}
                 </div>
               </div>
 
