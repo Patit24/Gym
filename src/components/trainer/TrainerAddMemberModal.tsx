@@ -52,8 +52,20 @@ export const TrainerAddMemberModal: React.FC<TrainerAddMemberModalProps> = ({ is
   const [includeAdmissionFee, setIncludeAdmissionFee] = useState(true);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCapturingPhoto, setIsCapturingPhoto] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+
+  const handleCapture = async (source: 'camera' | 'photos') => {
+    if (isCapturingPhoto) return;
+    setIsCapturingPhoto(true);
+    try {
+      const photo = await capturePhoto(source);
+      if (photo) setPhotoUrl(photo);
+    } finally {
+      setIsCapturingPhoto(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -209,11 +221,9 @@ export const TrainerAddMemberModal: React.FC<TrainerAddMemberModalProps> = ({ is
                 />
                   <button
                     type="button"
-                    onClick={async () => {
-                      const photo = await capturePhoto('camera');
-                      if (photo) setPhotoUrl(photo);
-                    }}
-                    className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#4F7CFF] text-white flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer hover:bg-blue-400 transition-all"
+                    onClick={() => handleCapture('camera')}
+                    disabled={isCapturingPhoto}
+                    className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#4F7CFF] text-white flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer hover:bg-blue-400 transition-all disabled:opacity-50"
                     title="Direct Camera Capture"
                   >
                     <Camera className="w-3.5 h-3.5" />
@@ -224,22 +234,18 @@ export const TrainerAddMemberModal: React.FC<TrainerAddMemberModalProps> = ({ is
                   <div className="flex items-center gap-2 mt-1">
                     <button
                       type="button"
-                      onClick={async () => {
-                        const photo = await capturePhoto('camera');
-                        if (photo) setPhotoUrl(photo);
-                      }}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#4F7CFF]/20 border border-[#4F7CFF]/40 text-[#4F7CFF] text-[10px] font-bold cursor-pointer active:scale-95 hover:bg-[#4F7CFF]/30 transition-all"
+                      onClick={() => handleCapture('camera')}
+                      disabled={isCapturingPhoto}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#4F7CFF]/20 border border-[#4F7CFF]/40 text-[#4F7CFF] text-[10px] font-bold cursor-pointer active:scale-95 hover:bg-[#4F7CFF]/30 transition-all disabled:opacity-50"
                     >
                       <Camera className="w-3 h-3" />
-                      <span>Take Photo</span>
+                      <span>{isCapturingPhoto ? 'Opening...' : 'Take Photo'}</span>
                     </button>
                     <button
                       type="button"
-                      onClick={async () => {
-                        const photo = await capturePhoto('photos');
-                        if (photo) setPhotoUrl(photo);
-                      }}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-slate-300 text-[10px] font-bold cursor-pointer active:scale-95 hover:bg-white/10 transition-all"
+                      onClick={() => handleCapture('photos')}
+                      disabled={isCapturingPhoto}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-slate-300 text-[10px] font-bold cursor-pointer active:scale-95 hover:bg-white/10 transition-all disabled:opacity-50"
                     >
                       <ImageIcon className="w-3 h-3 text-slate-400" />
                       <span>Gallery</span>

@@ -49,100 +49,120 @@ export const compressImage = (file: File, maxDim = 480, quality = 0.85): Promise
   });
 };
 
+// Mutex guard & cooldown tracker to prevent rapid duplicate clicks or ghost events
+let isCaptureInProgress = false;
+let lastCaptureDismissTime = 0;
+
 /**
  * Universal photo capture helper:
  * - Uses native Android camera hardware via @capacitor/camera when running on mobile.
  * - Falls back seamlessly to HTML file picker if on web desktop or if native camera is unavailable.
+ * - Single-click clean closing with zero duplicate instance stacking.
  */
 export const capturePhoto = async (
   source: 'camera' | 'photos' = 'camera',
   maxDim = 480,
   quality = 85
 ): Promise<string | null> => {
-  // If running in native Capacitor (Android APK) or Capacitor Camera is available
-  if (Capacitor.isNativePlatform()) {
+  const now = Date.now();
+  // Protect against rapid double-clicks and ghost touch events (cooldown 600ms)
+  if (isCaptureInProgress || now - lastCaptureDismissTime < 600) {
+    console.warn('[capturePhoto] Suppressed concurrent or rapid re-trigger capture call');
+    return null;
+  }
+  isCaptureInProgress = true;
+
+  try {
+    if (Capacitor.isNativePlatform()) {
+      return await capturePhotoNative(source, maxDim, quality);
+    } else {
+      return await capturePhotoWeb(source, maxDim, quality);
+    }
+  } finally {
+    lastCaptureDismissTime = Date.now();
+    isCaptureInProgress = false;
+  }
+};
+
+/**
+ * Native Android / iOS Camera capture via @capacitor/camera
+ */
+const capturePhotoNative = async (
+  source: 'camera' | 'photos',
+  maxDim: number,
+  quality: number
+): Promise<string | null> => {
+  try {
+    // Proactively check and request permissions if needed
     try {
-      // Proactively check and request permissions if needed
-      try {
-        const perms = await Camera.checkPermissions();
-        if (source === 'camera' && perms.camera !== 'granted') {
-          const req = await Camera.requestPermissions({ permissions: ['camera'] });
-          if (req.camera !== 'granted') {
-            console.warn('Camera permission not granted:', req.camera);
-            return null;
-          }
-        }
-      } catch (permErr) {
-        console.warn('Permission query notice:', permErr);
-      }
-
-      // Try takePhoto first for direct camera hardware if source is camera
-      if (source === 'camera' && typeof (Camera as any).takePhoto === 'function') {
-        try {
-          const res = await (Camera as any).takePhoto({
-            quality,
-            targetWidth: maxDim,
-            targetHeight: maxDim,
-            correctOrientation: true,
-          });
-          if (res?.thumbnail) {
-            return res.thumbnail.startsWith('data:') ? res.thumbnail : `data:image/jpeg;base64,${res.thumbnail}`;
-          }
-          if (res?.webPath) {
-            const blob = await fetch(res.webPath).then(r => r.blob());
-            const file = new File([blob], 'camera.jpg', { type: 'image/jpeg' });
-            return await compressImage(file, maxDim, quality / 100);
-          }
-        } catch (takePhotoErr: any) {
-          if (takePhotoErr?.message?.includes('cancelled') || takePhotoErr?.message?.includes('User cancelled')) {
-            return null;
-          }
-          console.warn('takePhoto notice, trying getPhoto:', takePhotoErr);
+      const perms = await Camera.checkPermissions();
+      if (source === 'camera' && perms.camera !== 'granted') {
+        const req = await Camera.requestPermissions({ permissions: ['camera'] });
+        if (req.camera !== 'granted') {
+          console.warn('Camera permission not granted:', req.camera);
+          return null;
         }
       }
+    } catch (permErr) {
+      console.warn('Permission query notice:', permErr);
+    }
 
-      // Standard getPhoto method with CameraSource.Camera or CameraSource.Photos
-      const photo = await Camera.getPhoto({
-        quality,
-        allowEditing: false,
-        resultType: CameraResultType.DataUrl,
-        source: source === 'camera' ? CameraSource.Camera : CameraSource.Photos,
-        width: maxDim,
-        height: maxDim,
-      });
+    // Direct, canonical call to Camera.getPhoto
+    const photo = await Camera.getPhoto({
+      quality,
+      allowEditing: false,
+      resultType: CameraResultType.DataUrl,
+      source: source === 'camera' ? CameraSource.Camera : CameraSource.Photos,
+      width: maxDim,
+      height: maxDim,
+      correctOrientation: true,
+    });
 
-      if (photo.dataUrl) {
-        return photo.dataUrl;
-      }
-      if (photo.webPath) {
-        const blob = await fetch(photo.webPath).then(r => r.blob());
-        const file = new File([blob], 'photo.jpg', { type: 'image/jpeg' });
-        return await compressImage(file, maxDim, quality / 100);
-      }
-      return null;
-    } catch (nativeErr: any) {
-      if (
-        nativeErr?.message?.includes('cancelled') ||
-        nativeErr?.message?.includes('User cancelled') ||
-        nativeErr?.message?.includes('Canceled') ||
-        nativeErr?.message?.includes('denied')
-      ) {
-        return null;
-      }
-      console.error('Native camera capture error:', nativeErr);
-      // On mobile native, do NOT fall back to standard HTML file input because on Android WebViews
-      // that defaults to gallery/document picker instead of hardware camera!
+    if (photo.dataUrl) {
+      return photo.dataUrl;
+    }
+    if (photo.webPath) {
+      const blob = await fetch(photo.webPath).then(r => r.blob());
+      const file = new File([blob], 'photo.jpg', { type: 'image/jpeg' });
+      return await compressImage(file, maxDim, quality / 100);
+    }
+    return null;
+  } catch (nativeErr: any) {
+    const errMsg = String(nativeErr?.message || nativeErr || '').toLowerCase();
+    // Catch ANY user cancellation, back button, dismissal or denial cleanly:
+    if (
+      errMsg.includes('cancel') ||
+      errMsg.includes('closed') ||
+      errMsg.includes('dismiss') ||
+      errMsg.includes('no image') ||
+      errMsg.includes('no photo') ||
+      errMsg.includes('back') ||
+      errMsg.includes('denied')
+    ) {
       return null;
     }
+    console.error('Native camera capture error:', nativeErr);
+    return null;
   }
+};
 
-  // Web desktop & mobile web browser:
+/**
+ * Web Viewfinder Modal & HTML5 MediaDevices / File Picker
+ */
+const capturePhotoWeb = async (
+  source: 'camera' | 'photos',
+  maxDim: number,
+  quality: number
+): Promise<string | null> => {
   if (source === 'camera') {
     // Open live viewfinder modal using WebRTC getUserMedia
     return new Promise<string | null>((resolve) => {
-      // 1. Remove ANY existing camera modals from DOM before creating a new one (prevents duplicate stacking)
-      const existingModals = document.querySelectorAll('#__web_camera_modal_root__');
-      existingModals.forEach((el) => el.remove());
+      // 1. Immediately purge ANY existing camera modals from DOM before creating a new one
+      document.querySelectorAll('#__web_camera_modal_root__').forEach((el) => {
+        try {
+          el.remove();
+        } catch (_) {}
+      });
 
       // Create DOM container for Web Camera modal
       const modalContainer = document.createElement('div');
@@ -158,16 +178,24 @@ export const capturePhoto = async (
         isClosed = true;
         window.removeEventListener('keydown', handleKeyDown);
         if (stream) {
-          stream.getTracks().forEach((t) => t.stop());
+          try {
+            stream.getTracks().forEach((t) => t.stop());
+          } catch (_) {}
           stream = null;
         }
-        document.querySelectorAll('#__web_camera_modal_root__').forEach((el) => el.remove());
+        document.querySelectorAll('#__web_camera_modal_root__').forEach((el) => {
+          try {
+            el.remove();
+          } catch (_) {}
+        });
       };
 
       const handleClose = (e?: Event) => {
         if (e) {
-          e.preventDefault();
-          e.stopPropagation();
+          try {
+            e.preventDefault();
+            e.stopPropagation();
+          } catch (_) {}
         }
         cleanup();
         resolve(null);
@@ -194,7 +222,9 @@ export const capturePhoto = async (
                   <div style="font-size: 10px; color: #94A3B8;">Position face clearly in viewfinder</div>
                 </div>
               </div>
-              <button type="button" id="__cam_close_btn__" style="width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,0.12); color: #FFFFFF; border: 1px solid rgba(255,255,255,0.2); cursor: pointer; font-size: 16px; font-weight: bold; display: flex; align-items: center; justify-content: center; transition: all 0.2s;" title="Close Camera (1 click)">✕</button>
+              <button type="button" id="__cam_close_btn__" style="display: flex; align-items: center; gap: 4px; padding: 6px 14px; border-radius: 9999px; background: rgba(239,68,68,0.2); color: #FCA5A5; border: 1px solid rgba(239,68,68,0.4); cursor: pointer; font-size: 12px; font-weight: 800; transition: all 0.2s;" title="Close Camera (1 click)">
+                <span>✕ Close</span>
+              </button>
             </div>
 
             <!-- Viewfinder Area -->
@@ -217,16 +247,20 @@ export const capturePhoto = async (
             </div>
 
             <!-- Action Controls -->
-            <div style="padding: 16px; background: #080C14; border-top: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; gap: 12px;">
-              <div id="__cam_capture_controls__" style="display: flex; align-items: center; justify-content: center; width: 100%;">
-                <button type="button" id="__cam_shutter_btn__" style="width: 64px; height: 64px; border-radius: 50%; border: 4px solid rgba(255,255,255,0.3); background: #06B6D4; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 15px -3px rgba(6,182,212,0.4); outline: none;">
-                  <div style="width: 44px; height: 44px; border-radius: 50%; background: #FFFFFF;"></div>
+            <div style="padding: 16px; background: #080C14; border-top: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;">
+              <div id="__cam_capture_controls__" style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; gap: 10px;">
+                <button type="button" id="__cam_shutter_btn__" style="width: 60px; height: 60px; border-radius: 50%; border: 4px solid rgba(255,255,255,0.3); background: #06B6D4; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 15px -3px rgba(6,182,212,0.4); outline: none;">
+                  <div style="width: 40px; height: 40px; border-radius: 50%; background: #FFFFFF;"></div>
+                </button>
+                <button type="button" id="__cam_bottom_close_btn__" style="padding: 8px 18px; border-radius: 12px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #CBD5E1; font-size: 12px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s;">
+                  ✕ Cancel & Close
                 </button>
               </div>
 
               <div id="__cam_review_controls__" style="display: none; width: 100%; gap: 10px;">
                 <button type="button" id="__cam_retake_btn__" style="flex: 1; padding: 10px 16px; border-radius: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15); color: #E2E8F0; font-size: 12px; font-weight: bold; cursor: pointer;">Retake</button>
-                <button type="button" id="__cam_use_btn__" style="flex: 1; padding: 10px 16px; border-radius: 12px; background: #06B6D4; border: none; color: #000000; font-size: 12px; font-weight: 800; cursor: pointer; box-shadow: 0 10px 15px -3px rgba(6,182,212,0.3);">Use Photo ✓</button>
+                <button type="button" id="__cam_use_btn__" style="flex: 1.5; padding: 10px 16px; border-radius: 12px; background: #06B6D4; border: none; color: #000000; font-size: 12px; font-weight: 800; cursor: pointer; box-shadow: 0 10px 15px -3px rgba(6,182,212,0.3);">Use Photo ✓</button>
+                <button type="button" id="__cam_review_cancel_btn__" style="padding: 10px 14px; border-radius: 12px; background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); color: #FCA5A5; font-size: 12px; font-weight: bold; cursor: pointer;">✕</button>
               </div>
             </div>
 
@@ -243,32 +277,49 @@ export const capturePhoto = async (
       const shutterBtn = modalContainer.querySelector('#__cam_shutter_btn__') as HTMLButtonElement;
       const flipBtn = modalContainer.querySelector('#__cam_flip_btn__') as HTMLButtonElement;
       const closeBtn = modalContainer.querySelector('#__cam_close_btn__') as HTMLButtonElement;
+      const bottomCloseBtn = modalContainer.querySelector('#__cam_bottom_close_btn__') as HTMLButtonElement;
+      const reviewCancelBtn = modalContainer.querySelector('#__cam_review_cancel_btn__') as HTMLButtonElement;
       const captureControls = modalContainer.querySelector('#__cam_capture_controls__') as HTMLDivElement;
       const reviewControls = modalContainer.querySelector('#__cam_review_controls__') as HTMLDivElement;
       const retakeBtn = modalContainer.querySelector('#__cam_retake_btn__') as HTMLButtonElement;
       const useBtn = modalContainer.querySelector('#__cam_use_btn__') as HTMLButtonElement;
 
-      // Single-click close handlers
-      closeBtn.addEventListener('click', handleClose);
-      closeBtn.addEventListener('touchend', (e) => {
-        handleClose(e);
-      });
+      // Single-click close handlers across all buttons & backdrop
+      const bindClose = (btn: HTMLElement | null) => {
+        if (!btn) return;
+        btn.onclick = handleClose;
+        btn.onpointerdown = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          handleClose(e);
+        };
+      };
+
+      bindClose(closeBtn);
+      bindClose(bottomCloseBtn);
+      bindClose(reviewCancelBtn);
 
       // Backdrop dismissal on click outside card
-      backdrop.addEventListener('click', (e) => {
+      backdrop.onclick = (e) => {
+        if (e.target === backdrop) handleClose(e);
+      };
+      backdrop.onpointerdown = (e) => {
         if (e.target === backdrop) {
+          e.preventDefault();
+          e.stopPropagation();
           handleClose(e);
         }
-      });
-      card.addEventListener('click', (e) => {
-        e.stopPropagation();
-      });
+      };
+      card.onclick = (e) => e.stopPropagation();
+      card.onpointerdown = (e) => e.stopPropagation();
 
       let capturedDataUrl: string | null = null;
 
       const initCamera = async () => {
         if (stream) {
-          stream.getTracks().forEach((t) => t.stop());
+          try {
+            stream.getTracks().forEach((t) => t.stop());
+          } catch (_) {}
           stream = null;
         }
 
