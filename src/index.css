@@ -207,3 +207,31 @@
   box-shadow: 0 0 14px #00D4FF;
   animation: qrScanLine 2.2s ease-in-out infinite;
 }
+
+/* ════════════════════════════════════════════════════════════════
+   GLOBAL FONT ACCESSIBILITY & LEGIBILITY BOOST
+   Ensures small labels, subtexts, and badges are clearly readable
+   for all users without eye strain.
+════════════════════════════════════════════════════════════════ */
+@layer utilities {
+  .text-\[7px\], .text-\[7\.5px\] {
+    font-size: 0.6875rem !important; /* 11px */
+    line-height: 1.1rem !important;
+  }
+  .text-\[8px\], .text-\[8\.5px\] {
+    font-size: 0.75rem !important; /* 12px */
+    line-height: 1.15rem !important;
+  }
+  .text-\[9px\], .text-\[9\.5px\] {
+    font-size: 0.775rem !important; /* 12.4px */
+    line-height: 1.2rem !important;
+  }
+  .text-\[10px\], .text-\[10\.5px\] {
+    font-size: 0.8125rem !important; /* 13px */
+    line-height: 1.25rem !important;
+  }
+  .text-\[11px\] {
+    font-size: 0.84rem !important; /* 13.5px */
+    line-height: 1.3rem !important;
+  }
+}

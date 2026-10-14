@@ -186,6 +186,8 @@ interface GymContextType {
   
   addWeeklyWorkout: (targetMemberId: string, weekNumber: number, weekTitle: string, splits: DailyWorkoutSplit[]) => Promise<void>;
   addMonthlyDiet: (targetMemberId: string, monthPlan: MonthlyDietPlan) => Promise<void>;
+  getMemberDiet: (targetMemberId: string) => Promise<DietPlan | null>;
+  getMemberWorkout: (targetMemberId: string) => Promise<WorkoutPlan | null>;
 
   logWorkoutSession: (session: Omit<WorkoutSessionLog, 'id'>) => Promise<WorkoutSessionLog>;
   addTrainerNote: (note: Omit<TrainerNote, 'id' | 'createdAt'>) => Promise<TrainerNote>;
@@ -2472,7 +2474,40 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (activeMemberId === targetMemberId) {
       setWorkout(updatedWorkout);
     }
+    try {
+      localStorage.setItem(`gym_workout_${targetMemberId}`, JSON.stringify(updatedWorkout));
+    } catch (e) {
+      console.warn('Failed to cache workout to localStorage:', e);
+    }
     await safeDbWrite(setDoc(doc(db, 'workouts', targetMemberId), updatedWorkout));
+  };
+
+  const getMemberWorkout = async (targetMemberId: string): Promise<WorkoutPlan | null> => {
+    if (!targetMemberId) return null;
+    let cached: WorkoutPlan | null = null;
+    try {
+      const localStr = localStorage.getItem(`gym_workout_${targetMemberId}`);
+      if (localStr) cached = JSON.parse(localStr);
+    } catch {}
+
+    try {
+      const docSnap = await getDoc(doc(db, 'workouts', targetMemberId));
+      if (docSnap.exists()) {
+        const data = docSnap.data() as WorkoutPlan;
+        if (data && Array.isArray(data.weeklyPlans) && data.weeklyPlans.length > 0) {
+          try {
+            localStorage.setItem(`gym_workout_${targetMemberId}`, JSON.stringify(data));
+          } catch {}
+          return data;
+        }
+      }
+    } catch (err) {
+      console.warn('Firestore getMemberWorkout error, using cache:', err);
+    }
+
+    if (cached) return cached;
+    if (workout && workout.memberId === targetMemberId) return workout;
+    return null;
   };
 
   const addMonthlyDiet = async (targetMemberId: string, monthPlan: MonthlyDietPlan) => {
@@ -2482,6 +2517,18 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let existingMonthlyPlans: MonthlyDietPlan[] = [];
     let currentWater = 2.5;
     try {
+      // Check local cache first
+      const localStr = localStorage.getItem(`gym_diet_${targetMemberId}`);
+      if (localStr) {
+        const localParsed = JSON.parse(localStr);
+        if (localParsed && Array.isArray(localParsed.monthlyPlans)) {
+          existingMonthlyPlans = localParsed.monthlyPlans;
+        }
+        if (localParsed && typeof localParsed.waterCurrentLiters === 'number') {
+          currentWater = localParsed.waterCurrentLiters;
+        }
+      }
+
       const docSnap = await getDoc(doc(db, 'diets', targetMemberId));
       if (docSnap.exists()) {
         const data = docSnap.data() as DietPlan;
@@ -2522,7 +2569,45 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (activeMemberId === targetMemberId) {
       setDiet(updatedDiet);
     }
+    try {
+      localStorage.setItem(`gym_diet_${targetMemberId}`, JSON.stringify(updatedDiet));
+    } catch (e) {
+      console.warn('Failed to cache diet to localStorage:', e);
+    }
     await safeDbWrite(setDoc(doc(db, 'diets', targetMemberId), updatedDiet));
+  };
+
+  const getMemberDiet = async (targetMemberId: string): Promise<DietPlan | null> => {
+    if (!targetMemberId) return null;
+
+    let cachedDiet: DietPlan | null = null;
+    try {
+      const localStr = localStorage.getItem(`gym_diet_${targetMemberId}`);
+      if (localStr) {
+        cachedDiet = JSON.parse(localStr);
+      }
+    } catch (e) {
+      console.warn('Failed to parse local diet cache:', e);
+    }
+
+    try {
+      const docSnap = await getDoc(doc(db, 'diets', targetMemberId));
+      if (docSnap.exists()) {
+        const firestoreDiet = docSnap.data() as DietPlan;
+        if (firestoreDiet && Array.isArray(firestoreDiet.monthlyPlans) && firestoreDiet.monthlyPlans.length > 0) {
+          try {
+            localStorage.setItem(`gym_diet_${targetMemberId}`, JSON.stringify(firestoreDiet));
+          } catch {}
+          return firestoreDiet;
+        }
+      }
+    } catch (err) {
+      console.warn('Firestore getMemberDiet error, using cache:', err);
+    }
+
+    if (cachedDiet) return cachedDiet;
+    if (diet && diet.memberId === targetMemberId) return diet;
+    return null;
   };
 
   const buySupplements = async (
@@ -3483,6 +3568,8 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addWaterIntake,
         addWeeklyWorkout,
         addMonthlyDiet,
+        getMemberDiet,
+        getMemberWorkout,
         buySupplements,
         addSupplement,
         updateSupplement,

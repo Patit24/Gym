@@ -16,14 +16,26 @@ export const PrivilegePassCard: React.FC<PrivilegePassCardProps> = ({
 }) => {
   const [isFlipped, setIsFlipped] = useState(false);
 
-  // Format dates
-  const memberSinceFormatted = member?.startDate
-    ? `${new Date(member.startDate).getMonth() + 1}/${String(new Date(member.startDate).getFullYear()).slice(-2)}`
-    : '1/26';
+  // Format exact dates as DD/MM/YYYY (Date/Month/Year)
+  const formatExactDateDDMMYYYY = (rawDate?: string): string => {
+    if (!rawDate) return '--/--/----';
+    const clean = rawDate.trim();
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(clean)) return clean;
+    const parts = clean.split('T')[0].split('-');
+    if (parts.length === 3 && parts[0].length === 4) {
+      const [year, month, day] = parts;
+      return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
+    }
+    const d = new Date(clean);
+    if (isNaN(d.getTime())) return clean;
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
 
-  const expiryFormatted = member?.expiryDate || member?.endDate
-    ? `${new Date(member.expiryDate || member.endDate).getMonth() + 1}/${String(new Date(member.expiryDate || member.endDate).getFullYear()).slice(-2)}`
-    : '1/27';
+  const registeredDateFormatted = formatExactDateDDMMYYYY(member?.startDate);
+  const validUntilFormatted = formatExactDateDDMMYYYY(member?.expiryDate || member?.endDate);
 
   const memberName = (member?.name || 'MEMBER').toUpperCase();
   const membershipPin = member?.membershipNo ? member.membershipNo.replace(/\D/g, '').slice(-4) || '0001' : '0001';
@@ -184,26 +196,26 @@ export const PrivilegePassCard: React.FC<PrivilegePassCardProps> = ({
             <div className="relative z-10 flex items-end justify-between pt-1">
               <div className="flex items-baseline gap-3">
                 <div>
-                  <span className="text-[7.5px] sm:text-[8px] font-bold tracking-[0.15em] text-slate-300 uppercase font-mono block">
-                    MEMBER SINCE
+                  <span className="text-[9px] sm:text-[10px] font-bold tracking-[0.12em] text-slate-300 uppercase font-mono block">
+                    REGISTERED
                   </span>
                   <span
-                    className="font-mono text-xs sm:text-sm font-black tracking-widest text-white drop-shadow"
+                    className="font-mono text-xs sm:text-sm font-black tracking-wider text-white drop-shadow"
                     style={{ textShadow: '1px 1px 2px #000' }}
                   >
-                    {memberSinceFormatted}
+                    {registeredDateFormatted}
                   </span>
                 </div>
 
                 <div className="border-l border-white/25 pl-3">
-                  <span className="text-[7.5px] sm:text-[8px] font-bold tracking-[0.15em] text-slate-300 uppercase font-mono block">
-                    VALID THRU
+                  <span className="text-[9px] sm:text-[10px] font-bold tracking-[0.12em] text-emerald-300 uppercase font-mono block">
+                    VALID TILL
                   </span>
                   <span
-                    className="font-mono text-xs sm:text-sm font-black tracking-widest text-white drop-shadow"
+                    className="font-mono text-xs sm:text-sm font-black tracking-wider text-emerald-400 drop-shadow"
                     style={{ textShadow: '1px 1px 2px #000' }}
                   >
-                    {expiryFormatted}
+                    {validUntilFormatted}
                   </span>
                 </div>
               </div>
@@ -228,7 +240,7 @@ export const PrivilegePassCard: React.FC<PrivilegePassCardProps> = ({
             <div className="absolute top-7 sm:top-8 inset-x-0 h-8 sm:h-9 bg-gradient-to-r from-[#1E293B] via-[#0F172A] via-[#334155] to-[#1E293B] shadow-[0_2px_8px_rgba(0,0,0,0.8)] border-y border-white/10" />
 
             {/* Top Serial Number Header */}
-            <div className="relative z-10 flex justify-between text-[8px] sm:text-[9px] text-slate-300 font-mono">
+            <div className="relative z-10 flex justify-between text-[9px] sm:text-[10px] text-slate-300 font-mono">
               <span className="tracking-widest uppercase">SMART GYM PASS</span>
               <span className="font-bold text-white">{fullMembershipId}</span>
             </div>
@@ -236,9 +248,12 @@ export const PrivilegePassCard: React.FC<PrivilegePassCardProps> = ({
             {/* Center: Membership Terms & Official Club Badge */}
             <div className="relative z-10 grid grid-cols-3 gap-3 items-center pt-6 sm:pt-7">
               
-              <div className="col-span-2 text-[7.5px] sm:text-[8.5px] text-slate-200 leading-snug space-y-0.5">
-                <p className="text-white font-medium">
+              <div className="col-span-2 text-[9px] sm:text-[10px] text-slate-200 leading-snug space-y-1">
+                <p className="text-white font-bold">
                   Authorized 24/7 RFID turnstile & dynamic QR gate entry across all clubs.
+                </p>
+                <p className="text-cyan-300 font-mono font-bold">
+                  Valid: {registeredDateFormatted} to {validUntilFormatted}
                 </p>
                 <p className="text-slate-400">
                   Non-transferable. Present for locker & trainer reservations.
@@ -253,7 +268,7 @@ export const PrivilegePassCard: React.FC<PrivilegePassCardProps> = ({
                     <Activity className="w-2.5 h-2.5 text-black" />
                   </div>
                 </div>
-                <span className="text-[6.5px] text-slate-300 font-mono tracking-widest mt-0.5 font-bold uppercase">
+                <span className="text-[8.5px] text-slate-300 font-mono tracking-widest mt-0.5 font-bold uppercase">
                   VERIFIED PASS
                 </span>
               </div>
@@ -270,13 +285,13 @@ export const PrivilegePassCard: React.FC<PrivilegePassCardProps> = ({
                     <span key={i} style={{ width: `${w}px` }} className="h-full bg-black block" />
                   ))}
                 </div>
-                <span className="text-[7px] font-mono font-bold text-black tracking-widest mt-0.5">
+                <span className="text-[9px] font-mono font-bold text-black tracking-widest mt-0.5">
                   {fullMembershipId}
                 </span>
               </div>
 
               {/* Club Info */}
-              <div className="text-right text-[7.5px] sm:text-[8px] text-slate-200 space-y-0.5">
+              <div className="text-right text-[9px] sm:text-[10px] text-slate-200 space-y-0.5">
                 <div className="font-bold text-white uppercase tracking-wider">Smart Gym Franchise</div>
                 <div className="text-slate-300 font-mono font-semibold">+91 98765 43210</div>
               </div>

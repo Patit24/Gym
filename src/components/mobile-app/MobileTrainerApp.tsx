@@ -79,6 +79,8 @@ export const MobileTrainerApp: React.FC = () => {
     attendance,
     addWeeklyWorkout,
     addMonthlyDiet,
+    getMemberDiet,
+    getMemberWorkout,
     addMember,
     provisionMemberWithAccount,
     updateMember,
@@ -325,6 +327,126 @@ export const MobileTrainerApp: React.FC = () => {
   const [newMealCategory, setNewMealCategory] = useState<'breakfast' | 'lunch' | 'snack' | 'dinner'>('breakfast');
   const [dietSuccessMsg, setDietSuccessMsg] = useState('');
   const [isSavingDiet, setIsSavingDiet] = useState(false);
+
+  // Track member ID whose diet was loaded into state
+  const lastLoadedMemberDietIdRef = React.useRef<string>('');
+  const isInitialDietHydratedRef = React.useRef<boolean>(false);
+
+  // Load member diet when targetMemberId changes or on initial mount
+  React.useEffect(() => {
+    if (!targetMemberId) return;
+    let isMounted = true;
+    lastLoadedMemberDietIdRef.current = targetMemberId;
+
+    // 1. Immediately check localStorage cache for this member to display instantly without delay
+    try {
+      const localStr = localStorage.getItem(`gym_diet_${targetMemberId}`);
+      if (localStr) {
+        const parsed = JSON.parse(localStr);
+        const plan = parsed.monthlyPlans?.[0] || parsed;
+        if (plan && (plan.targetCalories || plan.targetProteinG)) {
+          if (plan.monthTitle) setDietTitle(plan.monthTitle);
+          if (plan.targetCalories) setTargetCalories(Number(plan.targetCalories));
+          if (plan.targetProteinG) setTargetProtein(Number(plan.targetProteinG));
+          if (plan.targetCarbsG) setTargetCarbs(Number(plan.targetCarbsG));
+          if (plan.targetFatG) setTargetFats(Number(plan.targetFatG));
+          if (plan.waterTargetLiters) setWaterTarget(Number(plan.waterTargetLiters));
+          if (plan.meals) {
+            if (Array.isArray(plan.meals.breakfast)) setBreakfastMeals(plan.meals.breakfast);
+            if (Array.isArray(plan.meals.lunch)) setLunchMeals(plan.meals.lunch);
+            if (Array.isArray(plan.meals.snack)) setSnackMeals(plan.meals.snack);
+            if (Array.isArray(plan.meals.dinner)) setDinnerMeals(plan.meals.dinner);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Error reading local diet draft:', e);
+    }
+
+    // 2. Query Firestore via getMemberDiet for fresh data
+    getMemberDiet(targetMemberId)
+      .then((dietPlan) => {
+        if (!isMounted || !dietPlan || lastLoadedMemberDietIdRef.current !== targetMemberId) return;
+        const plan = dietPlan.monthlyPlans?.[0];
+        if (plan && (plan.targetCalories || plan.targetProteinG)) {
+          if (plan.monthTitle) setDietTitle(plan.monthTitle);
+          if (plan.targetCalories) setTargetCalories(Number(plan.targetCalories));
+          if (plan.targetProteinG) setTargetProtein(Number(plan.targetProteinG));
+          if (plan.targetCarbsG) setTargetCarbs(Number(plan.targetCarbsG));
+          if (plan.targetFatG) setTargetFats(Number(plan.targetFatG));
+          if (plan.waterTargetLiters) setWaterTarget(Number(plan.waterTargetLiters));
+          if (plan.meals) {
+            if (Array.isArray(plan.meals.breakfast)) setBreakfastMeals(plan.meals.breakfast);
+            if (Array.isArray(plan.meals.lunch)) setLunchMeals(plan.meals.lunch);
+            if (Array.isArray(plan.meals.snack)) setSnackMeals(plan.meals.snack);
+            if (Array.isArray(plan.meals.dinner)) setDinnerMeals(plan.meals.dinner);
+          }
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to load member diet:', err);
+      })
+      .finally(() => {
+        if (isMounted) isInitialDietHydratedRef.current = true;
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [targetMemberId, getMemberDiet]);
+
+  // Keep local draft in sync with any custom inputs so refresh never loses customized calories/protein
+  React.useEffect(() => {
+    if (!targetMemberId || lastLoadedMemberDietIdRef.current !== targetMemberId) return;
+    const currentDraft = {
+      memberId: targetMemberId,
+      monthlyPlans: [{
+        monthNumber: 1,
+        monthTitle: dietTitle,
+        targetCalories,
+        targetProteinG: targetProtein,
+        targetCarbsG: targetCarbs,
+        targetFatG: targetFats,
+        waterTargetLiters: waterTarget,
+        meals: {
+          breakfast: breakfastMeals.map(m => ({ ...m, carbsG: (m as any).carbsG ?? 20, fatG: (m as any).fatG ?? 10, completed: false })),
+          lunch: lunchMeals.map(m => ({ ...m, carbsG: (m as any).carbsG ?? 30, fatG: (m as any).fatG ?? 12, completed: false })),
+          snack: snackMeals.map(m => ({ ...m, carbsG: (m as any).carbsG ?? 15, fatG: (m as any).fatG ?? 5, completed: false })),
+          dinner: dinnerMeals.map(m => ({ ...m, carbsG: (m as any).carbsG ?? 25, fatG: (m as any).fatG ?? 15, completed: false }))
+        }
+      }]
+    };
+    try {
+      localStorage.setItem(`gym_diet_${targetMemberId}`, JSON.stringify(currentDraft));
+    } catch {}
+  }, [targetMemberId, dietTitle, targetCalories, targetProtein, targetCarbs, targetFats, waterTarget, breakfastMeals, lunchMeals, snackMeals, dinnerMeals]);
+
+  // Load member workout when targetMemberId changes
+  React.useEffect(() => {
+    if (!targetMemberId) return;
+    let isMounted = true;
+    getMemberWorkout(targetMemberId)
+      .then((workoutPlan) => {
+        if (!isMounted || !workoutPlan) return;
+        const firstWeek = workoutPlan.weeklyPlans?.[0] || (workoutPlan as any).weeklyPrograms?.[0];
+        if (firstWeek && firstWeek.splits && firstWeek.splits[0]) {
+          const split = firstWeek.splits[0];
+          setWorkoutDay(split.day || 'Monday');
+          setWorkoutSplitTitle(split.title || `Week ${firstWeek.weekNumber}: Custom Split`);
+          setWorkoutWeekNum(firstWeek.weekNumber || 1);
+          if (Array.isArray(split.exercises) && split.exercises.length > 0) {
+            setExercisesList(split.exercises);
+          }
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to load member workout:', err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [targetMemberId, getMemberWorkout]);
 
   // Enroll Client Form
   const [clName, setClName] = useState('');
@@ -618,6 +740,73 @@ export const MobileTrainerApp: React.FC = () => {
       setDinnerMeals([
         { id: `dn-1`, name: 'Tofu Stir-fry with Brown Rice', portion: '180g Tofu + 150g Brown Rice', calories: 520, proteinG: 35 }
       ]);
+    }
+
+    if (targetMemberId) {
+      const templateSnapshot = {
+        memberId: targetMemberId,
+        monthlyPlans: [{
+          monthNumber: 1,
+          monthTitle: templateType === 'bulk' ? 'High-Protein Lean Muscle Bulk (2,600 kcal)' :
+                      templateType === 'cut' ? 'Fat Loss & Muscle Preservation (1,850 kcal)' :
+                      templateType === 'recomp' ? 'Body Recomposition & Strength (2,200 kcal)' :
+                      'High-Protein Pure Vegetarian Diet (2,300 kcal)',
+          targetCalories: templateType === 'bulk' ? 2600 : templateType === 'cut' ? 1850 : templateType === 'recomp' ? 2200 : 2300,
+          targetProteinG: templateType === 'bulk' ? 180 : templateType === 'cut' ? 160 : templateType === 'recomp' ? 165 : 145,
+          targetCarbsG: templateType === 'bulk' ? 280 : templateType === 'cut' ? 150 : templateType === 'recomp' ? 220 : 260,
+          targetFatG: templateType === 'bulk' ? 70 : templateType === 'cut' ? 45 : templateType === 'recomp' ? 60 : 65,
+          waterTargetLiters: templateType === 'bulk' ? 4.5 : 4.0,
+          meals: {
+            breakfast: (templateType === 'bulk' ? [
+              { id: `bf-1`, name: 'Oatmeal with Whey & Peanut Butter', portion: '100g Oats + 1 Scoop Whey + 2 tbsp PB', calories: 550, proteinG: 40 },
+              { id: `bf-2`, name: 'Whole Eggs & Toast', portion: '3 Whole Eggs + 2 Brown Bread', calories: 350, proteinG: 22 }
+            ] : templateType === 'cut' ? [
+              { id: `bf-1`, name: 'Egg White Omelet with Spinach', portion: '5 Egg Whites + 1 Whole Egg + Veggies', calories: 240, proteinG: 30 },
+              { id: `bf-2`, name: 'Black Coffee & Apple', portion: '1 Cup + 1 Medium Apple', calories: 85, proteinG: 1 }
+            ] : templateType === 'recomp' ? [
+              { id: `bf-1`, name: 'Oatmeal with Blueberries & Whey', portion: '70g Oats + 1 Scoop Whey', calories: 420, proteinG: 34 }
+            ] : [
+              { id: `bf-1`, name: 'Soya Chunk Upma / Oats with Plant Protein', portion: '50g Soya Chunks + 60g Oats', calories: 450, proteinG: 38 }
+            ]).map(m => ({ ...m, carbsG: 20, fatG: 10, completed: false })),
+            lunch: (templateType === 'bulk' ? [
+              { id: `lu-1`, name: 'Grilled Chicken & White Rice', portion: '220g Chicken Breast + 250g Rice', calories: 700, proteinG: 60 },
+              { id: `lu-2`, name: 'Curd & Cucumber Salad', portion: '150g Greek Curd + 1 Cucumber', calories: 110, proteinG: 6 }
+            ] : templateType === 'cut' ? [
+              { id: `lu-1`, name: 'Grilled Chicken Salad with Olive Oil', portion: '200g Chicken + Large Mixed Greens', calories: 480, proteinG: 50 },
+              { id: `lu-2`, name: 'Brown Rice', portion: '100g Cooked Brown Rice', calories: 120, proteinG: 3 }
+            ] : templateType === 'recomp' ? [
+              { id: `lu-1`, name: 'Chicken / Paneer Breast with Quinoa', portion: '180g Chicken/Paneer + 150g Quinoa', calories: 600, proteinG: 52 }
+            ] : [
+              { id: `lu-1`, name: 'Paneer Bhurji with 2 Rotis & Dal', portion: '150g Paneer + 1 Cup Dal + 2 Multigrain Roti', calories: 680, proteinG: 42 }
+            ]).map(m => ({ ...m, carbsG: 30, fatG: 12, completed: false })),
+            snack: (templateType === 'bulk' ? [
+              { id: `sn-1`, name: 'Protein Shake & Banana', portion: '1 Scoop Whey + 1 Large Banana', calories: 250, proteinG: 26 },
+              { id: `sn-2`, name: 'Mixed Roasted Nuts', portion: '30g Walnuts & Almonds', calories: 190, proteinG: 6 }
+            ] : templateType === 'cut' ? [
+              { id: `sn-1`, name: 'Whey Protein in Water', portion: '1 Scoop (30g)', calories: 120, proteinG: 25 },
+              { id: `sn-2`, name: 'Almonds', portion: '12 Almonds', calories: 85, proteinG: 3 }
+            ] : templateType === 'recomp' ? [
+              { id: `sn-1`, name: 'Greek Yogurt with Honey', portion: '150g Yogurt + 1 tsp Honey', calories: 210, proteinG: 18 }
+            ] : [
+              { id: `sn-1`, name: 'Roasted Chana & Whey Isolate', portion: '40g Chana + 1 Scoop Whey', calories: 280, proteinG: 30 }
+            ]).map(m => ({ ...m, carbsG: 15, fatG: 5, completed: false })),
+            dinner: (templateType === 'bulk' ? [
+              { id: `dn-1`, name: 'Fish Fillet / Paneer with Sweet Potato', portion: '200g Fish/Paneer + 150g Sweet Potato', calories: 580, proteinG: 45 }
+            ] : templateType === 'cut' ? [
+              { id: `dn-1`, name: 'Grilled Tofu / White Fish with Steamed Broccoli', portion: '200g Fish/Tofu + 150g Broccoli', calories: 380, proteinG: 40 }
+            ] : templateType === 'recomp' ? [
+              { id: `dn-1`, name: 'Baked Salmon with Roasted Vegetables', portion: '160g Salmon + Asparagus & Bell Peppers', calories: 520, proteinG: 40 }
+            ] : [
+              { id: `dn-1`, name: 'Tofu Stir-fry with Brown Rice', portion: '180g Tofu + 150g Brown Rice', calories: 520, proteinG: 35 }
+            ]).map(m => ({ ...m, carbsG: 25, fatG: 15, completed: false }))
+          }
+        }]
+      };
+      try {
+        localStorage.setItem(`gym_diet_${targetMemberId}`, JSON.stringify(templateSnapshot));
+      } catch (e) {
+        console.warn('Failed to cache template in loadDietTemplate:', e);
+      }
     }
   };
 
@@ -1239,15 +1428,15 @@ export const MobileTrainerApp: React.FC = () => {
             </div>
 
             {/* Target Member Picker Banner */}
-            <div className="p-3.5 bg-[#101422] rounded-2xl border border-white/10 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5 min-w-0">
+            <div className="p-4 bg-[#101422] rounded-2xl border border-white/10 flex items-center justify-between gap-3 shadow-md">
+              <div className="flex items-center gap-3 min-w-0">
                 <img
                   src={selectedMemberObj?.photoUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb'}
                   alt={selectedMemberObj?.name || 'Client'}
-                  className="w-10 h-10 rounded-xl object-cover border border-[#4F7CFF]/40 shrink-0"
+                  className="w-11 h-11 rounded-xl object-cover border border-[#4F7CFF]/40 shrink-0"
                 />
                 <div className="min-w-0">
-                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Target Trainee</span>
+                  <span className="text-xs font-black text-slate-300 uppercase tracking-wider block">Target Trainee</span>
                   <select
                     value={targetMemberId}
                     onChange={(e) => {
@@ -1255,7 +1444,7 @@ export const MobileTrainerApp: React.FC = () => {
                       const m = members.find(item => item.id === e.target.value);
                       if (m) setSelectedClient(m);
                     }}
-                    className="bg-transparent text-xs font-black text-white focus:outline-none cursor-pointer truncate max-w-[190px]"
+                    className="bg-transparent text-sm sm:text-base font-black text-white focus:outline-none cursor-pointer truncate max-w-[210px] mt-0.5"
                   >
                     {myClients.map((m) => (
                       <option key={m.id} value={m.id} className="bg-[#0B0E17] text-white">
@@ -1267,8 +1456,8 @@ export const MobileTrainerApp: React.FC = () => {
               </div>
 
               <div className="text-right shrink-0">
-                <span className="text-[9px] text-[#4F7CFF] font-bold block">{selectedMemberObj?.goal}</span>
-                <span className="text-[9px] text-slate-400">{selectedMemberObj?.weightKg || 70} kg</span>
+                <span className="text-xs sm:text-sm text-[#4F7CFF] font-bold block">{selectedMemberObj?.goal}</span>
+                <span className="text-xs text-slate-300 font-semibold">{selectedMemberObj?.weightKg || 70} kg</span>
               </div>
             </div>
 
@@ -1513,47 +1702,47 @@ export const MobileTrainerApp: React.FC = () => {
                 )}
 
                 {/* Quick 1-Click Templates */}
-                <div className="space-y-1.5">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
+                <div className="space-y-2">
+                  <span className="text-xs sm:text-sm font-black text-slate-300 uppercase tracking-wider block">
                     ⚡ 1-Click Nutrition Templates
                   </span>
-                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
                     <button
                       type="button"
                       onClick={() => loadDietTemplate('bulk')}
-                      className="px-3 py-1.5 rounded-xl bg-[#101422] hover:bg-[#1A2238] border border-white/10 text-[10px] font-bold text-white whitespace-nowrap active:scale-95"
+                      className="px-3.5 py-2 rounded-xl bg-[#101422] hover:bg-[#1A2238] border border-white/10 text-xs sm:text-sm font-bold text-white whitespace-nowrap active:scale-95 shadow-sm"
                     >
                       Lean Bulk (2,600 kcal)
                     </button>
                     <button
                       type="button"
                       onClick={() => loadDietTemplate('cut')}
-                      className="px-3 py-1.5 rounded-xl bg-[#101422] hover:bg-[#1A2238] border border-white/10 text-[10px] font-bold text-white whitespace-nowrap active:scale-95"
+                      className="px-3.5 py-2 rounded-xl bg-[#101422] hover:bg-[#1A2238] border border-white/10 text-xs sm:text-sm font-bold text-white whitespace-nowrap active:scale-95 shadow-sm"
                     >
                       Fat Loss (1,850 kcal)
                     </button>
                     <button
                       type="button"
                       onClick={() => loadDietTemplate('recomp')}
-                      className="px-3 py-1.5 rounded-xl bg-[#101422] hover:bg-[#1A2238] border border-white/10 text-[10px] font-bold text-white whitespace-nowrap active:scale-95"
+                      className="px-3.5 py-2 rounded-xl bg-[#101422] hover:bg-[#1A2238] border border-white/10 text-xs sm:text-sm font-bold text-white whitespace-nowrap active:scale-95 shadow-sm"
                     >
                       Recomp (2,200 kcal)
                     </button>
                     <button
                       type="button"
                       onClick={() => loadDietTemplate('veg')}
-                      className="px-3 py-1.5 rounded-xl bg-[#101422] hover:bg-[#1A2238] border border-white/10 text-[10px] font-bold text-white whitespace-nowrap active:scale-95"
+                      className="px-3.5 py-2 rounded-xl bg-[#101422] hover:bg-[#1A2238] border border-white/10 text-xs sm:text-sm font-bold text-white whitespace-nowrap active:scale-95 shadow-sm"
                     >
                       Vegetarian (2,300 kcal)
                     </button>
                   </div>
                 </div>
 
-                <form onSubmit={handleSaveDietPlan} className="space-y-3.5">
+                <form onSubmit={handleSaveDietPlan} className="space-y-4">
                   {/* Macro Targets Card */}
-                  <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 space-y-3 shadow-xl">
+                  <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 space-y-3.5 shadow-xl">
                     <div>
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
+                      <label className="text-xs font-black text-slate-300 uppercase tracking-wider block mb-1.5">
                         Diet Plan Title
                       </label>
                       <input
@@ -1562,166 +1751,166 @@ export const MobileTrainerApp: React.FC = () => {
                         onChange={(e) => setDietTitle(e.target.value)}
                         placeholder="e.g. Muscle Recomposition & Shred"
                         required
-                        className="w-full p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white focus:outline-none focus:border-emerald-500"
+                        className="w-full p-3 bg-[#0B0E17] rounded-xl border border-white/10 text-sm font-bold text-white focus:outline-none focus:border-emerald-500"
                       />
                     </div>
 
                     <div className="grid grid-cols-4 gap-2 text-center">
                       <div className="p-2.5 bg-[#0B0E17] rounded-2xl border border-white/10">
-                        <span className="text-[9px] font-black text-amber-400 uppercase block">Calories</span>
+                        <span className="text-xs font-black text-amber-400 uppercase tracking-wide block">Calories</span>
                         <input
                           type="number"
                           value={targetCalories}
                           onChange={(e) => setTargetCalories(Number(e.target.value))}
-                          className="w-full text-center bg-transparent font-black text-xs text-white focus:outline-none mt-0.5"
+                          className="w-full text-center bg-transparent font-black text-base sm:text-lg text-white focus:outline-none mt-1"
                         />
-                        <span className="text-[8px] text-slate-500 block">kcal</span>
+                        <span className="text-xs font-semibold text-slate-400 block">kcal</span>
                       </div>
 
                       <div className="p-2.5 bg-[#0B0E17] rounded-2xl border border-white/10">
-                        <span className="text-[9px] font-black text-red-400 uppercase block">Protein</span>
+                        <span className="text-xs font-black text-red-400 uppercase tracking-wide block">Protein</span>
                         <input
                           type="number"
                           value={targetProtein}
                           onChange={(e) => setTargetProtein(Number(e.target.value))}
-                          className="w-full text-center bg-transparent font-black text-xs text-white focus:outline-none mt-0.5"
+                          className="w-full text-center bg-transparent font-black text-base sm:text-lg text-white focus:outline-none mt-1"
                         />
-                        <span className="text-[8px] text-slate-500 block">grams</span>
+                        <span className="text-xs font-semibold text-slate-400 block">grams</span>
                       </div>
 
                       <div className="p-2.5 bg-[#0B0E17] rounded-2xl border border-white/10">
-                        <span className="text-[9px] font-black text-[#4F7CFF] uppercase block">Carbs</span>
+                        <span className="text-xs font-black text-[#4F7CFF] uppercase tracking-wide block">Carbs</span>
                         <input
                           type="number"
                           value={targetCarbs}
                           onChange={(e) => setTargetCarbs(Number(e.target.value))}
-                          className="w-full text-center bg-transparent font-black text-xs text-white focus:outline-none mt-0.5"
+                          className="w-full text-center bg-transparent font-black text-base sm:text-lg text-white focus:outline-none mt-1"
                         />
-                        <span className="text-[8px] text-slate-500 block">grams</span>
+                        <span className="text-xs font-semibold text-slate-400 block">grams</span>
                       </div>
 
                       <div className="p-2.5 bg-[#0B0E17] rounded-2xl border border-white/10">
-                        <span className="text-[9px] font-black text-emerald-400 uppercase block">Water</span>
+                        <span className="text-xs font-black text-emerald-400 uppercase tracking-wide block">Water</span>
                         <input
                           type="number"
                           step="0.5"
                           value={waterTarget}
                           onChange={(e) => setWaterTarget(Number(e.target.value))}
-                          className="w-full text-center bg-transparent font-black text-xs text-white focus:outline-none mt-0.5"
+                          className="w-full text-center bg-transparent font-black text-base sm:text-lg text-white focus:outline-none mt-1"
                         />
-                        <span className="text-[8px] text-slate-500 block">liters</span>
+                        <span className="text-xs font-semibold text-slate-400 block">liters</span>
                       </div>
                     </div>
                   </div>
 
                   {/* 4 Meal Category Breakdown */}
-                  <div className="space-y-3">
+                  <div className="space-y-3.5">
                     {/* Breakfast */}
-                    <div className="bg-[#101422] p-3.5 rounded-2xl border border-white/10 space-y-2">
+                    <div className="bg-[#101422] p-4 rounded-2xl border border-white/10 space-y-2.5">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-black text-amber-400 flex items-center gap-1.5">
+                        <span className="text-sm font-black text-amber-400 flex items-center gap-1.5">
                           <Sun className="w-4 h-4" />
                           <span>Breakfast ({breakfastMeals.length} items)</span>
                         </span>
-                        <span className="text-[10px] text-slate-400">
+                        <span className="text-xs font-bold text-slate-300">
                           {breakfastMeals.reduce((acc, m) => acc + m.calories, 0)} kcal • {breakfastMeals.reduce((acc, m) => acc + m.proteinG, 0)}g P
                         </span>
                       </div>
                       {breakfastMeals.map(m => (
-                        <div key={m.id} className="p-2.5 bg-[#0B0E17] rounded-xl border border-white/5 flex items-center justify-between text-xs">
+                        <div key={m.id} className="p-3 bg-[#0B0E17] rounded-xl border border-white/5 flex items-center justify-between text-xs sm:text-sm">
                           <div>
-                            <div className="font-bold text-white">{m.name}</div>
-                            <div className="text-[10px] text-slate-400">{m.portion} • <strong className="text-amber-400">{m.calories} kcal</strong> ({m.proteinG}g P)</div>
+                            <div className="font-bold text-white text-sm">{m.name}</div>
+                            <div className="text-xs text-slate-400">{m.portion} • <strong className="text-amber-400 font-bold">{m.calories} kcal</strong> ({m.proteinG}g P)</div>
                           </div>
-                          <button type="button" onClick={() => handleRemoveMealItem('breakfast', m.id)} className="text-red-400 p-1 hover:bg-red-500/10 rounded">
-                            <Trash2 className="w-3.5 h-3.5" />
+                          <button type="button" onClick={() => handleRemoveMealItem('breakfast', m.id)} className="text-red-400 p-1.5 hover:bg-red-500/10 rounded">
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       ))}
                     </div>
 
                     {/* Lunch */}
-                    <div className="bg-[#101422] p-3.5 rounded-2xl border border-white/10 space-y-2">
+                    <div className="bg-[#101422] p-4 rounded-2xl border border-white/10 space-y-2.5">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-black text-emerald-400 flex items-center gap-1.5">
+                        <span className="text-sm font-black text-emerald-400 flex items-center gap-1.5">
                           <Utensils className="w-4 h-4" />
                           <span>Lunch ({lunchMeals.length} items)</span>
                         </span>
-                        <span className="text-[10px] text-slate-400">
+                        <span className="text-xs font-bold text-slate-300">
                           {lunchMeals.reduce((acc, m) => acc + m.calories, 0)} kcal • {lunchMeals.reduce((acc, m) => acc + m.proteinG, 0)}g P
                         </span>
                       </div>
                       {lunchMeals.map(m => (
-                        <div key={m.id} className="p-2.5 bg-[#0B0E17] rounded-xl border border-white/5 flex items-center justify-between text-xs">
+                        <div key={m.id} className="p-3 bg-[#0B0E17] rounded-xl border border-white/5 flex items-center justify-between text-xs sm:text-sm">
                           <div>
-                            <div className="font-bold text-white">{m.name}</div>
-                            <div className="text-[10px] text-slate-400">{m.portion} • <strong className="text-emerald-400">{m.calories} kcal</strong> ({m.proteinG}g P)</div>
+                            <div className="font-bold text-white text-sm">{m.name}</div>
+                            <div className="text-xs text-slate-400">{m.portion} • <strong className="text-emerald-400 font-bold">{m.calories} kcal</strong> ({m.proteinG}g P)</div>
                           </div>
-                          <button type="button" onClick={() => handleRemoveMealItem('lunch', m.id)} className="text-red-400 p-1 hover:bg-red-500/10 rounded">
-                            <Trash2 className="w-3.5 h-3.5" />
+                          <button type="button" onClick={() => handleRemoveMealItem('lunch', m.id)} className="text-red-400 p-1.5 hover:bg-red-500/10 rounded">
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       ))}
                     </div>
 
                     {/* Snacks */}
-                    <div className="bg-[#101422] p-3.5 rounded-2xl border border-white/10 space-y-2">
+                    <div className="bg-[#101422] p-4 rounded-2xl border border-white/10 space-y-2.5">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-black text-purple-400 flex items-center gap-1.5">
+                        <span className="text-sm font-black text-purple-400 flex items-center gap-1.5">
                           <Cookie className="w-4 h-4" />
                           <span>Snacks ({snackMeals.length} items)</span>
                         </span>
-                        <span className="text-[10px] text-slate-400">
+                        <span className="text-xs font-bold text-slate-300">
                           {snackMeals.reduce((acc, m) => acc + m.calories, 0)} kcal • {snackMeals.reduce((acc, m) => acc + m.proteinG, 0)}g P
                         </span>
                       </div>
                       {snackMeals.map(m => (
-                        <div key={m.id} className="p-2.5 bg-[#0B0E17] rounded-xl border border-white/5 flex items-center justify-between text-xs">
+                        <div key={m.id} className="p-3 bg-[#0B0E17] rounded-xl border border-white/5 flex items-center justify-between text-xs sm:text-sm">
                           <div>
-                            <div className="font-bold text-white">{m.name}</div>
-                            <div className="text-[10px] text-slate-400">{m.portion} • <strong className="text-purple-400">{m.calories} kcal</strong> ({m.proteinG}g P)</div>
+                            <div className="font-bold text-white text-sm">{m.name}</div>
+                            <div className="text-xs text-slate-400">{m.portion} • <strong className="text-purple-400 font-bold">{m.calories} kcal</strong> ({m.proteinG}g P)</div>
                           </div>
-                          <button type="button" onClick={() => handleRemoveMealItem('snack', m.id)} className="text-red-400 p-1 hover:bg-red-500/10 rounded">
-                            <Trash2 className="w-3.5 h-3.5" />
+                          <button type="button" onClick={() => handleRemoveMealItem('snack', m.id)} className="text-red-400 p-1.5 hover:bg-red-500/10 rounded">
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       ))}
                     </div>
 
                     {/* Dinner */}
-                    <div className="bg-[#101422] p-3.5 rounded-2xl border border-white/10 space-y-2">
+                    <div className="bg-[#101422] p-4 rounded-2xl border border-white/10 space-y-2.5">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-black text-[#4F7CFF] flex items-center gap-1.5">
+                        <span className="text-sm font-black text-[#4F7CFF] flex items-center gap-1.5">
                           <Moon className="w-4 h-4" />
                           <span>Dinner ({dinnerMeals.length} items)</span>
                         </span>
-                        <span className="text-[10px] text-slate-400">
+                        <span className="text-xs font-bold text-slate-300">
                           {dinnerMeals.reduce((acc, m) => acc + m.calories, 0)} kcal • {dinnerMeals.reduce((acc, m) => acc + m.proteinG, 0)}g P
                         </span>
                       </div>
                       {dinnerMeals.map(m => (
-                        <div key={m.id} className="p-2.5 bg-[#0B0E17] rounded-xl border border-white/5 flex items-center justify-between text-xs">
+                        <div key={m.id} className="p-3 bg-[#0B0E17] rounded-xl border border-white/5 flex items-center justify-between text-xs sm:text-sm">
                           <div>
-                            <div className="font-bold text-white">{m.name}</div>
-                            <div className="text-[10px] text-slate-400">{m.portion} • <strong className="text-[#4F7CFF]">{m.calories} kcal</strong> ({m.proteinG}g P)</div>
+                            <div className="font-bold text-white text-sm">{m.name}</div>
+                            <div className="text-xs text-slate-400">{m.portion} • <strong className="text-[#4F7CFF] font-bold">{m.calories} kcal</strong> ({m.proteinG}g P)</div>
                           </div>
-                          <button type="button" onClick={() => handleRemoveMealItem('dinner', m.id)} className="text-red-400 p-1 hover:bg-red-500/10 rounded">
-                            <Trash2 className="w-3.5 h-3.5" />
+                          <button type="button" onClick={() => handleRemoveMealItem('dinner', m.id)} className="text-red-400 p-1.5 hover:bg-red-500/10 rounded">
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       ))}
                     </div>
 
                     {/* Insert Meal Form */}
-                    <div className="bg-[#101422] p-3.5 rounded-2xl border border-white/10 space-y-2">
-                      <span className="text-[10px] font-black text-emerald-400 uppercase tracking-wider block">
+                    <div className="bg-[#101422] p-4 rounded-2xl border border-white/10 space-y-2.5">
+                      <span className="text-xs sm:text-sm font-black text-emerald-400 uppercase tracking-wider block">
                         + Add Custom Food Item
                       </span>
                       <div className="grid grid-cols-2 gap-2">
                         <select
                           value={newMealCategory}
                           onChange={(e) => setNewMealCategory(e.target.value as any)}
-                          className="p-2 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white focus:outline-none"
+                          className="p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs sm:text-sm text-white focus:outline-none"
                         >
                           <option value="breakfast">Breakfast</option>
                           <option value="lunch">Lunch</option>
@@ -1733,7 +1922,7 @@ export const MobileTrainerApp: React.FC = () => {
                           placeholder="Food Name (e.g. Scrambled Eggs)"
                           value={newMealName}
                           onChange={(e) => setNewMealName(e.target.value)}
-                          className="p-2 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none"
+                          className="p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none"
                         />
                       </div>
                       <div className="grid grid-cols-3 gap-2">
@@ -1742,29 +1931,29 @@ export const MobileTrainerApp: React.FC = () => {
                           placeholder="Portion (1 Bowl / 200g)"
                           value={newMealPortion}
                           onChange={(e) => setNewMealPortion(e.target.value)}
-                          className="p-2 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none"
+                          className="p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none"
                         />
                         <input
                           type="number"
                           placeholder="Calories (kcal)"
                           value={newMealCals}
                           onChange={(e) => setNewMealCals(Number(e.target.value))}
-                          className="p-2 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white focus:outline-none"
+                          className="p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs sm:text-sm text-white focus:outline-none"
                         />
                         <input
                           type="number"
                           placeholder="Protein (g)"
                           value={newMealProtein}
                           onChange={(e) => setNewMealProtein(Number(e.target.value))}
-                          className="p-2 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white focus:outline-none"
+                          className="p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs sm:text-sm text-white focus:outline-none"
                         />
                       </div>
                       <button
                         type="button"
                         onClick={handleAddMealItem}
-                        className="w-full py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold text-xs flex items-center justify-center gap-1.5 transition-all"
+                        className="w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-200 font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all"
                       >
-                        <Plus className="w-3.5 h-3.5" />
+                        <Plus className="w-4 h-4" />
                         <span>Add to {newMealCategory.toUpperCase()}</span>
                       </button>
                     </div>
@@ -1774,7 +1963,7 @@ export const MobileTrainerApp: React.FC = () => {
                   <button
                     type="submit"
                     disabled={isSavingDiet}
-                    className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 active:scale-95 disabled:opacity-50 text-white font-black text-xs flex items-center justify-center gap-2 shadow-xl shadow-emerald-500/25 cursor-pointer"
+                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 active:scale-95 disabled:opacity-50 text-white font-black text-sm sm:text-base flex items-center justify-center gap-2 shadow-xl shadow-emerald-500/25 cursor-pointer"
                   >
                     <Sparkles className="w-4 h-4" />
                     <span>{isSavingDiet ? 'Publishing to Database...' : `Save & Publish Diet to ${selectedMemberObj?.name || 'Member'}`}</span>
@@ -2839,15 +3028,15 @@ export const MobileTrainerApp: React.FC = () => {
         {currentScreen === 'set-diet' && (
           <div className="space-y-4 animate-in fade-in duration-200">
             {/* Target Member Banner */}
-            <div className="p-3.5 bg-[#101422] rounded-2xl border border-white/10 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5 min-w-0">
+            <div className="p-4 bg-[#101422] rounded-2xl border border-white/10 flex items-center justify-between gap-3 shadow-md">
+              <div className="flex items-center gap-3 min-w-0">
                 <img
                   src={selectedMemberObj?.photoUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb'}
                   alt={selectedMemberObj?.name || 'Client'}
-                  className="w-10 h-10 rounded-xl object-cover border border-emerald-500/40 shrink-0"
+                  className="w-11 h-11 rounded-xl object-cover border border-emerald-500/40 shrink-0"
                 />
                 <div className="min-w-0">
-                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Assigning Diet To</span>
+                  <span className="text-xs font-black text-slate-300 uppercase tracking-wider block">Assigning Diet To</span>
                   <select
                     value={targetMemberId}
                     onChange={(e) => {
@@ -2855,7 +3044,7 @@ export const MobileTrainerApp: React.FC = () => {
                       const m = members.find(item => item.id === e.target.value);
                       if (m) setSelectedClient(m);
                     }}
-                    className="bg-transparent text-xs font-black text-white focus:outline-none cursor-pointer truncate max-w-[190px]"
+                    className="bg-transparent text-sm sm:text-base font-black text-white focus:outline-none cursor-pointer truncate max-w-[210px] mt-0.5"
                   >
                     {myClients.map((m) => (
                       <option key={m.id} value={m.id} className="bg-[#0B0E17] text-white">
@@ -2867,8 +3056,8 @@ export const MobileTrainerApp: React.FC = () => {
               </div>
 
               <div className="text-right shrink-0">
-                <span className="text-[9px] text-emerald-400 font-bold block">{selectedMemberObj?.goal}</span>
-                <span className="text-[9px] text-slate-400">{selectedMemberObj?.weightKg || 70} kg</span>
+                <span className="text-xs sm:text-sm text-emerald-400 font-bold block">{selectedMemberObj?.goal}</span>
+                <span className="text-xs text-slate-300 font-semibold">{selectedMemberObj?.weightKg || 70} kg</span>
               </div>
             </div>
 
@@ -2880,47 +3069,47 @@ export const MobileTrainerApp: React.FC = () => {
             )}
 
             {/* Quick 1-Click Templates */}
-            <div className="space-y-1.5">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
+            <div className="space-y-2">
+              <span className="text-xs sm:text-sm font-black text-slate-300 uppercase tracking-wider block">
                 ⚡ 1-Click Nutrition Presets
               </span>
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
                 <button
                   type="button"
                   onClick={() => loadDietTemplate('bulk')}
-                  className="px-3 py-1.5 rounded-xl bg-[#101422] hover:bg-[#1A2238] border border-white/10 text-[10px] font-bold text-white whitespace-nowrap active:scale-95"
+                  className="px-3.5 py-2 rounded-xl bg-[#101422] hover:bg-[#1A2238] border border-white/10 text-xs sm:text-sm font-bold text-white whitespace-nowrap active:scale-95 shadow-sm"
                 >
                   Lean Bulk (2,600 kcal)
                 </button>
                 <button
                   type="button"
                   onClick={() => loadDietTemplate('cut')}
-                  className="px-3 py-1.5 rounded-xl bg-[#101422] hover:bg-[#1A2238] border border-white/10 text-[10px] font-bold text-white whitespace-nowrap active:scale-95"
+                  className="px-3.5 py-2 rounded-xl bg-[#101422] hover:bg-[#1A2238] border border-white/10 text-xs sm:text-sm font-bold text-white whitespace-nowrap active:scale-95 shadow-sm"
                 >
                   Fat Loss (1,850 kcal)
                 </button>
                 <button
                   type="button"
                   onClick={() => loadDietTemplate('recomp')}
-                  className="px-3 py-1.5 rounded-xl bg-[#101422] hover:bg-[#1A2238] border border-white/10 text-[10px] font-bold text-white whitespace-nowrap active:scale-95"
+                  className="px-3.5 py-2 rounded-xl bg-[#101422] hover:bg-[#1A2238] border border-white/10 text-xs sm:text-sm font-bold text-white whitespace-nowrap active:scale-95 shadow-sm"
                 >
                   Recomp (2,200 kcal)
                 </button>
                 <button
                   type="button"
                   onClick={() => loadDietTemplate('veg')}
-                  className="px-3 py-1.5 rounded-xl bg-[#101422] hover:bg-[#1A2238] border border-white/10 text-[10px] font-bold text-white whitespace-nowrap active:scale-95"
+                  className="px-3.5 py-2 rounded-xl bg-[#101422] hover:bg-[#1A2238] border border-white/10 text-xs sm:text-sm font-bold text-white whitespace-nowrap active:scale-95 shadow-sm"
                 >
                   Vegetarian (2,300 kcal)
                 </button>
               </div>
             </div>
 
-            <form onSubmit={handleSaveDietPlan} className="space-y-3.5">
+            <form onSubmit={handleSaveDietPlan} className="space-y-4">
               {/* Macro Targets Card */}
-              <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 space-y-3 shadow-xl">
+              <div className="bg-[#101422] p-4 rounded-3xl border border-white/10 space-y-3.5 shadow-xl">
                 <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
+                  <label className="text-xs font-black text-slate-300 uppercase tracking-wider block mb-1.5">
                     Diet Plan Title
                   </label>
                   <input
@@ -2929,166 +3118,166 @@ export const MobileTrainerApp: React.FC = () => {
                     onChange={(e) => setDietTitle(e.target.value)}
                     placeholder="e.g. Muscle Recomposition & Shred"
                     required
-                    className="w-full p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white focus:outline-none focus:border-emerald-500"
+                    className="w-full p-3 bg-[#0B0E17] rounded-xl border border-white/10 text-sm font-bold text-white focus:outline-none focus:border-emerald-500"
                   />
                 </div>
 
                 <div className="grid grid-cols-4 gap-2 text-center">
                   <div className="p-2.5 bg-[#0B0E17] rounded-2xl border border-white/10">
-                    <span className="text-[9px] font-black text-amber-400 uppercase block">Calories</span>
+                    <span className="text-xs font-black text-amber-400 uppercase tracking-wide block">Calories</span>
                     <input
                       type="number"
                       value={targetCalories}
                       onChange={(e) => setTargetCalories(Number(e.target.value))}
-                      className="w-full text-center bg-transparent font-black text-xs text-white focus:outline-none mt-0.5"
+                      className="w-full text-center bg-transparent font-black text-base sm:text-lg text-white focus:outline-none mt-1"
                     />
-                    <span className="text-[8px] text-slate-500 block">kcal</span>
+                    <span className="text-xs font-semibold text-slate-400 block">kcal</span>
                   </div>
 
                   <div className="p-2.5 bg-[#0B0E17] rounded-2xl border border-white/10">
-                    <span className="text-[9px] font-black text-red-400 uppercase block">Protein</span>
+                    <span className="text-xs font-black text-red-400 uppercase tracking-wide block">Protein</span>
                     <input
                       type="number"
                       value={targetProtein}
                       onChange={(e) => setTargetProtein(Number(e.target.value))}
-                      className="w-full text-center bg-transparent font-black text-xs text-white focus:outline-none mt-0.5"
+                      className="w-full text-center bg-transparent font-black text-base sm:text-lg text-white focus:outline-none mt-1"
                     />
-                    <span className="text-[8px] text-slate-500 block">grams</span>
+                    <span className="text-xs font-semibold text-slate-400 block">grams</span>
                   </div>
 
                   <div className="p-2.5 bg-[#0B0E17] rounded-2xl border border-white/10">
-                    <span className="text-[9px] font-black text-[#4F7CFF] uppercase block">Carbs</span>
+                    <span className="text-xs font-black text-[#4F7CFF] uppercase tracking-wide block">Carbs</span>
                     <input
                       type="number"
                       value={targetCarbs}
                       onChange={(e) => setTargetCarbs(Number(e.target.value))}
-                      className="w-full text-center bg-transparent font-black text-xs text-white focus:outline-none mt-0.5"
+                      className="w-full text-center bg-transparent font-black text-base sm:text-lg text-white focus:outline-none mt-1"
                     />
-                    <span className="text-[8px] text-slate-500 block">grams</span>
+                    <span className="text-xs font-semibold text-slate-400 block">grams</span>
                   </div>
 
                   <div className="p-2.5 bg-[#0B0E17] rounded-2xl border border-white/10">
-                    <span className="text-[9px] font-black text-emerald-400 uppercase block">Water</span>
+                    <span className="text-xs font-black text-emerald-400 uppercase tracking-wide block">Water</span>
                     <input
                       type="number"
                       step="0.5"
                       value={waterTarget}
                       onChange={(e) => setWaterTarget(Number(e.target.value))}
-                      className="w-full text-center bg-transparent font-black text-xs text-white focus:outline-none mt-0.5"
+                      className="w-full text-center bg-transparent font-black text-base sm:text-lg text-white focus:outline-none mt-1"
                     />
-                    <span className="text-[8px] text-slate-500 block">liters</span>
+                    <span className="text-xs font-semibold text-slate-400 block">liters</span>
                   </div>
                 </div>
               </div>
 
               {/* 4 Meal Category Breakdown */}
-              <div className="space-y-3">
+              <div className="space-y-3.5">
                 {/* Breakfast */}
-                <div className="bg-[#101422] p-3.5 rounded-2xl border border-white/10 space-y-2">
+                <div className="bg-[#101422] p-4 rounded-2xl border border-white/10 space-y-2.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-amber-400 flex items-center gap-1.5">
+                    <span className="text-sm font-black text-amber-400 flex items-center gap-1.5">
                       <Sun className="w-4 h-4" />
                       <span>Breakfast ({breakfastMeals.length} items)</span>
                     </span>
-                    <span className="text-[10px] text-slate-400">
+                    <span className="text-xs font-bold text-slate-300">
                       {breakfastMeals.reduce((acc, m) => acc + m.calories, 0)} kcal • {breakfastMeals.reduce((acc, m) => acc + m.proteinG, 0)}g P
                     </span>
                   </div>
                   {breakfastMeals.map(m => (
-                    <div key={m.id} className="p-2.5 bg-[#0B0E17] rounded-xl border border-white/5 flex items-center justify-between text-xs">
+                    <div key={m.id} className="p-3 bg-[#0B0E17] rounded-xl border border-white/5 flex items-center justify-between text-xs sm:text-sm">
                       <div>
-                        <div className="font-bold text-white">{m.name}</div>
-                        <div className="text-[10px] text-slate-400">{m.portion} • <strong className="text-amber-400">{m.calories} kcal</strong> ({m.proteinG}g P)</div>
+                        <div className="font-bold text-white text-sm">{m.name}</div>
+                        <div className="text-xs text-slate-400">{m.portion} • <strong className="text-amber-400 font-bold">{m.calories} kcal</strong> ({m.proteinG}g P)</div>
                       </div>
-                      <button type="button" onClick={() => handleRemoveMealItem('breakfast', m.id)} className="text-red-400 p-1 hover:bg-red-500/10 rounded">
-                        <Trash2 className="w-3.5 h-3.5" />
+                      <button type="button" onClick={() => handleRemoveMealItem('breakfast', m.id)} className="text-red-400 p-1.5 hover:bg-red-500/10 rounded">
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   ))}
                 </div>
 
                 {/* Lunch */}
-                <div className="bg-[#101422] p-3.5 rounded-2xl border border-white/10 space-y-2">
+                <div className="bg-[#101422] p-4 rounded-2xl border border-white/10 space-y-2.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-emerald-400 flex items-center gap-1.5">
+                    <span className="text-sm font-black text-emerald-400 flex items-center gap-1.5">
                       <Utensils className="w-4 h-4" />
                       <span>Lunch ({lunchMeals.length} items)</span>
                     </span>
-                    <span className="text-[10px] text-slate-400">
+                    <span className="text-xs font-bold text-slate-300">
                       {lunchMeals.reduce((acc, m) => acc + m.calories, 0)} kcal • {lunchMeals.reduce((acc, m) => acc + m.proteinG, 0)}g P
                     </span>
                   </div>
                   {lunchMeals.map(m => (
-                    <div key={m.id} className="p-2.5 bg-[#0B0E17] rounded-xl border border-white/5 flex items-center justify-between text-xs">
+                    <div key={m.id} className="p-3 bg-[#0B0E17] rounded-xl border border-white/5 flex items-center justify-between text-xs sm:text-sm">
                       <div>
-                        <div className="font-bold text-white">{m.name}</div>
-                        <div className="text-[10px] text-slate-400">{m.portion} • <strong className="text-emerald-400">{m.calories} kcal</strong> ({m.proteinG}g P)</div>
+                        <div className="font-bold text-white text-sm">{m.name}</div>
+                        <div className="text-xs text-slate-400">{m.portion} • <strong className="text-emerald-400 font-bold">{m.calories} kcal</strong> ({m.proteinG}g P)</div>
                       </div>
-                      <button type="button" onClick={() => handleRemoveMealItem('lunch', m.id)} className="text-red-400 p-1 hover:bg-red-500/10 rounded">
-                        <Trash2 className="w-3.5 h-3.5" />
+                      <button type="button" onClick={() => handleRemoveMealItem('lunch', m.id)} className="text-red-400 p-1.5 hover:bg-red-500/10 rounded">
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   ))}
                 </div>
 
                 {/* Snacks */}
-                <div className="bg-[#101422] p-3.5 rounded-2xl border border-white/10 space-y-2">
+                <div className="bg-[#101422] p-4 rounded-2xl border border-white/10 space-y-2.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-purple-400 flex items-center gap-1.5">
+                    <span className="text-sm font-black text-purple-400 flex items-center gap-1.5">
                       <Cookie className="w-4 h-4" />
                       <span>Snacks ({snackMeals.length} items)</span>
                     </span>
-                    <span className="text-[10px] text-slate-400">
+                    <span className="text-xs font-bold text-slate-300">
                       {snackMeals.reduce((acc, m) => acc + m.calories, 0)} kcal • {snackMeals.reduce((acc, m) => acc + m.proteinG, 0)}g P
                     </span>
                   </div>
                   {snackMeals.map(m => (
-                    <div key={m.id} className="p-2.5 bg-[#0B0E17] rounded-xl border border-white/5 flex items-center justify-between text-xs">
+                    <div key={m.id} className="p-3 bg-[#0B0E17] rounded-xl border border-white/5 flex items-center justify-between text-xs sm:text-sm">
                       <div>
-                        <div className="font-bold text-white">{m.name}</div>
-                        <div className="text-[10px] text-slate-400">{m.portion} • <strong className="text-purple-400">{m.calories} kcal</strong> ({m.proteinG}g P)</div>
+                        <div className="font-bold text-white text-sm">{m.name}</div>
+                        <div className="text-xs text-slate-400">{m.portion} • <strong className="text-purple-400 font-bold">{m.calories} kcal</strong> ({m.proteinG}g P)</div>
                       </div>
-                      <button type="button" onClick={() => handleRemoveMealItem('snack', m.id)} className="text-red-400 p-1 hover:bg-red-500/10 rounded">
-                        <Trash2 className="w-3.5 h-3.5" />
+                      <button type="button" onClick={() => handleRemoveMealItem('snack', m.id)} className="text-red-400 p-1.5 hover:bg-red-500/10 rounded">
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   ))}
                 </div>
 
                 {/* Dinner */}
-                <div className="bg-[#101422] p-3.5 rounded-2xl border border-white/10 space-y-2">
+                <div className="bg-[#101422] p-4 rounded-2xl border border-white/10 space-y-2.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-[#4F7CFF] flex items-center gap-1.5">
+                    <span className="text-sm font-black text-[#4F7CFF] flex items-center gap-1.5">
                       <Moon className="w-4 h-4" />
                       <span>Dinner ({dinnerMeals.length} items)</span>
                     </span>
-                    <span className="text-[10px] text-slate-400">
+                    <span className="text-xs font-bold text-slate-300">
                       {dinnerMeals.reduce((acc, m) => acc + m.calories, 0)} kcal • {dinnerMeals.reduce((acc, m) => acc + m.proteinG, 0)}g P
                     </span>
                   </div>
                   {dinnerMeals.map(m => (
-                    <div key={m.id} className="p-2.5 bg-[#0B0E17] rounded-xl border border-white/5 flex items-center justify-between text-xs">
+                    <div key={m.id} className="p-3 bg-[#0B0E17] rounded-xl border border-white/5 flex items-center justify-between text-xs sm:text-sm">
                       <div>
-                        <div className="font-bold text-white">{m.name}</div>
-                        <div className="text-[10px] text-slate-400">{m.portion} • <strong className="text-[#4F7CFF]">{m.calories} kcal</strong> ({m.proteinG}g P)</div>
+                        <div className="font-bold text-white text-sm">{m.name}</div>
+                        <div className="text-xs text-slate-400">{m.portion} • <strong className="text-[#4F7CFF] font-bold">{m.calories} kcal</strong> ({m.proteinG}g P)</div>
                       </div>
-                      <button type="button" onClick={() => handleRemoveMealItem('dinner', m.id)} className="text-red-400 p-1 hover:bg-red-500/10 rounded">
-                        <Trash2 className="w-3.5 h-3.5" />
+                      <button type="button" onClick={() => handleRemoveMealItem('dinner', m.id)} className="text-red-400 p-1.5 hover:bg-red-500/10 rounded">
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   ))}
                 </div>
 
                 {/* Insert Meal Form */}
-                <div className="bg-[#101422] p-3.5 rounded-2xl border border-white/10 space-y-2">
-                  <span className="text-[10px] font-black text-emerald-400 uppercase tracking-wider block">
+                <div className="bg-[#101422] p-4 rounded-2xl border border-white/10 space-y-2.5">
+                  <span className="text-xs sm:text-sm font-black text-emerald-400 uppercase tracking-wider block">
                     + Add Custom Food Item
                   </span>
                   <div className="grid grid-cols-2 gap-2">
                     <select
                       value={newMealCategory}
                       onChange={(e) => setNewMealCategory(e.target.value as any)}
-                      className="p-2 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white focus:outline-none"
+                      className="p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs sm:text-sm text-white focus:outline-none"
                     >
                       <option value="breakfast">Breakfast</option>
                       <option value="lunch">Lunch</option>
@@ -3100,7 +3289,7 @@ export const MobileTrainerApp: React.FC = () => {
                       placeholder="Food Name (e.g. Scrambled Eggs)"
                       value={newMealName}
                       onChange={(e) => setNewMealName(e.target.value)}
-                      className="p-2 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none"
+                      className="p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none"
                     />
                   </div>
                   <div className="grid grid-cols-3 gap-2">
@@ -3109,29 +3298,29 @@ export const MobileTrainerApp: React.FC = () => {
                       placeholder="Portion (1 Bowl / 200g)"
                       value={newMealPortion}
                       onChange={(e) => setNewMealPortion(e.target.value)}
-                      className="p-2 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none"
+                      className="p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none"
                     />
                     <input
                       type="number"
                       placeholder="Calories (kcal)"
                       value={newMealCals}
                       onChange={(e) => setNewMealCals(Number(e.target.value))}
-                      className="p-2 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white focus:outline-none"
+                      className="p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs sm:text-sm text-white focus:outline-none"
                     />
                     <input
                       type="number"
                       placeholder="Protein (g)"
                       value={newMealProtein}
                       onChange={(e) => setNewMealProtein(Number(e.target.value))}
-                      className="p-2 bg-[#0B0E17] rounded-xl border border-white/10 text-xs text-white focus:outline-none"
+                      className="p-2.5 bg-[#0B0E17] rounded-xl border border-white/10 text-xs sm:text-sm text-white focus:outline-none"
                     />
                   </div>
                   <button
                     type="button"
                     onClick={handleAddMealItem}
-                    className="w-full py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold text-xs flex items-center justify-center gap-1.5 transition-all"
+                    className="w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-200 font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all"
                   >
-                    <Plus className="w-3.5 h-3.5" />
+                    <Plus className="w-4 h-4" />
                     <span>Add to {newMealCategory.toUpperCase()}</span>
                   </button>
                 </div>
@@ -3141,7 +3330,7 @@ export const MobileTrainerApp: React.FC = () => {
               <button
                 type="submit"
                 disabled={isSavingDiet}
-                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 active:scale-95 disabled:opacity-50 text-white font-black text-xs flex items-center justify-center gap-2 shadow-xl shadow-emerald-500/25 cursor-pointer"
+                className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 active:scale-95 disabled:opacity-50 text-white font-black text-sm sm:text-base flex items-center justify-center gap-2 shadow-xl shadow-emerald-500/25 cursor-pointer"
               >
                 <Sparkles className="w-4 h-4" />
                 <span>{isSavingDiet ? 'Publishing to Database...' : `Save & Publish Diet to ${selectedMemberObj?.name || 'Member'}`}</span>
