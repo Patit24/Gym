@@ -8,6 +8,8 @@ import {
   CheckCircle2, AlertCircle, RefreshCw, Plus, Settings, Zap
 } from 'lucide-react';
 
+import { EnlargedPhotoModal } from '../common/EnlargedPhotoModal';
+
 // Helper: auto-generate username
 const generateUsername = (name: string): string => {
   const clean = name.toLowerCase().replace(/\s+/g, '.');
@@ -31,6 +33,14 @@ export const AdminMobileConsole: React.FC = () => {
   const [newCredential, setNewCredential] = useState<AppUser | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showPwd, setShowPwd] = useState(false);
+  const [accountRoleFilter, setAccountRoleFilter] = useState<'all' | 'Trainer' | 'Member'>('all');
+  const [enlargedPhoto, setEnlargedPhoto] = useState<{
+    isOpen: boolean;
+    photoUrl?: string;
+    name?: string;
+    subtitle?: string;
+    badge?: string;
+  }>({ isOpen: false });
 
   // Create Member form state
   const [memberForm, setMemberForm] = useState({
@@ -59,8 +69,10 @@ export const AdminMobileConsole: React.FC = () => {
     monthlyRevenue: 0
   };
   const selectedPlan = plans.find(p => p.id === memberForm.planId) || plans[0];
-  const branchMembers = members.filter(m => m.branchId === selectedBranchId);
-  const branchTrainers = employees.filter(e => e.branchId === selectedBranchId && e.role === 'Trainer');
+  const branchMembers = members.filter(m => !selectedBranchId || selectedBranchId === 'all' || m.branchId === selectedBranchId || (!m.branchId && selectedBranchId === 'branch-1'));
+  const branchTrainers = employees.filter(e => (!selectedBranchId || selectedBranchId === 'all' || e.branchId === selectedBranchId || (!e.branchId && selectedBranchId === 'branch-1')) && e.role === 'Trainer');
+  const branchUsers = appUsers.filter(u => !selectedBranchId || selectedBranchId === 'all' || u.branchId === selectedBranchId || (!u.branchId && selectedBranchId === 'branch-1'));
+  const filteredBranchUsers = branchUsers.filter(u => accountRoleFilter === 'all' || u.role === accountRoleFilter);
 
   const handleCopy = (text: string, field: string) => {
     navigator.clipboard.writeText(text);
@@ -472,7 +484,19 @@ export const AdminMobileConsole: React.FC = () => {
           ) : branchTrainers.map(trainer => (
             <div key={trainer.id} className="p-3.5 rounded-2xl bg-[#161C2E] border border-amber-400/30 space-y-2">
               <div className="flex items-center gap-3">
-                <img src={trainer.photoUrl} className="w-10 h-10 rounded-xl object-cover border-2 border-amber-400" alt={trainer.name} />
+                <img
+                  src={trainer.photoUrl}
+                  className="w-10 h-10 rounded-xl object-cover border-2 border-amber-400 cursor-zoom-in hover:scale-105 active:scale-95 transition-transform"
+                  alt={trainer.name}
+                  onClick={() => setEnlargedPhoto({
+                    isOpen: true,
+                    photoUrl: trainer.photoUrl,
+                    name: trainer.name,
+                    subtitle: `PT Trainer • ${trainer.shift}`,
+                    badge: 'Trainer'
+                  })}
+                  title="Click to view full photo"
+                />
                 <div className="flex-1">
                   <div className="font-black text-white text-xs">{trainer.name}</div>
                   <div className="text-[10px] text-amber-300 font-bold">PT Trainer • {trainer.shift}</div>
@@ -580,14 +604,59 @@ export const AdminMobileConsole: React.FC = () => {
             </div>
           )}
 
-          {/* All Users List */}
-          {appUsers.length === 0 ? (
+          {/* Role Filter Chips to strictly separate members and trainers */}
+          <div className="flex items-center gap-1.5 p-1 bg-[#101422] rounded-xl border border-white/10">
+            <button
+              type="button"
+              onClick={() => setAccountRoleFilter('all')}
+              className={`flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all ${
+                accountRoleFilter === 'all'
+                  ? 'bg-purple-600 text-white shadow'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              All ({branchUsers.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setAccountRoleFilter('Trainer')}
+              className={`flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all flex items-center justify-center gap-1 ${
+                accountRoleFilter === 'Trainer'
+                  ? 'bg-amber-500 text-black shadow'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Dumbbell className="w-3 h-3" />
+              <span>Trainers ({branchUsers.filter(u => u.role === 'Trainer').length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setAccountRoleFilter('Member')}
+              className={`flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all flex items-center justify-center gap-1 ${
+                accountRoleFilter === 'Member'
+                  ? 'bg-cyan-500 text-black shadow'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <UserCheck className="w-3 h-3" />
+              <span>Members ({branchUsers.filter(u => u.role === 'Member').length})</span>
+            </button>
+          </div>
+
+          {/* Branch Filtered Users List */}
+          {filteredBranchUsers.length === 0 ? (
             <div className="p-6 rounded-2xl bg-[#161C2E] border border-white/10 text-center space-y-2">
               <Key className="w-8 h-8 text-slate-600 mx-auto" />
-              <div className="text-slate-400 font-bold text-xs">No accounts created yet</div>
-              <div className="text-[10px] text-slate-500">Create a member or trainer to auto-generate login credentials</div>
+              <div className="text-slate-400 font-bold text-xs">
+                {accountRoleFilter === 'all'
+                  ? `No accounts found for ${currentBranch.name}`
+                  : `No ${accountRoleFilter.toLowerCase()} accounts found for ${currentBranch.name}`}
+              </div>
+              <div className="text-[10px] text-slate-500">
+                {accountRoleFilter === 'Trainer' ? 'Create a trainer profile to auto-generate login' : 'Create a member to auto-generate login'}
+              </div>
             </div>
-          ) : appUsers.map(user => (
+          ) : filteredBranchUsers.map(user => (
             <div key={user.id} className="p-3.5 rounded-2xl bg-[#161C2E] border border-purple-400/30 space-y-2">
               <div className="flex items-center justify-between">
                 <div>
@@ -621,6 +690,16 @@ export const AdminMobileConsole: React.FC = () => {
           ))}
         </div>
       )}
+
+      {/* Enlarged Profile Photo Modal */}
+      <EnlargedPhotoModal
+        isOpen={enlargedPhoto.isOpen}
+        onClose={() => setEnlargedPhoto({ isOpen: false })}
+        photoUrl={enlargedPhoto.photoUrl}
+        name={enlargedPhoto.name}
+        subtitle={enlargedPhoto.subtitle}
+        badge={enlargedPhoto.badge}
+      />
 
     </div>
   );

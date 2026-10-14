@@ -8,6 +8,7 @@ import { MobileBottomNav, MobileNavTab } from './MobileBottomNav';
 import { PrivilegePassCard } from '../shared/PrivilegePassCard';
 import { MobileFinanceScreen } from '../mobile/MobileFinanceScreen';
 import { compressImage, capturePhoto } from '../../utils/imageUtils';
+import { EnlargedPhotoModal } from '../common/EnlargedPhotoModal';
 import {
   Home,
   Users,
@@ -59,7 +60,8 @@ import {
   Hash,
   Edit3,
   X,
-  Save
+  Save,
+  ZoomIn
 } from 'lucide-react';
 
 type OwnerScreen =
@@ -265,14 +267,39 @@ export const MobileOwnerApp: React.FC = () => {
   const [isCollectingDue, setIsCollectingDue] = useState(false);
   const [collectDueToast, setCollectDueToast] = useState<string | null>(null);
 
+  // Enlarged Profile Photo Modal State
+  const [enlargedPhoto, setEnlargedPhoto] = useState<{
+    isOpen: boolean;
+    photoUrl?: string;
+    name?: string;
+    subtitle?: string;
+    badge?: string;
+  }>({ isOpen: false });
+
+  const openEnlargedPhoto = (photoUrl?: string, name?: string, subtitle?: string, badge?: string) => {
+    setEnlargedPhoto({
+      isOpen: true,
+      photoUrl,
+      name,
+      subtitle,
+      badge,
+    });
+  };
+
+  // Branch-isolated members list: only returns members registered in the selected branch
+  const branchMembers = useMemo(() => {
+    if (!selectedBranchId || selectedBranchId === 'all') return members || [];
+    return (members || []).filter((m) => m && m.branchId === selectedBranchId);
+  }, [members, selectedBranchId]);
+
   const dueMembers = useMemo(() => {
-    return (members || []).filter((m) => {
+    return branchMembers.filter((m) => {
       if (!m) return false;
       const isExpired = m.status === 'Expired' || m.status === 'Renewal Due' || (m.endDate && new Date(m.endDate) < new Date());
       const hasDues = (m.pendingDues || 0) > 0 || (m.balanceDue || 0) > 0 || m.paymentStatus === 'Pending' || m.paymentStatus === 'Partially Paid' || m.paymentStatus === 'Overdue';
       return isExpired || hasDues;
     });
-  }, [members]);
+  }, [branchMembers]);
 
   const totalOutstandingAmount = useMemo(() => {
     return dueMembers.reduce((sum, m) => {
@@ -614,7 +641,7 @@ export const MobileOwnerApp: React.FC = () => {
   };
 
   // Comprehensive Trainers & Coaches list
-  const trainers = useMemo(() => {
+  const allTrainers = useMemo(() => {
     const fromEmp = (employees || []).filter((e) => e && (e.role === 'Trainer' || e.role === 'Dietitian'));
     const trainerUserLinkedIds = new Set(fromEmp.map(e => e.id));
     
@@ -644,27 +671,41 @@ export const MobileOwnerApp: React.FC = () => {
     return [...fromEmp, ...fromUsers];
   }, [employees, appUsers, members]);
 
+  // Strictly branch-scoped trainers
+  const branchTrainers = useMemo(() => {
+    if (!selectedBranchId || selectedBranchId === 'all') return allTrainers;
+    return allTrainers.filter((t) => t && (t.branchId === selectedBranchId || (!t.branchId && selectedBranchId === 'branch-1')));
+  }, [allTrainers, selectedBranchId]);
+
+  // Alias trainers to branchTrainers so all trainer screens, counts and lists are automatically branch-isolated
+  const trainers = branchTrainers;
+
   const unreadNotifs = (notifications || []).filter((n) => n && !n.read);
 
-  // Financial Calculations with robust branch fallback
+  // Financial Calculations with strict branch filtering
   const branchTransactions = (transactions || []).filter((t) => {
     if (!t) return false;
     if (!selectedBranchId || selectedBranchId === 'all') return true;
-    return t.branchId === selectedBranchId || !t.branchId;
+    return t.branchId === selectedBranchId;
   });
   const branchExpenses = (expenses || []).filter((e) => {
     if (!e) return false;
     if (!selectedBranchId || selectedBranchId === 'all') return true;
-    return e.branchId === selectedBranchId || !e.branchId;
+    return e.branchId === selectedBranchId;
   });
   const totalCollections = branchTransactions.reduce((acc, t) => acc + (t?.amount || 0), 0);
   const totalExpenseAmount = branchExpenses.reduce((acc, e) => acc + (e?.amount || 0), 0);
   const netProfit = totalCollections - totalExpenseAmount;
   const isProfitPositive = netProfit >= 0;
 
-  // Attendance
+  // Attendance strictly filtered by branch
   const todayStr = new Date().toISOString().split('T')[0];
-  const todayCheckins = (attendance || []).filter((a) => a && a.date === todayStr);
+  const branchAttendance = (attendance || []).filter((a) => {
+    if (!a) return false;
+    if (!selectedBranchId || selectedBranchId === 'all') return true;
+    return a.branchId === selectedBranchId;
+  });
+  const todayCheckins = branchAttendance.filter((a) => a && a.date === todayStr);
 
   const navigateTo = (screen: OwnerScreen) => {
     setPreviousScreen(currentScreen);
@@ -684,8 +725,8 @@ export const MobileOwnerApp: React.FC = () => {
     }
   };
 
-  // Filtered members list with strict null safety
-  const filteredMembers = (members || []).filter((m) => {
+  // Filtered members list with strict branch isolation
+  const filteredMembers = branchMembers.filter((m) => {
     if (!m) return false;
     const nameStr = m.name || '';
     const membershipNoStr = m.membershipNo || '';
@@ -948,7 +989,6 @@ export const MobileOwnerApp: React.FC = () => {
     'add-member',
     'member-profile',
     'add-trainer',
-    'trainers',
     'trainer-profile',
     'add-expense',
     'broadcast',
@@ -962,9 +1002,9 @@ export const MobileOwnerApp: React.FC = () => {
 
   const bottomNavTabs: MobileNavTab[] = [
     { id: 'home', label: 'Home', icon: Home },
-    { id: 'members', label: 'Members', icon: Users, badge: members.length },
+    { id: 'members', label: 'Members', icon: Users, badge: branchMembers.length },
+    { id: 'trainers', label: 'Trainers', icon: Dumbbell, badge: branchTrainers.length },
     { id: 'finance', label: 'Finance', icon: CreditCard },
-    { id: 'attendance', label: 'Attendance', icon: Calendar, badge: todayCheckins.length > 0 ? todayCheckins.length : undefined },
     { id: 'more', label: 'More', icon: Layers },
   ];
 
@@ -1128,7 +1168,7 @@ export const MobileOwnerApp: React.FC = () => {
                   <Users className="w-3.5 h-3.5" />
                 </div>
                 <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Members</div>
-                <div className="text-xl font-black text-white mt-0.5 group-hover:text-[#00D4FF] transition-colors">{members.length}</div>
+                <div className="text-xl font-black text-white mt-0.5 group-hover:text-[#00D4FF] transition-colors">{branchMembers.length}</div>
                 <span className="text-[9px] text-[#00D4FF] font-bold block mt-0.5">Directory →</span>
               </div>
 
@@ -1212,14 +1252,15 @@ export const MobileOwnerApp: React.FC = () => {
             {/* Recent Member Admissions Stream */}
             <div className="pt-1">
               <div className="flex items-center justify-between mb-2 px-1">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
-                  Recent Members
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-[#00D4FF]" />
+                  <span>Recent Members</span>
                 </span>
                 <button
                   onClick={() => navigateTo('members')}
                   className="text-[10px] font-bold text-[#00D4FF] hover:underline cursor-pointer"
                 >
-                  View All ({members.length}) →
+                  View All ({branchMembers.length}) →
                 </button>
               </div>
 
@@ -1237,7 +1278,12 @@ export const MobileOwnerApp: React.FC = () => {
                       <img
                         src={member.photoUrl}
                         alt={member.name}
-                        className="w-10 h-10 rounded-xl object-cover border border-[#00D4FF]/40 shadow-sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEnlargedPhoto(member.photoUrl, member.name, `Member ID: ${member.membershipNo} • ${member.planName}`, member.status);
+                        }}
+                        className="w-10 h-10 rounded-xl object-cover border border-[#00D4FF]/40 shadow-sm cursor-pointer hover:scale-105 active:scale-95 transition-transform"
+                        title="Click to view full photo"
                       />
                       <div>
                         <h4 className="text-xs font-black text-white">{member.name}</h4>
@@ -1275,6 +1321,63 @@ export const MobileOwnerApp: React.FC = () => {
               </div>
             </div>
 
+            {/* Separate Gym Coaches & Trainers Section */}
+            <div className="pt-2">
+              <div className="flex items-center justify-between mb-2 px-1">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Award className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Branch Coaches & Trainers</span>
+                </span>
+                <button
+                  onClick={() => navigateTo('trainers')}
+                  className="text-[10px] font-bold text-purple-400 hover:underline cursor-pointer"
+                >
+                  View All ({trainers.length}) →
+                </button>
+              </div>
+
+              {trainers.length === 0 ? (
+                <div className="p-4 rounded-2xl bg-[#101422] border border-white/10 text-center">
+                  <p className="text-xs text-slate-400">No trainers registered in this branch yet.</p>
+                  <button
+                    onClick={() => navigateTo('add-trainer')}
+                    className="mt-2 px-3 py-1.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 text-[10px] font-black cursor-pointer transition-all"
+                  >
+                    + Add Coach to {currentBranch.name}
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  {trainers.slice(0, 4).map((trainer) => (
+                    <div
+                      key={trainer.id}
+                      onClick={() => {
+                        setSelectedTrainer(trainer);
+                        navigateTo('trainer-profile');
+                      }}
+                      className="p-3 glass-card-premium hover:border-purple-500/40 active:scale-[0.98] rounded-2xl flex items-center gap-2.5 cursor-pointer transition-all shadow-md"
+                    >
+                      <img
+                        src={trainer.photoUrl}
+                        alt={trainer.name}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEnlargedPhoto(trainer.photoUrl, trainer.name, `${trainer.role} • ${trainer.specialization || 'Fitness Coach'}`, 'Active Coach');
+                        }}
+                        className="w-10 h-10 rounded-xl object-cover border border-purple-500/40 shadow-sm shrink-0 cursor-pointer hover:scale-105 active:scale-95 transition-transform"
+                        title="Click to view full photo"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-xs font-black text-white truncate">{trainer.name}</h4>
+                        <div className="text-[9px] text-purple-300 font-semibold truncate">{trainer.role}</div>
+                        <div className="text-[9px] text-slate-400 truncate">{trainer.shift || 'Full-time'}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
           </div>
         )}
 
@@ -1284,6 +1387,26 @@ export const MobileOwnerApp: React.FC = () => {
         {currentScreen === 'members' && (
           <div className="space-y-3.5 animate-in fade-in duration-200">
             
+            {/* Top Segmented Directory Switcher (Separate Members & Trainers) */}
+            <div className="flex rounded-2xl bg-[#090D16] p-1 border border-white/10 shadow-inner">
+              <button
+                type="button"
+                onClick={() => navigateTo('members')}
+                className="flex-1 py-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all bg-[#4F7CFF] text-white shadow-md cursor-pointer"
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>Members ({branchMembers.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => navigateTo('trainers')}
+                className="flex-1 py-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all text-slate-400 hover:text-white cursor-pointer"
+              >
+                <Dumbbell className="w-3.5 h-3.5" />
+                <span>Trainers & Coaches ({branchTrainers.length})</span>
+              </button>
+            </div>
+
             {/* Search & Add Member */}
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
@@ -1315,7 +1438,7 @@ export const MobileOwnerApp: React.FC = () => {
                     : 'bg-[#101422] text-slate-400 border border-white/10 hover:text-white'
                 }`}
               >
-                All Members ({members.length})
+                All Members ({branchMembers.length})
               </button>
 
               <button
@@ -1360,7 +1483,12 @@ export const MobileOwnerApp: React.FC = () => {
                     <img
                       src={member.photoUrl}
                       alt={member.name}
-                      className="w-11 h-11 rounded-2xl object-cover border border-[#4F7CFF]/50 shadow-inner"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEnlargedPhoto(member.photoUrl, member.name, `Member ID: ${member.membershipNo} • ${member.planName}`, member.status);
+                      }}
+                      className="w-11 h-11 rounded-2xl object-cover border border-[#4F7CFF]/50 shadow-inner cursor-pointer hover:scale-105 active:scale-95 transition-transform"
+                      title="Click to view full photo"
                     />
                     <div>
                       <div className="flex items-center gap-2">
@@ -2180,7 +2308,9 @@ export const MobileOwnerApp: React.FC = () => {
                   <img
                     src={selectedMember.photoUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&fit=crop&q=80'}
                     alt={selectedMember.name}
-                    className="w-14 h-14 rounded-2xl object-cover border-2 border-[#4F7CFF] shadow-lg"
+                    onClick={() => openEnlargedPhoto(selectedMember.photoUrl, selectedMember.name, `Member ID: ${selectedMember.membershipNo} • ${selectedMember.planName}`, selectedMember.status)}
+                    className="w-14 h-14 rounded-2xl object-cover border-2 border-[#4F7CFF] shadow-lg cursor-pointer hover:ring-2 hover:ring-cyan-400 active:scale-95 transition-all"
+                    title="Click to view full photo"
                   />
                   <button
                     type="button"
@@ -2191,7 +2321,7 @@ export const MobileOwnerApp: React.FC = () => {
                         setSelectedMember(prev => prev ? { ...prev, photoUrl: dataUrl, faceEnrolled: true } : null);
                       }
                     }}
-                    className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#4F7CFF] text-white flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer hover:bg-blue-400 transition-all"
+                    className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#4F7CFF] text-white flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer hover:bg-blue-400 transition-all z-10"
                     title="Take Photo with Camera"
                   >
                     <Camera className="w-3.5 h-3.5" />
@@ -2211,7 +2341,16 @@ export const MobileOwnerApp: React.FC = () => {
                   <div className="text-[10px] text-slate-400 mt-0.5 truncate">
                     ID: {selectedMember.membershipNo} • {selectedMember.mobile}
                   </div>
-                  <div className="flex items-center gap-2 mt-1.5">
+                  <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => openEnlargedPhoto(selectedMember.photoUrl, selectedMember.name, `Member ID: ${selectedMember.membershipNo} • ${selectedMember.planName}`, selectedMember.status)}
+                      className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 text-[9px] font-bold active:scale-95 cursor-pointer transition-all"
+                      title="View Enlarged Photo"
+                    >
+                      <ZoomIn className="w-3 h-3 text-cyan-400" />
+                      <span>View Photo</span>
+                    </button>
                     <button
                       type="button"
                       onClick={async () => {
@@ -2987,12 +3126,25 @@ export const MobileOwnerApp: React.FC = () => {
                 <span>{copiedField === 'FullTrCredentials' ? 'Copied Coach Credentials!' : 'Copy Full Credentials Message'}</span>
               </button>
 
-              <button
-                onClick={() => navigateTo('more')}
-                className="w-full py-2.5 rounded-2xl bg-[#4F7CFF] hover:bg-[#3D69EB] text-white text-xs font-black"
-              >
-                Done
-              </button>
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedTrainer(newlyCreatedTrainer);
+                    navigateTo('trainer-profile');
+                  }}
+                  className="flex-1 py-3 rounded-2xl bg-[#101422] hover:bg-[#151A2E] border border-white/10 text-white font-bold text-xs cursor-pointer active:scale-95 transition-all text-center"
+                >
+                  View Profile
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigateTo('trainers')}
+                  className="flex-1 py-3 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white font-black text-xs cursor-pointer active:scale-95 transition-all shadow-lg shadow-purple-600/30 text-center"
+                >
+                  View Trainers List →
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -3002,6 +3154,26 @@ export const MobileOwnerApp: React.FC = () => {
         ═══════════════════════════════════════════════════════════ */}
         {currentScreen === 'trainers' && (
           <div className="space-y-4 animate-in fade-in duration-200">
+            {/* Top Segmented Directory Switcher (Separate Members & Trainers) */}
+            <div className="flex rounded-2xl bg-[#090D16] p-1 border border-white/10 shadow-inner">
+              <button
+                type="button"
+                onClick={() => navigateTo('members')}
+                className="flex-1 py-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all text-slate-400 hover:text-white cursor-pointer"
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>Members ({branchMembers.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => navigateTo('trainers')}
+                className="flex-1 py-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all bg-purple-500 text-white shadow-md cursor-pointer"
+              >
+                <Dumbbell className="w-3.5 h-3.5" />
+                <span>Trainers & Coaches ({branchTrainers.length})</span>
+              </button>
+            </div>
+
             {/* Header & Quick Action */}
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -3010,13 +3182,13 @@ export const MobileOwnerApp: React.FC = () => {
                   <span>Coaches & Trainers Roster</span>
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  {trainers.length} Active PT coaches & nutritionists
+                  {trainers.length} Active PT coaches & nutritionists in {currentBranch.name}
                 </p>
               </div>
 
               <button
                 onClick={() => navigateTo('add-trainer')}
-                className="px-3.5 py-2 rounded-2xl bg-purple-500 hover:bg-purple-600 active:scale-95 text-white font-black text-xs flex items-center gap-1.5 shadow-lg shadow-purple-500/25 transition-all"
+                className="px-3.5 py-2 rounded-2xl bg-purple-500 hover:bg-purple-600 active:scale-95 text-white font-black text-xs flex items-center gap-1.5 shadow-lg shadow-purple-500/25 transition-all cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Add Coach</span>
@@ -3073,7 +3245,7 @@ export const MobileOwnerApp: React.FC = () => {
                   );
                 })
                 .map((trainer) => {
-                  const assignedCount = members.filter(m => m.assignedTrainerId === trainer.id || m.assignedDietitianId === trainer.id).length;
+                  const assignedCount = branchMembers.filter(m => m.assignedTrainerId === trainer.id || m.assignedDietitianId === trainer.id).length;
                   const trainerUser = (appUsers || []).find(u => u.linkedId === trainer.id || u.id === trainer.id);
                   const displayUsername = (trainer as any).username || trainerUser?.username || trainer.email?.split('@')[0] || trainer.id;
 
@@ -3090,7 +3262,12 @@ export const MobileOwnerApp: React.FC = () => {
                         <img
                           src={trainer.photoUrl || 'https://images.unsplash.com/photo-1568602471122-7832951cc4c5?w=400&fit=crop&q=80'}
                           alt={trainer.name}
-                          className="w-12 h-12 rounded-2xl object-cover border-2 border-purple-500/40 shrink-0 group-hover:scale-105 transition-transform"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEnlargedPhoto(trainer.photoUrl, trainer.name, `${trainer.role} • ${trainer.specialization || 'Fitness Coach'}`, 'Active Coach');
+                          }}
+                          className="w-12 h-12 rounded-2xl object-cover border-2 border-purple-500/40 shrink-0 cursor-pointer hover:scale-105 active:scale-95 transition-transform"
+                          title="Click to view full photo"
                         />
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
@@ -3172,7 +3349,9 @@ export const MobileOwnerApp: React.FC = () => {
                     <img
                       src={selectedTrainer.photoUrl || 'https://images.unsplash.com/photo-1568602471122-7832951cc4c5?w=400&fit=crop&q=80'}
                       alt={selectedTrainer.name}
-                      className="w-16 h-16 rounded-2xl object-cover border-2 border-purple-500 shadow-md shrink-0"
+                      onClick={() => openEnlargedPhoto(selectedTrainer.photoUrl, selectedTrainer.name, `Coach ID: ${selectedTrainer.id} • ${selectedTrainer.specialization}`, selectedTrainer.role)}
+                      className="w-16 h-16 rounded-2xl object-cover border-2 border-purple-500 shadow-md shrink-0 cursor-pointer hover:ring-2 hover:ring-purple-400 active:scale-95 transition-all"
+                      title="Click to view full photo"
                     />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
@@ -3189,6 +3368,14 @@ export const MobileOwnerApp: React.FC = () => {
                         <span>•</span>
                         <span>Shift: {selectedTrainer.shift || 'Morning'}</span>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => openEnlargedPhoto(selectedTrainer.photoUrl, selectedTrainer.name, `Coach ID: ${selectedTrainer.id} • ${selectedTrainer.specialization}`, selectedTrainer.role)}
+                        className="flex items-center gap-1 text-[9px] text-purple-300 font-bold hover:underline cursor-pointer mt-1"
+                      >
+                        <ZoomIn className="w-3 h-3 text-purple-400" />
+                        <span>View Photo</span>
+                      </button>
                     </div>
                   </div>
 
@@ -4730,12 +4917,23 @@ export const MobileOwnerApp: React.FC = () => {
         tabs={bottomNavTabs}
         activeTab={
           ['add-member', 'member-profile', 'member-created-success'].includes(currentScreen) ? 'members' :
+          ['add-trainer', 'trainers', 'trainer-profile', 'trainer-created-success'].includes(currentScreen) ? 'trainers' :
           currentScreen === 'add-expense' ? 'finance' :
-          ['broadcast', 'audit-logs', 'add-trainer', 'trainers', 'trainer-profile'].includes(currentScreen) ? 'more' :
+          ['broadcast', 'audit-logs', 'add-branch', 'fee-matrix', 'due-members'].includes(currentScreen) ? 'more' :
           currentScreen
         }
         onSelectTab={(tabId) => navigateTo(tabId as OwnerScreen)}
         accentColor="#00D4FF"
+      />
+
+      {/* ── 5. FULL-SCREEN ENLARGED PROFILE PHOTO LIGHTBOX MODAL ── */}
+      <EnlargedPhotoModal
+        isOpen={enlargedPhoto.isOpen}
+        onClose={() => setEnlargedPhoto({ isOpen: false })}
+        photoUrl={enlargedPhoto.photoUrl}
+        name={enlargedPhoto.name}
+        subtitle={enlargedPhoto.subtitle}
+        badge={enlargedPhoto.badge}
       />
 
     </div>

@@ -7,6 +7,7 @@ import { PrivilegePassCard } from '../shared/PrivilegePassCard';
 import { TrainerCollectPaymentModal } from '../trainer/TrainerCollectPaymentModal';
 import { TrainerAddExpenseModal } from '../trainer/TrainerAddExpenseModal';
 import { compressImage, capturePhoto } from '../../utils/imageUtils';
+import { EnlargedPhotoModal } from '../common/EnlargedPhotoModal';
 import {
   Home,
   Users,
@@ -50,7 +51,8 @@ import {
   KeyRound,
   Copy,
   MessageSquare,
-  ExternalLink
+  ExternalLink,
+  ZoomIn
 } from 'lucide-react';
 
 type Gender = 'Male' | 'Female' | 'Other';
@@ -228,6 +230,25 @@ export const MobileTrainerApp: React.FC = () => {
     } finally {
       setIsSavingClientEdit(false);
     }
+  };
+
+  // Enlarged Profile Photo Modal State
+  const [enlargedPhoto, setEnlargedPhoto] = useState<{
+    isOpen: boolean;
+    photoUrl?: string;
+    name?: string;
+    subtitle?: string;
+    badge?: string;
+  }>({ isOpen: false });
+
+  const openEnlargedPhoto = (photoUrl?: string, name?: string, subtitle?: string, badge?: string) => {
+    setEnlargedPhoto({
+      isOpen: true,
+      photoUrl,
+      name,
+      subtitle,
+      badge,
+    });
   };
 
   // Active Plan Tab in Screen 3
@@ -1036,7 +1057,12 @@ export const MobileTrainerApp: React.FC = () => {
                       <img
                         src={client.photoUrl}
                         alt={client.name}
-                        className="w-10 h-10 rounded-xl object-cover border border-[#4F7CFF]/40"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEnlargedPhoto(client.photoUrl, client.name, `Client ID: ${client.membershipNo} • ${client.goal || 'Fitness'}`, client.status);
+                        }}
+                        className="w-10 h-10 rounded-xl object-cover border border-[#4F7CFF]/40 cursor-zoom-in hover:scale-105 transition-transform"
+                        title="Click to enlarge photo"
                       />
                       <div>
                         <h4 className="text-xs font-black text-white">{client.name}</h4>
@@ -1124,7 +1150,12 @@ export const MobileTrainerApp: React.FC = () => {
                     <img
                       src={client.photoUrl}
                       alt={client.name}
-                      className="w-11 h-11 rounded-2xl object-cover border border-[#4F7CFF]/50 shadow-inner shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEnlargedPhoto(client.photoUrl, client.name, `Client ID: ${client.membershipNo} • ${client.goal || 'Fitness'}`, client.status);
+                      }}
+                      className="w-11 h-11 rounded-2xl object-cover border border-[#4F7CFF]/50 shadow-inner shrink-0 cursor-zoom-in hover:scale-105 transition-transform"
+                      title="Click to enlarge photo"
                     />
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
@@ -2400,7 +2431,9 @@ export const MobileTrainerApp: React.FC = () => {
                   <img
                     src={selectedClient.photoUrl}
                     alt={selectedClient.name}
-                    className="w-14 h-14 rounded-2xl object-cover border-2 border-[#4F7CFF] shadow-lg"
+                    onClick={() => openEnlargedPhoto(selectedClient.photoUrl, selectedClient.name, `Client ID: ${selectedClient.membershipNo} • ${selectedClient.goal || 'Fitness'}`, selectedClient.status)}
+                    className="w-14 h-14 rounded-2xl object-cover border-2 border-[#4F7CFF] shadow-lg cursor-pointer hover:ring-2 hover:ring-cyan-400 active:scale-95 transition-all"
+                    title="Click to view full photo"
                   />
                   <button
                     type="button"
@@ -2411,7 +2444,7 @@ export const MobileTrainerApp: React.FC = () => {
                         setSelectedClient(prev => prev ? { ...prev, photoUrl: dataUrl, faceEnrolled: true } : null);
                       }
                     }}
-                    className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#4F7CFF] text-white flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer hover:bg-blue-400 transition-all"
+                    className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#4F7CFF] text-white flex items-center justify-center shadow-md border border-white/20 active:scale-95 cursor-pointer hover:bg-blue-400 transition-all z-10"
                     title="Take Photo with Camera"
                   >
                     <Camera className="w-3.5 h-3.5" />
@@ -2425,7 +2458,16 @@ export const MobileTrainerApp: React.FC = () => {
                     </span>
                   </div>
                   <div className="text-[10px] text-slate-400 mt-0.5 truncate">ID: {selectedClient.membershipNo} • {selectedClient.mobile}</div>
-                  <div className="flex items-center gap-2 mt-1.5">
+                  <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => openEnlargedPhoto(selectedClient.photoUrl, selectedClient.name, `Client ID: ${selectedClient.membershipNo} • ${selectedClient.goal || 'Fitness'}`, selectedClient.status)}
+                      className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 text-[9px] font-bold active:scale-95 cursor-pointer transition-all"
+                      title="View Enlarged Photo"
+                    >
+                      <ZoomIn className="w-3 h-3 text-cyan-400" />
+                      <span>View Photo</span>
+                    </button>
                     <button
                       type="button"
                       onClick={async () => {
@@ -3491,6 +3533,16 @@ export const MobileTrainerApp: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Enlarged Photo Modal */}
+      <EnlargedPhotoModal
+        isOpen={enlargedPhoto.isOpen}
+        onClose={() => setEnlargedPhoto({ isOpen: false })}
+        photoUrl={enlargedPhoto.photoUrl}
+        name={enlargedPhoto.name}
+        subtitle={enlargedPhoto.subtitle}
+        badge={enlargedPhoto.badge}
+      />
 
     </div>
   );

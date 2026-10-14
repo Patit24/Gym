@@ -3,6 +3,7 @@ import { useGym } from '../../context/GymContext';
 import { Member, GoalType } from '../../types/gym';
 import { PrivilegePassCard } from '../shared/PrivilegePassCard';
 import { compressImage, capturePhoto } from '../../utils/imageUtils';
+import { EnlargedPhotoModal } from '../common/EnlargedPhotoModal';
 import {
   Search,
   UserPlus,
@@ -200,7 +201,17 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
     }
   };
 
-  const branchMembers = members.filter((m) => m.branchId === selectedBranchId);
+  const [enlargedPhoto, setEnlargedPhoto] = useState<{
+    isOpen: boolean;
+    photoUrl?: string;
+    name?: string;
+    subtitle?: string;
+    badge?: string;
+  }>({ isOpen: false });
+
+  const branchMembers = !selectedBranchId || selectedBranchId === 'all'
+    ? members
+    : members.filter((m) => m.branchId === selectedBranchId || (!m.branchId && selectedBranchId === 'branch-1'));
 
   // Filter logic
   const filteredMembers = branchMembers.filter((m) => {
@@ -461,7 +472,18 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
                           <img
                             src={m.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${m.id}`}
                             alt={m.name}
-                            className="w-12 h-12 rounded-2xl object-cover border border-white/20 shadow-md shrink-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEnlargedPhoto({
+                                isOpen: true,
+                                photoUrl: m.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${m.id}`,
+                                name: m.name,
+                                subtitle: `Member ID: ${m.membershipNo} • ${m.planName || 'Gym Member'}`,
+                                badge: m.status
+                              });
+                            }}
+                            className="w-12 h-12 rounded-2xl object-cover border border-white/20 shadow-md shrink-0 cursor-zoom-in hover:scale-105 active:scale-95 transition-transform"
+                            title="Click to view full photo"
                           />
                           <div>
                             <h3 className="text-sm font-extrabold text-white group-hover:text-cyan-300 transition-colors">
@@ -657,7 +679,15 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
                       <img
                         src={selectedMember.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedMember.id}`}
                         alt={selectedMember.name}
-                        className="w-16 h-16 rounded-2xl object-cover border-2 border-cyan-400 bg-[#141722] shadow-md"
+                        onClick={() => setEnlargedPhoto({
+                          isOpen: true,
+                          photoUrl: selectedMember.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedMember.id}`,
+                          name: selectedMember.name,
+                          subtitle: `Member ID: ${selectedMember.membershipNo} • ${selectedMember.planName || 'Gym Member'}`,
+                          badge: selectedMember.status
+                        })}
+                        className="w-16 h-16 rounded-2xl object-cover border-2 border-cyan-400 bg-[#141722] shadow-md cursor-zoom-in hover:scale-105 active:scale-95 transition-transform"
+                        title="Click to view full photo"
                       />
                       <button
                         type="button"
@@ -1744,6 +1774,16 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
           </div>
         </div>
       )}
+
+      {/* Enlarged Photo Modal */}
+      <EnlargedPhotoModal
+        isOpen={enlargedPhoto.isOpen}
+        onClose={() => setEnlargedPhoto({ isOpen: false })}
+        photoUrl={enlargedPhoto.photoUrl}
+        name={enlargedPhoto.name}
+        subtitle={enlargedPhoto.subtitle}
+        badge={enlargedPhoto.badge}
+      />
 
     </div>
   );

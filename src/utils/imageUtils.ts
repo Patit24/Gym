@@ -140,6 +140,10 @@ export const capturePhoto = async (
   if (source === 'camera') {
     // Open live viewfinder modal using WebRTC getUserMedia
     return new Promise<string | null>((resolve) => {
+      // 1. Remove ANY existing camera modals from DOM before creating a new one (prevents duplicate stacking)
+      const existingModals = document.querySelectorAll('#__web_camera_modal_root__');
+      existingModals.forEach((el) => el.remove());
+
       // Create DOM container for Web Camera modal
       const modalContainer = document.createElement('div');
       modalContainer.id = '__web_camera_modal_root__';
@@ -147,19 +151,39 @@ export const capturePhoto = async (
 
       let stream: MediaStream | null = null;
       let facingMode: 'user' | 'environment' = 'user';
+      let isClosed = false;
 
       const cleanup = () => {
+        if (isClosed) return;
+        isClosed = true;
+        window.removeEventListener('keydown', handleKeyDown);
         if (stream) {
-          stream.getTracks().forEach(t => t.stop());
+          stream.getTracks().forEach((t) => t.stop());
           stream = null;
         }
-        modalContainer.remove();
+        document.querySelectorAll('#__web_camera_modal_root__').forEach((el) => el.remove());
       };
+
+      const handleClose = (e?: Event) => {
+        if (e) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        cleanup();
+        resolve(null);
+      };
+
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          handleClose(e);
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
 
       // HTML structure
       modalContainer.innerHTML = `
-        <div style="position: fixed; inset: 0; z-index: 99999; display: flex; align-items: center; justify-content: center; padding: 12px; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-          <div style="position: relative; width: 100%; max-width: 440px; background: #0E131F; border: 1px solid rgba(6,182,212,0.4); border-radius: 24px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); display: flex; flex-direction: column;">
+        <div id="__cam_backdrop__" style="position: fixed; inset: 0; z-index: 99999; display: flex; align-items: center; justify-content: center; padding: 12px; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+          <div id="__cam_card__" style="position: relative; width: 100%; max-width: 440px; background: #0E131F; border: 1px solid rgba(6,182,212,0.4); border-radius: 24px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); display: flex; flex-direction: column;">
             
             <!-- Header -->
             <div style="padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,0.1); background: #080C14; display: flex; align-items: center; justify-content: space-between;">
@@ -170,7 +194,7 @@ export const capturePhoto = async (
                   <div style="font-size: 10px; color: #94A3B8;">Position face clearly in viewfinder</div>
                 </div>
               </div>
-              <button id="__cam_close_btn__" style="width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,0.1); color: #CBD5E1; border: none; cursor: pointer; font-size: 14px; font-weight: bold;">✕</button>
+              <button type="button" id="__cam_close_btn__" style="width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,0.12); color: #FFFFFF; border: 1px solid rgba(255,255,255,0.2); cursor: pointer; font-size: 16px; font-weight: bold; display: flex; align-items: center; justify-content: center; transition: all 0.2s;" title="Close Camera (1 click)">✕</button>
             </div>
 
             <!-- Viewfinder Area -->
@@ -184,7 +208,7 @@ export const capturePhoto = async (
               </div>
 
               <!-- Flip Camera Button -->
-              <button id="__cam_flip_btn__" style="position: absolute; top: 12px; right: 12px; width: 36px; height: 36px; border-radius: 50%; background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.2); color: white; cursor: pointer; font-size: 16px; backdrop-filter: blur(4px);">🔄</button>
+              <button type="button" id="__cam_flip_btn__" style="position: absolute; top: 12px; right: 12px; width: 36px; height: 36px; border-radius: 50%; background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.2); color: white; cursor: pointer; font-size: 16px; backdrop-filter: blur(4px);">🔄</button>
 
               <!-- Status Overlay -->
               <div id="__cam_status__" style="position: absolute; inset: 0; background: rgba(14,19,31,0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: #06B6D4; font-size: 12px; font-weight: bold; padding: 20px; text-align: center;">
@@ -195,14 +219,14 @@ export const capturePhoto = async (
             <!-- Action Controls -->
             <div style="padding: 16px; background: #080C14; border-top: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; gap: 12px;">
               <div id="__cam_capture_controls__" style="display: flex; align-items: center; justify-content: center; width: 100%;">
-                <button id="__cam_shutter_btn__" style="width: 64px; height: 64px; border-radius: 50%; border: 4px solid rgba(255,255,255,0.3); background: #06B6D4; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 15px -3px rgba(6,182,212,0.4); outline: none;">
+                <button type="button" id="__cam_shutter_btn__" style="width: 64px; height: 64px; border-radius: 50%; border: 4px solid rgba(255,255,255,0.3); background: #06B6D4; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 15px -3px rgba(6,182,212,0.4); outline: none;">
                   <div style="width: 44px; height: 44px; border-radius: 50%; background: #FFFFFF;"></div>
                 </button>
               </div>
 
               <div id="__cam_review_controls__" style="display: none; width: 100%; gap: 10px;">
-                <button id="__cam_retake_btn__" style="flex: 1; padding: 10px 16px; border-radius: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15); color: #E2E8F0; font-size: 12px; font-weight: bold; cursor: pointer;">Retake</button>
-                <button id="__cam_use_btn__" style="flex: 1; padding: 10px 16px; border-radius: 12px; background: #06B6D4; border: none; color: #000000; font-size: 12px; font-weight: 800; cursor: pointer; box-shadow: 0 10px 15px -3px rgba(6,182,212,0.3);">Use Photo ✓</button>
+                <button type="button" id="__cam_retake_btn__" style="flex: 1; padding: 10px 16px; border-radius: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15); color: #E2E8F0; font-size: 12px; font-weight: bold; cursor: pointer;">Retake</button>
+                <button type="button" id="__cam_use_btn__" style="flex: 1; padding: 10px 16px; border-radius: 12px; background: #06B6D4; border: none; color: #000000; font-size: 12px; font-weight: 800; cursor: pointer; box-shadow: 0 10px 15px -3px rgba(6,182,212,0.3);">Use Photo ✓</button>
               </div>
             </div>
 
@@ -210,6 +234,8 @@ export const capturePhoto = async (
         </div>
       `;
 
+      const backdrop = modalContainer.querySelector('#__cam_backdrop__') as HTMLDivElement;
+      const card = modalContainer.querySelector('#__cam_card__') as HTMLDivElement;
       const video = modalContainer.querySelector('#__cam_video__') as HTMLVideoElement;
       const previewImg = modalContainer.querySelector('#__cam_preview__') as HTMLImageElement;
       const overlay = modalContainer.querySelector('#__cam_overlay__') as HTMLDivElement;
@@ -222,11 +248,27 @@ export const capturePhoto = async (
       const retakeBtn = modalContainer.querySelector('#__cam_retake_btn__') as HTMLButtonElement;
       const useBtn = modalContainer.querySelector('#__cam_use_btn__') as HTMLButtonElement;
 
+      // Single-click close handlers
+      closeBtn.addEventListener('click', handleClose);
+      closeBtn.addEventListener('touchend', (e) => {
+        handleClose(e);
+      });
+
+      // Backdrop dismissal on click outside card
+      backdrop.addEventListener('click', (e) => {
+        if (e.target === backdrop) {
+          handleClose(e);
+        }
+      });
+      card.addEventListener('click', (e) => {
+        e.stopPropagation();
+      });
+
       let capturedDataUrl: string | null = null;
 
       const initCamera = async () => {
         if (stream) {
-          stream.getTracks().forEach(t => t.stop());
+          stream.getTracks().forEach((t) => t.stop());
           stream = null;
         }
 
@@ -250,6 +292,11 @@ export const capturePhoto = async (
             },
             audio: false,
           });
+
+          if (isClosed) {
+            s.getTracks().forEach((t) => t.stop());
+            return;
+          }
 
           stream = s;
           video.srcObject = s;
@@ -276,12 +323,6 @@ export const capturePhoto = async (
       };
 
       initCamera();
-
-      // Close
-      closeBtn.onclick = () => {
-        cleanup();
-        resolve(null);
-      };
 
       // Flip Front/Back
       flipBtn.onclick = () => {
