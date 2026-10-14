@@ -289,7 +289,12 @@ export const MobileOwnerApp: React.FC = () => {
   // Branch-isolated members list: only returns members registered in the selected branch
   const branchMembers = useMemo(() => {
     if (!selectedBranchId || selectedBranchId === 'all') return members || [];
-    return (members || []).filter((m) => m && m.branchId === selectedBranchId);
+    return (members || []).filter((m) => {
+      if (!m) return false;
+      if (m.branchId === selectedBranchId) return true;
+      if (selectedBranchId === 'branch-1' && (!m.branchId || m.branchId === 'all')) return true;
+      return false;
+    });
   }, [members, selectedBranchId]);
 
   const dueMembers = useMemo(() => {
@@ -440,19 +445,36 @@ export const MobileOwnerApp: React.FC = () => {
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [resetResult, setResetResult] = useState<{ password: string; whatsappUrl?: string } | null>(null);
 
-  const currentBranch = (branches || []).find((b) => b?.id === selectedBranchId) || branches?.[0] || {
-    id: selectedBranchId || 'branch-1',
-    name: 'Main Flagship',
-    code: 'HQ',
-    city: 'Downtown',
-    address: 'Fitness Blvd',
-    phone: '+91 98765 00000',
-    activeMembers: 0,
-    currentCheckIns: 0,
-    monthlyRevenue: 0,
-    capacity: 100,
-    manager: 'Admin'
-  };
+  const currentBranch = useMemo(() => {
+    if (selectedBranchId === 'all') {
+      return {
+        id: 'all' as BranchId,
+        name: 'All Branches (Franchise)',
+        code: 'ALL',
+        city: 'Franchise Overview',
+        address: 'All Gym Locations',
+        phone: '+91 98765 00000',
+        activeMembers: members.length,
+        currentCheckIns: 0,
+        monthlyRevenue: 0,
+        capacity: 1000,
+        manager: 'HQ Management'
+      };
+    }
+    return (branches || []).find((b) => b?.id === selectedBranchId) || branches?.[0] || {
+      id: selectedBranchId || 'branch-1',
+      name: 'Smart Gym Ashoknagar',
+      code: 'SMARTGYM001',
+      city: 'Ashoknagar',
+      address: 'Ashok Nagar Station Road',
+      phone: '+91 98765 00000',
+      activeMembers: 0,
+      currentCheckIns: 0,
+      monthlyRevenue: 0,
+      capacity: 150,
+      manager: 'Swadesh Ballav'
+    };
+  }, [branches, selectedBranchId, members.length]);
 
   // Trainer Roster & Profile States
   const [selectedTrainer, setSelectedTrainer] = useState<Employee | null>(null);
@@ -674,7 +696,12 @@ export const MobileOwnerApp: React.FC = () => {
   // Strictly branch-scoped trainers
   const branchTrainers = useMemo(() => {
     if (!selectedBranchId || selectedBranchId === 'all') return allTrainers;
-    return allTrainers.filter((t) => t && (t.branchId === selectedBranchId || (!t.branchId && selectedBranchId === 'branch-1')));
+    return allTrainers.filter((t) => {
+      if (!t) return false;
+      if (t.branchId === selectedBranchId) return true;
+      if (selectedBranchId === 'branch-1' && (!t.branchId || t.branchId === 'all')) return true;
+      return false;
+    });
   }, [allTrainers, selectedBranchId]);
 
   // Alias trainers to branchTrainers so all trainer screens, counts and lists are automatically branch-isolated
@@ -686,12 +713,16 @@ export const MobileOwnerApp: React.FC = () => {
   const branchTransactions = (transactions || []).filter((t) => {
     if (!t) return false;
     if (!selectedBranchId || selectedBranchId === 'all') return true;
-    return t.branchId === selectedBranchId;
+    if (t.branchId === selectedBranchId) return true;
+    if (selectedBranchId === 'branch-1' && (!t.branchId || t.branchId === 'all')) return true;
+    return false;
   });
   const branchExpenses = (expenses || []).filter((e) => {
     if (!e) return false;
     if (!selectedBranchId || selectedBranchId === 'all') return true;
-    return e.branchId === selectedBranchId;
+    if (e.branchId === selectedBranchId) return true;
+    if (selectedBranchId === 'branch-1' && (!e.branchId || e.branchId === 'all')) return true;
+    return false;
   });
   const totalCollections = branchTransactions.reduce((acc, t) => acc + (t?.amount || 0), 0);
   const totalExpenseAmount = branchExpenses.reduce((acc, e) => acc + (e?.amount || 0), 0);
@@ -703,7 +734,9 @@ export const MobileOwnerApp: React.FC = () => {
   const branchAttendance = (attendance || []).filter((a) => {
     if (!a) return false;
     if (!selectedBranchId || selectedBranchId === 'all') return true;
-    return a.branchId === selectedBranchId;
+    if (a.branchId === selectedBranchId) return true;
+    if (selectedBranchId === 'branch-1' && (!a.branchId || a.branchId === 'all')) return true;
+    return false;
   });
   const todayCheckins = branchAttendance.filter((a) => a && a.date === todayStr);
 
@@ -794,7 +827,7 @@ export const MobileOwnerApp: React.FC = () => {
         medicalHistory: 'None',
         goal: memGoal,
         referralSource: 'Mobile App Admission',
-        branchId: selectedBranchId,
+        branchId: (selectedBranchId && selectedBranchId !== 'all') ? selectedBranchId : 'branch-1',
         planId: isMemCustomDuration ? `${selectedPlan.id}-custom-${effectiveMonths}m` : selectedPlan.id,
         planName: customPlanName,
         startDate: startDateStr,
@@ -891,7 +924,7 @@ export const MobileOwnerApp: React.FC = () => {
         role: 'Trainer',
         mobile: trMobile.trim() || '+91 98765 00000',
         email: trEmail.trim() || `${trName.toLowerCase().replace(/\s+/g, '.')}@smartgym.com`,
-        branchId: selectedBranchId,
+        branchId: (selectedBranchId && selectedBranchId !== 'all') ? selectedBranchId : 'branch-1',
         baseSalary: trSalary,
         ptCommissionRate: 15,
         ptSessionsCompleted: 0,
@@ -959,7 +992,7 @@ export const MobileOwnerApp: React.FC = () => {
         date: new Date().toISOString().split('T')[0],
         paymentMethod: 'UPI',
         status: 'Paid',
-        branchId: selectedBranchId,
+        branchId: (selectedBranchId && selectedBranchId !== 'all') ? selectedBranchId : 'branch-1',
       });
       setExpTitle('');
       setExpAmount(2500);
@@ -1078,6 +1111,9 @@ export const MobileOwnerApp: React.FC = () => {
                         {b.name} ({b.code})
                       </option>
                     ))}
+                    <option value="all" className="bg-[#0A0D14] text-[#00D4FF] font-bold">
+                      🏢 All Branches (Franchise Overview)
+                    </option>
                   </select>
                   <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
@@ -1603,6 +1639,17 @@ export const MobileOwnerApp: React.FC = () => {
                     <div className="text-[9px] mt-0.5">{b.code} • {b.city}</div>
                   </button>
                 ))}
+                <button
+                  onClick={() => setSelectedBranchId('all')}
+                  className={`p-2.5 rounded-2xl text-left border transition-all ${
+                    selectedBranchId === 'all'
+                      ? 'bg-[#4F7CFF]/20 border-[#4F7CFF] text-white shadow-md'
+                      : 'bg-[#0B0E17] border-white/10 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <div className="text-xs font-black truncate">All Branches</div>
+                  <div className="text-[9px] mt-0.5">ALL • Franchise</div>
+                </button>
               </div>
             </div>
 

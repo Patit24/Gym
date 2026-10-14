@@ -211,7 +211,12 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
 
   const branchMembers = !selectedBranchId || selectedBranchId === 'all'
     ? members
-    : members.filter((m) => m.branchId === selectedBranchId || (!m.branchId && selectedBranchId === 'branch-1'));
+    : members.filter((m) => {
+        if (!m) return false;
+        if (m.branchId === selectedBranchId) return true;
+        if (selectedBranchId === 'branch-1' && (!m.branchId || m.branchId === 'all')) return true;
+        return false;
+      });
 
   // Filter logic
   const filteredMembers = branchMembers.filter((m) => {

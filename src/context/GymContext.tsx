@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Role,
   BranchId,
@@ -294,9 +294,36 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
     return 'Super Admin';
   });
-  const [selectedBranchId, setSelectedBranchId] = useState<BranchId>('branch-1');
-
   const [branches, setBranches] = useState<Branch[]>(INITIAL_BRANCHES);
+  const [selectedBranchId, setSelectedBranchIdState] = useState<BranchId>(() => {
+    try {
+      const saved = localStorage.getItem('gym_selected_branch_id');
+      if (saved) return saved as BranchId;
+    } catch {}
+    return 'branch-1';
+  });
+
+  const setSelectedBranchId = useCallback((id: BranchId) => {
+    setSelectedBranchIdState(id);
+    try {
+      if (id) {
+        localStorage.setItem('gym_selected_branch_id', id);
+      }
+    } catch {}
+  }, []);
+
+  const resolveInitialBranch = useCallback((userBranch?: string): BranchId => {
+    try {
+      const saved = localStorage.getItem('gym_selected_branch_id');
+      if (saved && (saved === 'all' || saved === 'branch-1' || saved === 'branch-2' || (branches || []).some(b => b.id === saved))) {
+        return saved as BranchId;
+      }
+    } catch {}
+    if (userBranch && userBranch !== 'all') {
+      return userBranch as BranchId;
+    }
+    return (branches?.[0]?.id as BranchId) || 'branch-1';
+  }, [branches]);
   const [plans, setPlans] = useState<MembershipPlan[]>(INITIAL_PLANS);
   const [members, setMembers] = useState<Member[]>(INITIAL_MEMBERS);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>(INITIAL_ATTENDANCE);
@@ -779,7 +806,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (parsed && parsed.id && parsed.role) {
             setAppUserAccount(parsed);
             setCurrentRole(parsed.role);
-            setSelectedBranchId(parsed.branchId || 'branch-1');
+            setSelectedBranchId(resolveInitialBranch(parsed.branchId));
             setSubscriptionStatus('active');
             if (parsed.role === 'Member' && parsed.linkedId) {
               setActiveMemberIdState(parsed.linkedId);
@@ -848,7 +875,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
         setAppUserAccount(masterAccount);
         setCurrentRole('Super Admin');
-        setSelectedBranchId(branches[0]?.id || 'all');
+        setSelectedBranchId(resolveInitialBranch());
         setSubscriptionStatus('active');
         localStorage.setItem('gym_app_user_account', JSON.stringify(masterAccount));
         return;
@@ -865,7 +892,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           };
           setAppUserAccount(verifiedUser);
           setCurrentRole(verifiedUser.role);
-          setSelectedBranchId(verifiedUser.branchId || branches[0]?.id || 'all');
+          setSelectedBranchId(resolveInitialBranch(verifiedUser.branchId));
           localStorage.setItem('gym_app_user_account', JSON.stringify(verifiedUser));
 
           if (verifiedUser.role === 'Member') {
@@ -911,7 +938,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
         setAppUserAccount(verifiedUser);
         setCurrentRole(verifiedUser.role);
-        setSelectedBranchId(verifiedUser.branchId || branches[0]?.id || 'all');
+        setSelectedBranchId(resolveInitialBranch(verifiedUser.branchId));
         localStorage.setItem('gym_app_user_account', JSON.stringify(verifiedUser));
         if (verifiedUser.role === 'Member') {
           setActiveMemberIdState(verifiedUser.linkedId || authUid);
@@ -960,7 +987,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
         setAppUserAccount(empAccount);
         setCurrentRole(matchingEmployee.role);
-        setSelectedBranchId(matchingEmployee.branchId || branches[0]?.id || 'all');
+        setSelectedBranchId(resolveInitialBranch(matchingEmployee.branchId));
         setActiveMemberIdState('');
         setSubscriptionStatus('active');
         localStorage.setItem('gym_app_user_account', JSON.stringify(empAccount));
@@ -986,7 +1013,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           role: 'Member',
           linkedId: matchingMember.id,
           linkedName: matchingMember.name,
-          branchId: matchingMember.branchId || branches[0]?.id || 'all',
+          branchId: (matchingMember.branchId && matchingMember.branchId !== 'all') ? matchingMember.branchId : 'branch-1',
           createdAt: matchingMember.startDate || new Date().toISOString(),
           createdByAdminId: 'system',
           isActive: matchingMember.status !== 'Cancelled' && matchingMember.status !== 'Suspended',
@@ -1003,6 +1030,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setAppUserAccount(memberAccount);
         setCurrentRole('Member');
         setActiveMemberIdState(matchingMember.id);
+        setSelectedBranchId(resolveInitialBranch(matchingMember.branchId));
         localStorage.setItem('gym_app_user_account', JSON.stringify(memberAccount));
         safeDbWrite(setDoc(doc(db, 'users', authUid), memberAccount));
         safeDbWrite(updateDoc(doc(db, 'members', matchingMember.id), { userId: authUid }));
@@ -1021,7 +1049,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (parsed && parsed.role && parsed.role !== 'Member') {
             setAppUserAccount(parsed);
             setCurrentRole(parsed.role);
-            setSelectedBranchId(parsed.branchId || branches[0]?.id || 'all');
+            setSelectedBranchId(resolveInitialBranch(parsed.branchId));
             setActiveMemberIdState('');
             setSubscriptionStatus('active');
             return;
@@ -1087,7 +1115,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem('gym_auth_context', 'app');
     setAppUserAccount(user);
     setCurrentRole(user.role);
-    setSelectedBranchId(user.branchId || 'branch-1');
+    setSelectedBranchId(resolveInitialBranch(user.branchId));
     setSubscriptionStatus('active');
     setAuthContext('app');
     if (user.role === 'Member' && user.linkedId) {
@@ -1423,7 +1451,11 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       memberId: scannedMember.id,
       memberName: scannedMember.name,
       memberPhoto: scannedMember.photoUrl,
-      branchId: targetBranchId || scannedMember.branchId || 'branch-1',
+      branchId: (targetBranchId && targetBranchId !== 'all')
+        ? targetBranchId
+        : (scannedMember.branchId && scannedMember.branchId !== 'all')
+          ? scannedMember.branchId
+          : 'branch-1',
       entryTime: timeStr,
       verificationMethod,
       deviceInfo: `SmartRelay-Pro #${targetBranchId || scannedMember.branchId || 'main'} (Main Gate)`,
@@ -1497,7 +1529,8 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const branchToUse = targetBranchId || member.branchId || selectedBranchId || 'branch-1';
+    const branchCandidate = targetBranchId || member.branchId || selectedBranchId;
+    const branchToUse = (branchCandidate && branchCandidate !== 'all') ? branchCandidate : 'branch-1';
 
     const newRecord: AttendanceRecord = {
       id: `att-man-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
@@ -1664,6 +1697,10 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let createdAppUser: AppUser | undefined;
     let authUid = `USR-MEM-${Date.now()}`;
 
+    const sanitizedMemberBranch: BranchId = (newMemberData.branchId && newMemberData.branchId !== 'all')
+      ? newMemberData.branchId
+      : (selectedBranchId && selectedBranchId !== 'all' ? selectedBranchId : 'branch-1');
+
     if (options.createLogin) {
       const memberAuthEmail = newMemberData.email || `${username.toLowerCase()}@smartgym.com`;
       try {
@@ -1681,7 +1718,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         role: 'Member',
         linkedId: memberId,
         linkedName: newMemberData.name,
-        branchId: newMemberData.branchId,
+        branchId: sanitizedMemberBranch,
         createdAt: new Date().toISOString(),
         createdByAdminId: appUserAccount?.id || 'admin-system',
         isActive: true,
@@ -1712,6 +1749,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // 6. Build Member Record
     const newMember: Member = {
       ...newMemberData,
+      branchId: sanitizedMemberBranch,
       id: memberId,
       userId: options.createLogin ? authUid : undefined,
       username: options.createLogin ? username : undefined,
@@ -2166,7 +2204,9 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: `TXN-${Date.now()}`,
       memberId,
       memberName: member?.name || 'Member',
-      branchId: member?.branchId || selectedBranchId || 'branch-1',
+      branchId: (member?.branchId && member.branchId !== 'all')
+        ? member.branchId
+        : (selectedBranchId && selectedBranchId !== 'all' ? selectedBranchId : 'branch-1'),
       amount: sanitizedAmount,
       paymentMethod,
       category: 'Membership Dues',
@@ -3111,6 +3151,9 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (exists) {
         return prevMembers.map((m) => (m.id === targetMemberId ? { ...m, ...updatedData } : m));
       } else {
+        const rawRenewBranch = existingMember?.branchId || appUserAccount?.branchId || selectedBranchId;
+        const safeRenewBranch = (rawRenewBranch && rawRenewBranch !== 'all') ? rawRenewBranch : 'branch-1';
+
         const fullNewMember: Member = {
           id: targetMemberId,
           membershipNo: `SG-${Math.floor(10000 + Math.random() * 90000)}`,
@@ -3136,7 +3179,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           medicalHistory: 'None',
           goal: 'Muscle Building',
           referralSource: 'App Subscription',
-          branchId: appUserAccount?.branchId || selectedBranchId || 'branch-1',
+          branchId: safeRenewBranch as BranchId,
           planId: targetPlan?.id || 'custom-plan',
           planName: resolvedPlanName,
           startDate: effectiveStartDate,
@@ -3155,12 +3198,15 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     });
 
+    const rawTxnBranch = existingMember?.branchId || appUserAccount?.branchId || selectedBranchId;
+    const safeTxnBranch = (rawTxnBranch && rawTxnBranch !== 'all') ? rawTxnBranch : 'branch-1';
+
     // Record renewal transaction
     const newTx: Transaction = {
       id: `TX-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
       memberId: targetMemberId,
       memberName: existingMember?.name || appUserAccount?.linkedName || 'Member',
-      branchId: (existingMember?.branchId || selectedBranchId || 'branch-1') as BranchId,
+      branchId: safeTxnBranch as BranchId,
       amount: finalAmount,
       paymentMethod,
       category: 'Membership Dues',

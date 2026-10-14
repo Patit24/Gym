@@ -42,9 +42,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNewMemberM
     currentCheckIns: 0,
     monthlyRevenue: 0
   };
-  const branchMembers = selectedBranchId === 'all' 
+  const branchMembers = (!selectedBranchId || selectedBranchId === 'all')
     ? members 
-    : members.filter((m) => m.branchId === selectedBranchId);
+    : members.filter((m) => {
+        if (!m) return false;
+        if (m.branchId === selectedBranchId) return true;
+        if (selectedBranchId === 'branch-1' && (!m.branchId || m.branchId === 'all')) return true;
+        return false;
+      });
 
   // 1. Membership Metrics
   const totalMembersCount = branchMembers.length;
@@ -61,12 +66,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNewMemberM
   // 2. Real Financial Metrics from Database
   const branchTransactions = !selectedBranchId || selectedBranchId === 'all'
     ? transactions
-    : transactions.filter((t) => t.branchId === selectedBranchId || !t.branchId);
+    : transactions.filter((t) => {
+        if (!t) return false;
+        if (t.branchId === selectedBranchId) return true;
+        if (selectedBranchId === 'branch-1' && (!t.branchId || t.branchId === 'all')) return true;
+        return false;
+      });
   const totalRevenueCollected = branchTransactions.reduce((acc, t) => acc + (t.amount || 0), 0);
   
   const branchExpenses = !selectedBranchId || selectedBranchId === 'all'
     ? expenses
-    : expenses.filter((e) => e.branchId === selectedBranchId || !e.branchId);
+    : expenses.filter((e) => {
+        if (!e) return false;
+        if (e.branchId === selectedBranchId) return true;
+        if (selectedBranchId === 'branch-1' && (!e.branchId || e.branchId === 'all')) return true;
+        return false;
+      });
   const totalExpenses = branchExpenses.reduce((acc, e) => acc + (e.amount || 0), 0);
   
   const netProfit = totalRevenueCollected - totalExpenses;

@@ -19,7 +19,14 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ onOpenNe
     currentCheckIns: 0,
     monthlyRevenue: 0
   };
-  const branchMembers = members.filter((m) => m.branchId === selectedBranchId);
+  const branchMembers = (!selectedBranchId || selectedBranchId === 'all')
+    ? members
+    : members.filter((m) => {
+        if (!m) return false;
+        if (m.branchId === selectedBranchId) return true;
+        if (selectedBranchId === 'branch-1' && (!m.branchId || m.branchId === 'all')) return true;
+        return false;
+      });
 
   const pendingDuesMembers = branchMembers.filter((m) => m.pendingDues > 0 || m.status === 'Renewal Due');
 

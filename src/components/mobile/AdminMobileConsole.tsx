@@ -69,9 +69,16 @@ export const AdminMobileConsole: React.FC = () => {
     monthlyRevenue: 0
   };
   const selectedPlan = plans.find(p => p.id === memberForm.planId) || plans[0];
-  const branchMembers = members.filter(m => !selectedBranchId || selectedBranchId === 'all' || m.branchId === selectedBranchId || (!m.branchId && selectedBranchId === 'branch-1'));
-  const branchTrainers = employees.filter(e => (!selectedBranchId || selectedBranchId === 'all' || e.branchId === selectedBranchId || (!e.branchId && selectedBranchId === 'branch-1')) && e.role === 'Trainer');
-  const branchUsers = appUsers.filter(u => !selectedBranchId || selectedBranchId === 'all' || u.branchId === selectedBranchId || (!u.branchId && selectedBranchId === 'branch-1'));
+  const isRecordInSelectedBranch = (branchId?: string) => {
+    if (!selectedBranchId || selectedBranchId === 'all') return true;
+    if (branchId === selectedBranchId) return true;
+    if (selectedBranchId === 'branch-1' && (!branchId || branchId === 'all')) return true;
+    return false;
+  };
+
+  const branchMembers = members.filter(m => m && isRecordInSelectedBranch(m.branchId));
+  const branchTrainers = employees.filter(e => e && e.role === 'Trainer' && isRecordInSelectedBranch(e.branchId));
+  const branchUsers = appUsers.filter(u => u && isRecordInSelectedBranch(u.branchId));
   const filteredBranchUsers = branchUsers.filter(u => accountRoleFilter === 'all' || u.role === accountRoleFilter);
 
   const handleCopy = (text: string, field: string) => {
@@ -89,6 +96,7 @@ export const AdminMobileConsole: React.FC = () => {
     endDateObj.setMonth(endDateObj.getMonth() + plan.durationMonths);
     const endDate = endDateObj.toISOString().split('T')[0];
     const bmi = parseFloat((memberForm.weightKg / ((memberForm.heightCm / 100) ** 2)).toFixed(1));
+    const effectiveBranchId = (selectedBranchId && selectedBranchId !== 'all') ? selectedBranchId : 'branch-1';
 
     try {
       const newMem = await addMember({
@@ -100,7 +108,7 @@ export const AdminMobileConsole: React.FC = () => {
         bloodGroup: 'O+', emergencyContactName: '', emergencyMobile: '',
         address: memberForm.address, medicalHistory: memberForm.medicalHistory,
         goal: memberForm.goal, referralSource: 'Admin Created',
-        branchId: selectedBranchId, planId: plan.id, planName: plan.name,
+        branchId: effectiveBranchId, planId: plan.id, planName: plan.name,
         startDate, endDate, expiryDate: endDate,
         faceEnrolled: false, photoUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${memberForm.name}`,
         pendingDues: 0, lockerNumber: undefined,
@@ -112,7 +120,7 @@ export const AdminMobileConsole: React.FC = () => {
       const user: AppUser = {
         id: `USR-${Date.now()}`, username: uname, password: pwd,
         role: 'Member', linkedId: newMem.id, linkedName: newMem.name,
-        branchId: selectedBranchId, createdAt: new Date().toISOString(),
+        branchId: effectiveBranchId, createdAt: new Date().toISOString(),
         createdByAdminId: 'admin-1', isActive: true,
         permissions: {
           canViewDashboard: true, canEditWorkouts: false, canEditDiets: false,
@@ -133,6 +141,7 @@ export const AdminMobileConsole: React.FC = () => {
     const uname = generateUsername(trainerForm.name);
     const pwd = generatePassword();
     const trainerId = `EMP-${Date.now()}`;
+    const effectiveBranchId = (selectedBranchId && selectedBranchId !== 'all') ? selectedBranchId : 'branch-1';
 
     try {
       // 1. Create Employee/Trainer record
@@ -143,7 +152,7 @@ export const AdminMobileConsole: React.FC = () => {
         role: 'Trainer',
         mobile: trainerForm.mobile,
         email: trainerForm.email,
-        branchId: selectedBranchId,
+        branchId: effectiveBranchId,
         baseSalary: trainerForm.baseSalary,
         ptCommissionRate: 15,
         ptSessionsCompleted: 0,
@@ -156,7 +165,7 @@ export const AdminMobileConsole: React.FC = () => {
       const user: AppUser = {
         id: `USR-${Date.now()}`, username: uname, password: pwd,
         role: 'Trainer', linkedId: trainerId, linkedName: trainerForm.name,
-        branchId: selectedBranchId, createdAt: new Date().toISOString(),
+        branchId: effectiveBranchId, createdAt: new Date().toISOString(),
         createdByAdminId: 'admin-1', isActive: true,
         permissions: {
           canViewDashboard: trainerForm.canViewDashboard,
