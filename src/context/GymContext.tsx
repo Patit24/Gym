@@ -221,7 +221,8 @@ interface GymContextType {
     paymentMethod?: 'UPI' | 'Cash' | 'Card' | 'Bank Transfer',
     customAmount?: number,
     customDurationMonths?: number,
-    notes?: string
+    notes?: string,
+    customExpiryDate?: string
   ) => Promise<{ success: boolean; transaction: Transaction; newEndDate: string; durationMonths: number; amount: number }>;
   
   addExpense: (expense: Omit<Expense, 'id'>) => Promise<Expense>;
@@ -237,6 +238,8 @@ interface GymContextType {
   addAppUser: (user: AppUser) => Promise<void>;
   addEmployee: (emp: Employee) => Promise<void>;
   updateEmployee: (id: string, updatedData: Partial<Employee>) => Promise<void>;
+  deleteEmployee: (employeeId: string) => Promise<void>;
+  deleteMember: (memberId: string) => Promise<void>;
 }
 
 const GymContext = createContext<GymContextType | undefined>(undefined);
@@ -3091,7 +3094,8 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     paymentMethod: 'UPI' | 'Cash' | 'Card' | 'Bank Transfer' = 'UPI',
     customAmount?: number,
     customDurationMonths?: number,
-    notes?: string
+    notes?: string,
+    customExpiryDate?: string
   ) => {
     const targetPlan = plans.find((p) => p.id === planId) || plans[0];
     const targetMemberId = memberId || activeMemberId;
@@ -3121,7 +3125,8 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Add target plan duration months to the base expiry date
     const newExpiryObj = new Date(baseExpiryDate);
     newExpiryObj.setMonth(newExpiryObj.getMonth() + durationMonthsToAdd);
-    const newEndDate = newExpiryObj.toISOString().split('T')[0];
+    const calculatedEndDate = newExpiryObj.toISOString().split('T')[0];
+    const newEndDate = (customExpiryDate && customExpiryDate.trim()) ? customExpiryDate.trim() : calculatedEndDate;
 
     const finalAmount = customAmount !== undefined && customAmount >= 0
       ? Math.round(customAmount)
@@ -3454,6 +3459,21 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAppUsers(prev => prev.filter(u => u.id !== userId && u.username !== userId));
     safeDbWrite(deleteDoc(doc(db, 'users', userId)));
 
+    // Cascade: If linked to an employee or member, also permanently purge that profile
+    if (target?.linkedId) {
+      if (employees.some(e => e.id === target.linkedId)) {
+        safeDbWrite(deleteDoc(doc(db, 'employees', target.linkedId)));
+        setEmployees(prev => prev.filter(e => e.id !== target.linkedId));
+      }
+      if (members.some(m => m.id === target.linkedId)) {
+        safeDbWrite(deleteDoc(doc(db, 'members', target.linkedId)));
+        safeDbWrite(deleteDoc(doc(db, 'workouts', target.linkedId)));
+        safeDbWrite(deleteDoc(doc(db, 'diets', target.linkedId)));
+        setMembers(prev => prev.filter(m => m.id !== target.linkedId));
+        setAttendance(prev => prev.filter(a => a.memberId !== target.linkedId));
+      }
+    }
+
     const auditRecord: AuditLog = {
       id: `audit-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
       timestamp: new Date().toISOString(),
@@ -3463,7 +3483,7 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       actorRole: appUserAccount?.role || 'Super Admin',
       targetId: userId,
       targetType: 'UserAccount',
-      details: `User account ${target?.username || userId} permanently removed by Master Admin.`,
+      details: `User account ${target?.username || userId} permanently removed by Admin.`,
       status: 'SUCCESS'
     };
     setAuditLogs(prev => [auditRecord, ...prev]);
@@ -3520,6 +3540,128 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         linkedName: updatedData.name !== undefined ? updatedData.name : prev.linkedName,
       } : null);
     }
+  };
+
+  const deleteEmployee = async (employeeId: string) => {
+    const targetEmp = employees.find(e => e.id === employeeId);
+
+    // 1. Permanently remove employee document from Firestore
+    safeDbWrite(deleteDoc(doc(db, 'employees', employeeId)));
+    setEmployees(prev => prev.filter(e => e.id !== employeeId));
+
+    // 2. Permanently remove linked user account(s) from users collection in Firestore
+    const linkedUserIds = new Set<string>();
+    appUsers.forEach(u => {
+      if (
+        u.linkedId === employeeId ||
+        u.id === employeeId ||
+        (targetEmp?.email && u.email && u.email.toLowerCase() === targetEmp.email.toLowerCase())
+      ) {
+        if (u.username !== 'MASTERADMIN' && !u.isProtected) {
+          linkedUserIds.add(u.id);
+        }
+      }
+    });
+
+    linkedUserIds.forEach(uid => {
+      safeDbWrite(deleteDoc(doc(db, 'users', uid)));
+    });
+
+    if (linkedUserIds.size > 0) {
+      setAppUsers(prev => prev.filter(u => !linkedUserIds.has(u.id)));
+    }
+
+    // 3. Unassign any trainees assigned to this coach
+    const assignedTrainees = members.filter(m => m.assignedTrainerId === employeeId);
+    if (assignedTrainees.length > 0) {
+      setMembers(prev => prev.map(m => m.assignedTrainerId === employeeId ? { ...m, assignedTrainerId: undefined } : m));
+      assignedTrainees.forEach(m => {
+        safeDbWrite(updateDoc(doc(db, 'members', m.id), { assignedTrainerId: '' }));
+      });
+    }
+
+    // 4. Record Audit Log
+    const auditRecord: AuditLog = {
+      id: `audit-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      timestamp: new Date().toISOString(),
+      eventType: 'ACCOUNT_DELETION',
+      actorId: appUserAccount?.id || 'system',
+      actorName: appUserAccount?.linkedName || 'Admin',
+      actorRole: appUserAccount?.role || 'Super Admin',
+      targetId: employeeId,
+      targetType: 'Employee',
+      details: `Employee/Coach ${targetEmp?.name || employeeId} (${targetEmp?.role || 'Staff'}) permanently purged from database along with portal credentials.`,
+      status: 'SUCCESS'
+    };
+    setAuditLogs(prev => [auditRecord, ...prev]);
+    safeDbWrite(setDoc(doc(db, 'audit_logs', auditRecord.id), auditRecord));
+  };
+
+  const deleteMember = async (memberId: string) => {
+    const targetMember = members.find(m => m.id === memberId);
+
+    // 1. Permanently remove member document from Firestore
+    safeDbWrite(deleteDoc(doc(db, 'members', memberId)));
+    setMembers(prev => prev.filter(m => m.id !== memberId));
+
+    // 2. Permanently remove workouts and diets docs for this member
+    safeDbWrite(deleteDoc(doc(db, 'workouts', memberId)));
+    safeDbWrite(deleteDoc(doc(db, 'diets', memberId)));
+
+    // 3. Permanently remove attendance records for this member
+    const memberAttendance = attendance.filter(a => a.memberId === memberId);
+    memberAttendance.forEach(att => {
+      safeDbWrite(deleteDoc(doc(db, 'attendance', att.id)));
+    });
+    if (memberAttendance.length > 0) {
+      setAttendance(prev => prev.filter(a => a.memberId !== memberId));
+    }
+
+    // 4. Permanently remove linked user account(s) from users collection in Firestore
+    const linkedUserIds = new Set<string>();
+    appUsers.forEach(u => {
+      if (
+        u.linkedId === memberId ||
+        u.id === memberId ||
+        u.id === targetMember?.userId ||
+        u.username === targetMember?.membershipNo ||
+        (targetMember?.username && u.username === targetMember.username) ||
+        (targetMember?.email && u.email && u.email.toLowerCase() === targetMember.email.toLowerCase())
+      ) {
+        if (u.username !== 'MASTERADMIN' && !u.isProtected) {
+          linkedUserIds.add(u.id);
+        }
+      }
+    });
+
+    linkedUserIds.forEach(uid => {
+      safeDbWrite(deleteDoc(doc(db, 'users', uid)));
+    });
+
+    if (linkedUserIds.size > 0) {
+      setAppUsers(prev => prev.filter(u => !linkedUserIds.has(u.id)));
+    }
+
+    // 5. If this was the active member, clear active member
+    if (activeMemberId === memberId) {
+      setActiveMemberId('');
+    }
+
+    // 6. Record Audit Log
+    const auditRecord: AuditLog = {
+      id: `audit-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      timestamp: new Date().toISOString(),
+      eventType: 'ACCOUNT_DELETION',
+      actorId: appUserAccount?.id || 'system',
+      actorName: appUserAccount?.linkedName || 'Admin',
+      actorRole: appUserAccount?.role || 'Super Admin',
+      targetId: memberId,
+      targetType: 'Member',
+      details: `Member ${targetMember?.name || memberId} (${targetMember?.membershipNo || 'Pass'}) permanently purged from database along with workouts, diets, attendance, and login access.`,
+      status: 'SUCCESS'
+    };
+    setAuditLogs(prev => [auditRecord, ...prev]);
+    safeDbWrite(setDoc(doc(db, 'audit_logs', auditRecord.id), auditRecord));
   };
 
   return (
@@ -3644,6 +3786,8 @@ export const GymProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addAppUser,
         addEmployee,
         updateEmployee,
+        deleteEmployee,
+        deleteMember,
       }}
     >
       {children}

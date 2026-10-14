@@ -88,6 +88,8 @@ export const TrainerCollectPaymentModal: React.FC<TrainerCollectPaymentModalProp
     ).slice(0, 8);
   }, [members, memberSearch]);
 
+  const [manualExpiryDate, setManualExpiryDate] = useState<string>('');
+
   // Calculate live extended expiry date preview
   const liveExtendedExpiry = useMemo(() => {
     const today = new Date();
@@ -104,6 +106,17 @@ export const TrainerCollectPaymentModal: React.FC<TrainerCollectPaymentModalProp
     newExp.setMonth(newExp.getMonth() + (Number(durationMonths) || 1));
     return newExp.toISOString().split('T')[0];
   }, [currentMember, durationMonths]);
+
+  // The active extended expiry date (manual override if set, else auto calculated)
+  const effectiveExpiryDate = manualExpiryDate || liveExtendedExpiry;
+
+  const handleSetFirstOfNextMonth = () => {
+    const today = new Date();
+    const nextMonth1st = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    const yyyy = nextMonth1st.getFullYear();
+    const mm = String(nextMonth1st.getMonth() + 1).padStart(2, '0');
+    setManualExpiryDate(`${yyyy}-${mm}-01`);
+  };
 
   // Handle Duration Change
   const handleDurationChange = (months: number) => {
@@ -143,7 +156,8 @@ export const TrainerCollectPaymentModal: React.FC<TrainerCollectPaymentModalProp
         paymentMethod,
         Number(amount),
         Number(durationMonths),
-        trainerNoteText
+        trainerNoteText,
+        effectiveExpiryDate
       );
 
       if (result.success) {
@@ -169,6 +183,7 @@ export const TrainerCollectPaymentModal: React.FC<TrainerCollectPaymentModalProp
     setSuccessReceipt(null);
     setErrorMsg('');
     setNotes('');
+    setManualExpiryDate('');
     onClose();
   };
 
@@ -466,25 +481,77 @@ export const TrainerCollectPaymentModal: React.FC<TrainerCollectPaymentModalProp
               </div>
             </div>
 
-            {/* Expiry Extension Live Preview Card */}
-            <div className="p-3 bg-gradient-to-r from-emerald-500/10 via-[#101422] to-cyan-500/10 rounded-2xl border border-emerald-500/20 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-emerald-400 shrink-0" />
-                <div>
-                  <span className="text-[10px] text-slate-400 block">Current Status</span>
-                  <span className="text-xs font-bold text-slate-200">
-                    {currentMember?.expiryDate || currentMember?.endDate || 'Expired / New'}
+            {/* Expiry Extension & Custom Expiry Date Selector */}
+            <div className="p-3.5 bg-gradient-to-r from-emerald-500/10 via-[#101422] to-cyan-500/10 rounded-2xl border border-emerald-500/30 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <div>
+                    <span className="text-[9px] text-slate-400 font-bold uppercase block">Current Expiry</span>
+                    <span className="text-xs font-bold text-slate-200">
+                      {currentMember?.expiryDate || currentMember?.endDate || 'Expired / New'}
+                    </span>
+                  </div>
+                </div>
+
+                <ArrowRight className="w-4 h-4 text-emerald-400 shrink-0" />
+
+                <div className="text-right">
+                  <span className="text-[9px] text-emerald-400 font-bold uppercase block">New Extended Expiry</span>
+                  <span className="text-xs font-black text-white font-mono">
+                    {effectiveExpiryDate}
                   </span>
                 </div>
               </div>
 
-              <ArrowRight className="w-4 h-4 text-emerald-400 shrink-0" />
+              {/* Manual Expiry Date Picker & Preset Shortcuts */}
+              <div className="pt-2 border-t border-white/10 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-black text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Custom Expiry Date (Admin / Trainer Override)</span>
+                  </label>
+                  {manualExpiryDate && (
+                    <button
+                      type="button"
+                      onClick={() => setManualExpiryDate('')}
+                      className="text-[9px] text-amber-400 hover:underline font-bold cursor-pointer"
+                    >
+                      Reset to Standard (+{durationMonths}M)
+                    </button>
+                  )}
+                </div>
 
-              <div className="text-right">
-                <span className="text-[10px] text-emerald-400 font-bold block">New Extended Expiry</span>
-                <span className="text-xs font-black text-white">
-                  {liveExtendedExpiry}
-                </span>
+                <input
+                  type="date"
+                  value={effectiveExpiryDate}
+                  onChange={(e) => setManualExpiryDate(e.target.value)}
+                  className="w-full px-3 py-2 bg-[#0B0E17] rounded-xl border border-white/15 text-xs font-mono font-bold text-white focus:outline-none focus:border-cyan-400"
+                />
+
+                {/* Quick Expiry Shortcuts */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={handleSetFirstOfNextMonth}
+                    className="px-2.5 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-[10px] font-black text-cyan-300 flex items-center gap-1 transition-all cursor-pointer"
+                  >
+                    <span>📅 1st of Next Month</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const today = new Date();
+                      const d = new Date(today.getFullYear(), today.getMonth() + durationMonths, 1);
+                      const yyyy = d.getFullYear();
+                      const mm = String(d.getMonth() + 1).padStart(2, '0');
+                      setManualExpiryDate(`${yyyy}-${mm}-01`);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-[10px] font-black text-emerald-300 flex items-center gap-1 transition-all cursor-pointer"
+                  >
+                    <span>1st of Month (+{durationMonths}M)</span>
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -503,10 +570,10 @@ export const TrainerCollectPaymentModal: React.FC<TrainerCollectPaymentModalProp
                 </div>
                 <input
                   type="number"
-                  min="1"
-                  step="50"
+                  min="0"
+                  step="any"
                   required
-                  placeholder="e.g. 2500"
+                  placeholder="e.g. 600"
                   value={amount || ''}
                   onChange={(e) => setAmount(Number(e.target.value))}
                   className="w-full pl-8 pr-4 py-3 bg-[#101422] rounded-2xl border border-white/10 text-base font-black text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400"
@@ -515,7 +582,7 @@ export const TrainerCollectPaymentModal: React.FC<TrainerCollectPaymentModalProp
 
               {/* Quick Amount Chips */}
               <div className="flex items-center gap-1.5 mt-2 overflow-x-auto pb-1 scrollbar-none">
-                {[1200, 2000, 2500, 3500, 5000, 7500, 10000].map((quickAmt) => (
+                {[500, 600, 1000, 1200, 1500, 2000, 2500, 3500, 5000].map((quickAmt) => (
                   <button
                     key={quickAmt}
                     type="button"

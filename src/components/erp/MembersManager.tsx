@@ -35,7 +35,8 @@ import {
   Camera,
   Image as ImageIcon,
   Edit3,
-  X
+  X,
+  Trash2
 } from 'lucide-react';
 
 interface MembersManagerProps {
@@ -57,7 +58,8 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
     workout,
     diet,
     attendance,
-    updateMember
+    updateMember,
+    deleteMember
   } = useGym();
 
   // Navigation State: 'list' = complete members directory; 'profile' = selected member's detailed view
@@ -80,6 +82,7 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
   const [renewalDurationMonths, setRenewalDurationMonths] = useState<number>(2);
   const [renewalAmount, setRenewalAmount] = useState<number>(2500);
   const [renewalPaymentMethod, setRenewalPaymentMethod] = useState<'UPI' | 'Cash' | 'Card' | 'Bank Transfer'>('UPI');
+  const [renewalCustomExpiry, setRenewalCustomExpiry] = useState<string>('');
   const [isRenewing, setIsRenewing] = useState(false);
   const [renewalSuccessMsg, setRenewalSuccessMsg] = useState<string | null>(null);
 
@@ -293,7 +296,8 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
         renewalPaymentMethod,
         Number(renewalAmount),
         Number(renewalDurationMonths),
-        `Admin manual subscription extension (${renewalDurationMonths} Months)`
+        `Admin manual subscription extension (${renewalDurationMonths} Months)`,
+        renewalCustomExpiry
       );
       const updated = members.find(m => m.id === selectedMember.id);
       if (updated) setSelectedMember(updated);
@@ -626,6 +630,20 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
               >
                 <Send className="w-3.5 h-3.5 text-purple-400" />
                 <span>Send Alert</span>
+              </button>
+
+              <button
+                onClick={async () => {
+                  if (window.confirm(`⚠️ DANGER: Are you sure you want to PERMANENTLY delete member ${selectedMember.name} (${selectedMember.membershipNo})?\n\nThis will permanently purge:\n• Membership profile & digital pass\n• Workout routines & diet plans\n• Attendance records\n• App login accounts & credentials\n\nThis action CANNOT be undone.`)) {
+                    await deleteMember(selectedMember.id);
+                    handleBackToList();
+                  }
+                }}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 font-bold text-xs transition-all active:scale-95 cursor-pointer"
+                title="Permanently Delete Member"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete Member</span>
               </button>
             </div>
           </div>
@@ -1318,6 +1336,59 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
                 </select>
               </div>
 
+              {/* Custom Expiry Date Override */}
+              <div className="p-3 bg-[#0B0D12] rounded-xl border border-gym-border/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[10px] font-black text-slate-300 uppercase flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Custom Expiry Date (Admin Override)</span>
+                  </label>
+                  {renewalCustomExpiry && (
+                    <button
+                      type="button"
+                      onClick={() => setRenewalCustomExpiry('')}
+                      className="text-[9px] text-amber-400 hover:underline font-bold cursor-pointer"
+                    >
+                      Reset to Standard (+{renewalDurationMonths}M)
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="date"
+                  value={renewalCustomExpiry}
+                  onChange={(e) => setRenewalCustomExpiry(e.target.value)}
+                  className="w-full bg-[#14171F] border border-gym-border rounded-xl px-3 py-2 text-white font-mono text-xs font-bold outline-none focus:border-cyan-400"
+                />
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const today = new Date();
+                      const d = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+                      const yyyy = d.getFullYear();
+                      const mm = String(d.getMonth() + 1).padStart(2, '0');
+                      setRenewalCustomExpiry(`${yyyy}-${mm}-01`);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-[10px] font-black text-cyan-300 flex items-center gap-1 transition-all cursor-pointer"
+                  >
+                    <span>📅 1st of Next Month</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const today = new Date();
+                      const d = new Date(today.getFullYear(), today.getMonth() + renewalDurationMonths, 1);
+                      const yyyy = d.getFullYear();
+                      const mm = String(d.getMonth() + 1).padStart(2, '0');
+                      setRenewalCustomExpiry(`${yyyy}-${mm}-01`);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-[10px] font-black text-emerald-300 flex items-center gap-1 transition-all cursor-pointer"
+                  >
+                    <span>1st of Month (+{renewalDurationMonths}M)</span>
+                  </button>
+                </div>
+              </div>
+
               {/* Amount Input */}
               <div>
                 <label className="block text-[10px] font-black text-slate-300 uppercase mb-1">Payment Amount (₹) *</label>
@@ -1325,7 +1396,8 @@ export const MembersManager: React.FC<MembersManagerProps> = ({ onOpenNewMemberM
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₹</span>
                   <input
                     type="number"
-                    min="1"
+                    min="0"
+                    step="any"
                     required
                     value={renewalAmount || ''}
                     onChange={(e) => setRenewalAmount(Number(e.target.value))}

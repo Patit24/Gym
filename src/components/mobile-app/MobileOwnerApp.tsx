@@ -61,7 +61,8 @@ import {
   Edit3,
   X,
   Save,
-  ZoomIn
+  ZoomIn,
+  Trash2
 } from 'lucide-react';
 
 type OwnerScreen =
@@ -116,7 +117,9 @@ export const MobileOwnerApp: React.FC = () => {
     markNotificationRead,
     recordMemberPayment,
     updateMember,
-    revokeTrainerAccess
+    revokeTrainerAccess,
+    deleteEmployee,
+    deleteMember
   } = useGym();
 
   const [currentScreen, setCurrentScreen] = useState<OwnerScreen>('home');
@@ -137,6 +140,7 @@ export const MobileOwnerApp: React.FC = () => {
   const [isMobileRenewOpen, setIsMobileRenewOpen] = useState(false);
   const [mobileRenewPlanId, setMobileRenewPlanId] = useState('');
   const [mobileRenewPaymentMethod, setMobileRenewPaymentMethod] = useState<'UPI' | 'Cash' | 'Card' | 'Bank Transfer'>('UPI');
+  const [mobileRenewCustomExpiry, setMobileRenewCustomExpiry] = useState<string>('');
   const [isMobileRenewing, setIsMobileRenewing] = useState(false);
   const [mobileRenewSuccessToast, setMobileRenewSuccessToast] = useState<string | null>(null);
 
@@ -2673,6 +2677,41 @@ export const MobileOwnerApp: React.FC = () => {
                 <span>Call Client</span>
               </a>
             </div>
+
+            {/* Danger Zone: Permanent Deletion */}
+            <div className="bg-[#12080C] p-4 rounded-3xl border border-rose-500/30 shadow-xl space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-rose-500/20">
+                <div className="flex items-center gap-2">
+                  <Trash2 className="w-4 h-4 text-rose-400" />
+                  <span className="text-xs font-black text-rose-300 uppercase tracking-wider">Danger Zone</span>
+                </div>
+                <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/40">
+                  Irreversible
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Permanently delete this member profile, workouts, diets, attendance, and login access. All records will be wiped from the database.
+              </p>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (window.confirm(`⚠️ DANGER: Are you sure you want to PERMANENTLY delete Member ${selectedMember.name} (${selectedMember.membershipNo})?\n\nThis will permanently purge:\n• Membership registration & digital pass\n• Workout routines & diet plans\n• Attendance records & payment history\n• App login accounts & credentials\n\nThis action CANNOT be undone.`)) {
+                    try {
+                      await deleteMember(selectedMember.id);
+                      alert(`Member ${selectedMember.name} has been permanently deleted.`);
+                      setSelectedMember(null);
+                      navigateTo('members');
+                    } catch (err: any) {
+                      alert(`Error deleting member: ${err.message || 'Unknown error'}`);
+                    }
+                  }
+                }}
+                className="w-full py-3 rounded-2xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 font-black text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Delete Member Permanently (Purge All Data)</span>
+              </button>
+            </div>
           </div>
         )}
 
@@ -3644,6 +3683,41 @@ export const MobileOwnerApp: React.FC = () => {
                   )}
                 </div>
               </div>
+
+              {/* Danger Zone: Permanent Deletion */}
+              <div className="bg-[#12080C] p-4 rounded-3xl border border-rose-500/30 shadow-xl space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-rose-500/20">
+                  <div className="flex items-center gap-2">
+                    <Trash2 className="w-4 h-4 text-rose-400" />
+                    <span className="text-xs font-black text-rose-300 uppercase tracking-wider">Danger Zone</span>
+                  </div>
+                  <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/40">
+                    Irreversible
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Permanently delete this coach profile, remove their app login credentials, and unassign any trainees from their roster.
+                </p>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (window.confirm(`⚠️ DANGER: Are you sure you want to PERMANENTLY delete Coach ${selectedTrainer.name}?\n\nThis will permanently purge:\n• Coach profile & salary records\n• App login account & credentials\n• Trainee assignments\n\nThis action CANNOT be undone.`)) {
+                      try {
+                        await deleteEmployee(selectedTrainer.id);
+                        alert(`Coach ${selectedTrainer.name} has been permanently deleted.`);
+                        setSelectedTrainer(null);
+                        navigateTo('trainers');
+                      } catch (err: any) {
+                        alert(`Error deleting coach: ${err.message || 'Unknown error'}`);
+                      }
+                    }
+                  }}
+                  className="w-full py-3 rounded-2xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 font-black text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Delete Coach Permanently (Purge All Data)</span>
+                </button>
+              </div>
             </div>
           );
         })()}
@@ -4107,10 +4181,19 @@ export const MobileOwnerApp: React.FC = () => {
                 if (!mobileRenewPlanId) return;
                 setIsMobileRenewing(true);
                 try {
-                  await renewSubscription(selectedMember.id, mobileRenewPlanId, mobileRenewPaymentMethod);
+                  await renewSubscription(
+                    selectedMember.id,
+                    mobileRenewPlanId,
+                    mobileRenewPaymentMethod,
+                    undefined,
+                    undefined,
+                    undefined,
+                    mobileRenewCustomExpiry
+                  );
                   const updated = members.find((m) => m.id === selectedMember.id);
                   if (updated) setSelectedMember(updated);
                   setMobileRenewSuccessToast('Subscription renewed successfully!');
+                  setMobileRenewCustomExpiry('');
                   setTimeout(() => {
                     setMobileRenewSuccessToast(null);
                     setIsMobileRenewOpen(false);
@@ -4139,6 +4222,48 @@ export const MobileOwnerApp: React.FC = () => {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* Custom Expiry Date Override */}
+              <div className="p-3 bg-[#080C14] rounded-2xl border border-white/10 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-black text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Custom Expiry Date Override</span>
+                  </label>
+                  {mobileRenewCustomExpiry && (
+                    <button
+                      type="button"
+                      onClick={() => setMobileRenewCustomExpiry('')}
+                      className="text-[9px] text-amber-400 hover:underline font-bold cursor-pointer"
+                    >
+                      Reset to Standard
+                    </button>
+                  )}
+                </div>
+
+                <input
+                  type="date"
+                  value={mobileRenewCustomExpiry}
+                  onChange={(e) => setMobileRenewCustomExpiry(e.target.value)}
+                  className="w-full px-3 py-2 bg-[#101422] rounded-xl border border-white/15 text-xs font-mono font-bold text-white focus:outline-none focus:border-cyan-400"
+                />
+
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const today = new Date();
+                      const d = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+                      const yyyy = d.getFullYear();
+                      const mm = String(d.getMonth() + 1).padStart(2, '0');
+                      setMobileRenewCustomExpiry(`${yyyy}-${mm}-01`);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-[10px] font-black text-cyan-300 flex items-center gap-1 transition-all cursor-pointer"
+                  >
+                    <span>📅 1st of Next Month</span>
+                  </button>
+                </div>
               </div>
 
               <div>

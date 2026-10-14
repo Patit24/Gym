@@ -5,7 +5,7 @@ import {
   Shield, UserPlus, Users, Dumbbell, CreditCard, Copy, Check, Eye, EyeOff,
   TrendingUp, DollarSign, Building2, Activity, ChevronRight, X, Sparkles,
   UserCheck, Lock, Key, Mail, Phone, Calendar, Award, BarChart3,
-  CheckCircle2, AlertCircle, RefreshCw, Plus, Settings, Zap
+  CheckCircle2, AlertCircle, RefreshCw, Plus, Settings, Zap, Trash2
 } from 'lucide-react';
 
 import { EnlargedPhotoModal } from '../common/EnlargedPhotoModal';
@@ -27,7 +27,7 @@ const generatePassword = (): string => {
 type AdminTab = 'dashboard' | 'create-member' | 'create-trainer' | 'users' | 'trainers';
 
 export const AdminMobileConsole: React.FC = () => {
-  const { members, employees, plans, branches, selectedBranchId, addMember, currentRole, addAppUser, addEmployee, appUsers } = useGym();
+  const { members, employees, plans, branches, selectedBranchId, addMember, currentRole, addAppUser, addEmployee, appUsers, deleteUserAccount } = useGym();
 
   const [tab, setTab] = useState<AdminTab>('dashboard');
   const [newCredential, setNewCredential] = useState<AppUser | null>(null);
@@ -675,9 +675,30 @@ export const AdminMobileConsole: React.FC = () => {
                   </div>
                   <div className="text-[10px] text-purple-300 font-bold">{user.role} • {user.branchId.replace('branch-', 'Branch ')}</div>
                 </div>
-                <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${user.isActive ? 'bg-[#27D980]/20 text-[#27D980] border border-[#27D980]/40' : 'bg-red-500/20 text-red-400'}`}>
-                  {user.isActive ? 'Active' : 'Inactive'}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${user.isActive ? 'bg-[#27D980]/20 text-[#27D980] border border-[#27D980]/40' : 'bg-red-500/20 text-red-400'}`}>
+                    {user.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                  {user.username !== 'MASTERADMIN' && !user.isProtected && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (window.confirm(`⚠️ Are you sure you want to PERMANENTLY delete user account ${user.username} (${user.linkedName})?\n\nThis will permanently delete this account and linked profile from the database.`)) {
+                          try {
+                            await deleteUserAccount(user.id);
+                            alert(`Account ${user.username} deleted.`);
+                          } catch (err: any) {
+                            alert(err.message || 'Failed to delete account.');
+                          }
+                        }
+                      }}
+                      className="p-1 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 hover:text-rose-300 transition-all cursor-pointer"
+                      title="Permanently Delete Account"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">

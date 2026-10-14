@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { useGym } from '../../context/GymContext';
 import { Employee } from '../../types/gym';
-import { Users, DollarSign, FileText, CheckCircle2, ShieldCheck, Download, X, Activity, Award } from 'lucide-react';
+import { Users, DollarSign, FileText, CheckCircle2, ShieldCheck, Download, X, Activity, Award, Trash2 } from 'lucide-react';
 import { TrainerActivityAudit } from './TrainerActivityAudit';
 
 export const PayrollHR: React.FC = () => {
-  const { employees, selectedBranchId } = useGym();
+  const { employees, selectedBranchId, deleteEmployee } = useGym();
   const [activeSubTab, setActiveSubTab] = useState<'payroll' | 'trainer-audit'>('payroll');
   const [selectedPayslipEmp, setSelectedPayslipEmp] = useState<Employee | null>(null);
 
@@ -177,13 +177,27 @@ export const PayrollHR: React.FC = () => {
                 </div>
               </div>
 
-              <button
-                onClick={() => setSelectedPayslipEmp(emp)}
-                className="w-full py-2.5 rounded-xl bg-[#1E2330] hover:bg-[#272E40] border border-gym-border text-xs font-semibold text-[#4F7CFF] flex items-center justify-center gap-2 transition-all"
-              >
-                <FileText className="w-4 h-4" />
-                <span>View & Print Payslip</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setSelectedPayslipEmp(emp)}
+                  className="flex-1 py-2.5 rounded-xl bg-[#1E2330] hover:bg-[#272E40] border border-gym-border text-xs font-semibold text-[#4F7CFF] flex items-center justify-center gap-2 transition-all"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>View & Print Payslip</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (window.confirm(`⚠️ Are you sure you want to PERMANENTLY delete staff member ${emp.name} (${emp.role})?\n\nThis will permanently purge:\n• Employee/coach profile & payroll records\n• App portal credentials & access\n\nThis action CANNOT be undone.`)) {
+                      await deleteEmployee(emp.id);
+                    }
+                  }}
+                  className="p-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 hover:text-rose-300 transition-all cursor-pointer"
+                  title="Permanently Delete Staff Member"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           );
         })}
